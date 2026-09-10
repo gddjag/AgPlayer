@@ -138,6 +138,7 @@ private slots:
     void commitUsesLocalizedStemLabelsAndVisibleModelName();
     void localizedNamesRejectUnsafeWindowsComponents();
     void successiveJobsUseAutoNumberedFinalDirectories();
+    void publishedOutputReportsPendingReservationCleanupAndCanRetry();
     void renameFailureLeavesNoPublishedDirectory();
     void rollbackFailurePreservesCauseAndOnlyExistingPaths();
     void cleanupRescanNeverReportsAPathThatWasActuallyRemoved();
@@ -324,6 +325,40 @@ void SeparationOutputTransactionTest::rollbackFailurePreservesCauseAndOnlyExisti
 
     operations->allowCleanup = true;
     QVERIFY(transaction.cancel().ok);
+}
+
+void SeparationOutputTransactionTest::publishedOutputReportsPendingReservationCleanupAndCanRetry()
+{
+    QTemporaryDir output;
+    auto operations = std::make_shared<ControlledDirectoryOps>();
+    OutputTransaction transaction(
+        {output.path(), QStringLiteral("published"), QStringLiteral("wav"),
+         {QStringLiteral("vocals")}},
+        operations);
+    QVERIFY(transaction.begin().ok);
+    QVERIFY(writePayload(transaction.temporaryPath(QStringLiteral("vocals"))));
+    operations->allowCleanup = false;
+    CancellationToken cancellation;
+
+    const TransactionResult result = transaction.commit(
+        [](const QString&) { return true; }, cancellation);
+
+    QVERIFY(result.ok);
+    QCOMPARE(result.code, QStringLiteral("cleanup_pending"));
+    QCOMPARE(result.outputs.size(), 1);
+    QVERIFY(QFileInfo::exists(result.outputs.front()));
+    QCOMPARE(QDir(output.path()).entryList(
+                 {QStringLiteral(".agplayer-separation-reservation-*.json")},
+                 QDir::Files | QDir::Hidden | QDir::System).size(),
+             1);
+
+    operations->allowCleanup = true;
+    QVERIFY(transaction.cancel().ok);
+    QCOMPARE(QDir(output.path()).entryList(
+                 {QStringLiteral(".agplayer-separation-reservation-*.json")},
+                 QDir::Files | QDir::Hidden | QDir::System).size(),
+             0);
+    QVERIFY(QFileInfo::exists(result.outputs.front()));
 }
 
 void SeparationOutputTransactionTest::cleanupRescanNeverReportsAPathThatWasActuallyRemoved()

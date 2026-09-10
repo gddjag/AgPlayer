@@ -14,6 +14,7 @@ extern "C" {
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cerrno>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -31,6 +32,12 @@ extern "C" {
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
+#if defined(__linux__)
+#include <linux/fs.h>
+#include <sys/syscall.h>
+#elif defined(__APPLE__)
+#include <stdio.h>
+#endif
 #include <unistd.h>
 #endif
 
@@ -191,6 +198,41 @@ bool atomic_replace(const std::filesystem::path& temp_path,
     return std::rename(temp_path.c_str(), target_path.c_str()) == 0;
 #endif
 }
+
+#ifndef _WIN32
+enum class AtomicExchangeResult {
+    Exchanged,
+    Unsupported,
+    Failed,
+};
+
+AtomicExchangeResult atomic_exchange(const std::filesystem::path& first,
+                                     const std::filesystem::path& second)
+{
+#if defined(__linux__) && defined(SYS_renameat2) && defined(RENAME_EXCHANGE)
+    errno = 0;
+    if (::syscall(SYS_renameat2, AT_FDCWD, first.c_str(), AT_FDCWD,
+                  second.c_str(), RENAME_EXCHANGE) == 0) {
+        return AtomicExchangeResult::Exchanged;
+    }
+    return errno == ENOSYS || errno == EINVAL || errno == EOPNOTSUPP
+        ? AtomicExchangeResult::Unsupported
+        : AtomicExchangeResult::Failed;
+#elif defined(__APPLE__) && defined(RENAME_SWAP)
+    errno = 0;
+    if (::renamex_np(first.c_str(), second.c_str(), RENAME_SWAP) == 0) {
+        return AtomicExchangeResult::Exchanged;
+    }
+    return errno == ENOTSUP || errno == EINVAL
+        ? AtomicExchangeResult::Unsupported
+        : AtomicExchangeResult::Failed;
+#else
+    (void)first;
+    (void)second;
+    return AtomicExchangeResult::Unsupported;
+#endif
+}
+#endif
 
 class ExistingBackupGuard final {
 public:
@@ -2531,21 +2573,65 @@ ag_result write_metadata_with_preserved_backup(
         return AG_IO_ERROR;
     }
 #else
-    // rename is atomic, but flock is advisory. The immediately adjacent
-    // lstat/fstat identity and SHA-256 checks above deterministically catch
-    // non-cooperating writes injected before this instruction; POSIX has no
-    // portable compare-and-swap rename primitive for the remaining interval.
-    if (!atomic_replace(staged, source)) {
+    // POSIX locks are advisory. Exchange the two directory entries atomically,
+    // then prove that the displaced entry is still the locked source object.
+    // If another writer won the interval after the final pre-check, exchange
+    // back so its file remains at the public source path.
+    if (test_hooks != nullptr && test_hooks->before_replace_file)
+        test_hooks->before_replace_file();
+    const AtomicExchangeResult exchange_result = atomic_exchange(source, staged);
+    if (exchange_result != AtomicExchangeResult::Exchanged) {
         clean_stage();
         const bool prior_backup_restored = existing_backup->restore(
             test_hooks != nullptr && test_hooks->fail_backup_restore);
-        error = "Failed to atomically replace original file";
+        error = exchange_result == AtomicExchangeResult::Unsupported
+            ? "Failed to atomically replace original file: atomic path "
+              "exchange is unsupported"
+            : "Failed to atomically replace original file";
         if (!prior_backup_restored) {
             error += "; prior backup remains preserved at ";
             error += existing_backup->preserved_path();
         }
         return AG_IO_ERROR;
     }
+    FileSha256 displaced_fingerprint{};
+    const bool displaced_source_matches = commit_guard.matchesPath(staged)
+        && commit_guard.fingerprint(displaced_fingerprint)
+        && displaced_fingerprint == source_fingerprint
+        && commit_guard.matchesPath(staged);
+    if (!displaced_source_matches) {
+        const bool source_restored =
+            atomic_exchange(source, staged) == AtomicExchangeResult::Exchanged;
+        error = "Source changed during atomic metadata replacement";
+        if (source_restored) {
+            clean_stage();
+            const bool prior_backup_restored = existing_backup->restore(
+                test_hooks != nullptr && test_hooks->fail_backup_restore);
+            if (!prior_backup_restored) {
+                error += "; prior backup remains preserved at ";
+                error += existing_backup->preserved_path();
+            }
+        } else {
+            const auto recovery =
+                existing_backup->preserve_after_source_restore_failure(
+                    test_hooks != nullptr
+                    && test_hooks->fail_backup_restore);
+            error += "; displaced source remains at ";
+            error += staged.u8string();
+            if (!recovery.original_backup_path.empty()) {
+                error += "; original recovery backup remains at ";
+                error += recovery.original_backup_path;
+            }
+            if (!recovery.prior_backup_path.empty()) {
+                error += recovery.prior_backup_restored
+                    ? "; prior backup restored at "
+                    : "; prior backup remains preserved at ";
+                error += recovery.prior_backup_path;
+            }
+        }
+        return AG_IO_ERROR;
+    }
+    clean_stage();
 #endif
     if (owned_backup.has_value()) existing_backup->discard();
     std::filesystem::remove(std::filesystem::path(staged.native()

@@ -2109,6 +2109,7 @@ To roll back, use Undo to restore the original filenames.</translation>
     </context>
 <context>
         <name>FilenameProcessor</name>
+        <message><source>上次覆盖备份已变更或无法删除，已保留撤销记录</source><translation>The previous overwrite backup changed or could not be deleted; the undo record was kept.</translation></message>
         <message>
             <location filename="../qt/src/filename_processor.cpp" line="185" />
             <source>未找到支持的音频文件</source>
@@ -2742,6 +2743,16 @@ Actual encoding parameters may vary with system performance.</translation>
     </context>
 <context>
         <name>ImmersiveControlPanel</name>
+        <message><source>最小尺寸</source><translation>Minimum size</translation></message>
+        <message><source>最大尺寸</source><translation>Maximum size</translation></message>
+        <message><source>跟随速度</source><translation>Follow speed</translation></message>
+        <message><source>响应强度</source><translation>Response strength</translation></message>
+        <message><source>预设自动轮换</source><translation>Automatic preset rotation</translation></message>
+        <message><source>定时</source><translation>Timed</translation></message>
+        <message><source>换歌</source><translation>On track change</translation></message>
+        <message><source>间隔</source><translation>Interval</translation></message>
+        <message><source> 秒</source><translation> seconds</translation></message>
+        <message><source>启用</source><translation>Enable</translation></message>
         <message><source>仅调视觉响应，不改变音效；频带估计不等于人声分离或乐器识别</source><translation>Visual response only; audio is unchanged. Frequency estimates are not vocal separation or instrument recognition.</translation></message>
         <message><source>低频 · 整体起伏</source><translation>Low frequencies · Overall motion</translation></message>
         <message><source>低频 · 鼓点区域</source><translation>Low frequencies · Beat region</translation></message>
@@ -6787,6 +6798,7 @@ Clear: Remove all known aliases for this field.</translation>
     </context>
 <context>
         <name>VocalSeparationController</name>
+        <message><source>输出已生成，但临时预约标记清理失败；后续将自动重试清理。</source><translation>Outputs were generated, but the temporary reservation marker could not be cleaned up; cleanup will be retried automatically.</translation></message>
         <message>
             <source>临时下载路径不安全，已停止下载。请更换模型目录后重试</source>
             <translation>The temporary download path is unsafe. Download stopped. Choose another model directory and retry.</translation>

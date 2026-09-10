@@ -2331,6 +2331,7 @@
     </context>
 <context>
         <name>FilenameProcessor</name>
+        <message><source>上次覆盖备份已变更或无法删除，已保留撤销记录</source><translation>上次覆盖备份已变更或无法删除，已保留撤销记录</translation></message>
         <message>
             <location filename="../qt/src/filename_processor.cpp" line="185" />
             <source>未找到支持的音频文件</source>
@@ -3000,6 +3001,16 @@
     </context>
 <context>
         <name>ImmersiveControlPanel</name>
+        <message><source>最小尺寸</source><translation>最小尺寸</translation></message>
+        <message><source>最大尺寸</source><translation>最大尺寸</translation></message>
+        <message><source>跟随速度</source><translation>跟随速度</translation></message>
+        <message><source>响应强度</source><translation>响应强度</translation></message>
+        <message><source>预设自动轮换</source><translation>预设自动轮换</translation></message>
+        <message><source>定时</source><translation>定时</translation></message>
+        <message><source>换歌</source><translation>换歌</translation></message>
+        <message><source>间隔</source><translation>间隔</translation></message>
+        <message><source> 秒</source><translation> 秒</translation></message>
+        <message><source>启用</source><translation>启用</translation></message>
         <message><source>仅调视觉响应，不改变音效；频带估计不等于人声分离或乐器识别</source><translation>仅调视觉响应，不改变音效；频带估计不等于人声分离或乐器识别</translation></message>
         <message><source>低频 · 整体起伏</source><translation>低频 · 整体起伏</translation></message>
         <message><source>低频 · 鼓点区域</source><translation>低频 · 鼓点区域</translation></message>
@@ -7664,6 +7675,7 @@
     </context>
 <context>
         <name>VocalSeparationController</name>
+        <message><source>输出已生成，但临时预约标记清理失败；后续将自动重试清理。</source><translation>输出已生成，但临时预约标记清理失败；后续将自动重试清理。</translation></message>
         <message>
             <source>临时下载路径不安全，已停止下载。请更换模型目录后重试</source>
             <translation>临时下载路径不安全，已停止下载。请更换模型目录后重试</translation>

@@ -185,9 +185,8 @@ protected:
             smoothedFeatures_ = AudioFeatures{};
             referenceResponse_.reset();
         }
-        const bool pcmDiscontinuity = next.pcm.epoch != snapshot_.pcm.epoch
-            || next.pcm.sampleRate != snapshot_.pcm.sampleRate
-            || next.pcm.valid != snapshot_.pcm.valid;
+        const bool pcmDiscontinuity =
+            TerrainReactorItem::hasVisualPcmDiscontinuity(snapshot_.pcm, next.pcm);
         const bool visualReset = next.referenceAudio != snapshot_.referenceAudio
             || next.visualResetRevision != snapshot_.visualResetRevision
             // A pause deliberately makes the retained window non-current.
@@ -1075,6 +1074,17 @@ TerrainReactorItem::TerrainReactorItem(QQuickItem* parent)
     connect(this, &QQuickItem::heightChanged,
             this, &TerrainReactorItem::updateColorBufferSize);
     updateWindowState(window());
+}
+
+bool TerrainReactorItem::hasVisualPcmDiscontinuity(
+    const agplayer::VisualAudioFrameAnalyzer::Snapshot& previous,
+    const agplayer::VisualAudioFrameAnalyzer::Snapshot& next)
+{
+    // valid intentionally drops while playback is paused and returns on
+    // resume. The retained PCM window remains on the same generation and
+    // sample-rate timeline, so only those timeline changes require a reset.
+    return next.epoch != previous.epoch
+        || next.sampleRate != previous.sampleRate;
 }
 
 TerrainReactorItem::~TerrainReactorItem()

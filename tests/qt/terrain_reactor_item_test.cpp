@@ -126,6 +126,7 @@ private slots:
     void renderEventsSurviveDiscardedGuiReportsAndRendererRecreation();
     void queuedRenderReportCannotOverwriteManualMode();
     void referenceSceneRetainsSharedPcmForPauseRelease();
+    void pauseResumeValidityDoesNotResetContinuousPcm();
     void defaultsDoNotScheduleRendering();
     void compensatesRasterDirectionAtPresentation()
     {
@@ -333,6 +334,28 @@ void TerrainReactorItemTest::referenceSceneRetainsSharedPcmForPauseRelease()
     item.setFeatureSource(nullptr);
     QCOMPARE(item.featureEnergy(), 0.0);
     for (const auto& band : item.featureBands()) QCOMPARE(band.toDouble(), 0.0);
+}
+
+void TerrainReactorItemTest::pauseResumeValidityDoesNotResetContinuousPcm()
+{
+    agplayer::VisualAudioFrameAnalyzer::Snapshot playing;
+    playing.valid = true;
+    playing.sampleRate = 48000;
+    playing.epoch = 7;
+
+    auto paused = playing;
+    paused.valid = false;
+    paused.paused = true;
+    QVERIFY(!TerrainReactorItem::hasVisualPcmDiscontinuity(playing, paused));
+    QVERIFY(!TerrainReactorItem::hasVisualPcmDiscontinuity(paused, playing));
+
+    auto seeked = playing;
+    ++seeked.epoch;
+    QVERIFY(TerrainReactorItem::hasVisualPcmDiscontinuity(playing, seeked));
+
+    auto reconfigured = playing;
+    reconfigured.sampleRate = 44100;
+    QVERIFY(TerrainReactorItem::hasVisualPcmDiscontinuity(playing, reconfigured));
 }
 
 void TerrainReactorItemTest::referenceThemesReachRendererWithoutHexQuantization()

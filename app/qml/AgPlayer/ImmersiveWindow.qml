@@ -16,6 +16,7 @@ Window {
     property int qaViewportHeight: 0
     property alias surfaceItem: surface
     property rect windowedGeometry: Qt.rect(0, 0, 0, 0)
+    property int synchronizedHostMode: PlayerExperienceController.Windowed
 
     readonly property bool hasKeyboardFocus:
         visible && active && visibility !== Window.Minimized
@@ -93,17 +94,21 @@ Window {
             return
         }
         var wasVisible = visible
-        if (PlayerExperienceController.hostMode
-                === PlayerExperienceController.Fullscreen) {
-            if (visibility === Window.Windowed)
-                windowedGeometry = Qt.rect(x, y, width, height)
+        var requestedHostMode = PlayerExperienceController.hostMode
+        var previousHostMode = synchronizedHostMode
+        if (previousHostMode === PlayerExperienceController.Windowed
+                && requestedHostMode !== PlayerExperienceController.Windowed
+                && visibility === Window.Windowed) {
+            windowedGeometry = Qt.rect(x, y, width, height)
+        }
+        synchronizedHostMode = requestedHostMode
+        if (requestedHostMode === PlayerExperienceController.Fullscreen) {
             showFullScreen()
             WindowController.enterImmersivePresentation()
             requestActivate()
             return
         }
-        if (PlayerExperienceController.hostMode
-                === PlayerExperienceController.Desktop) {
+        if (requestedHostMode === PlayerExperienceController.Desktop) {
             x = Screen.virtualX
             y = Screen.virtualY
             width = Screen.width
@@ -112,9 +117,11 @@ Window {
             x = Screen.virtualX + Math.max(0, (Screen.width - width) / 2)
             y = Screen.virtualY + Math.max(0, (Screen.height - height) / 2)
         }
-        var restoreGeometry = visibility === Window.FullScreen
-                && PlayerExperienceController.hostMode === PlayerExperienceController.Windowed
+        var restoreGeometry = requestedHostMode
+                === PlayerExperienceController.Windowed
                 && windowedGeometry.width > 0
+                && (visibility === Window.FullScreen
+                    || previousHostMode === PlayerExperienceController.Desktop)
         showNormal()
         if (restoreGeometry) {
             x = windowedGeometry.x

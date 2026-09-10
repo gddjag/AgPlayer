@@ -59,9 +59,10 @@ ResourceFolderController::ResourceFolderController(QObject* parent)
 ResourceFolderController::~ResourceFolderController()
 {
     if (scanCancel_) scanCancel_->store(true);
-    // Discovery captures values only, but stop the owned filesystem work promptly.
-    for (auto* watcher : findChildren<QFutureWatcher<QVariantMap>*>())
-        watcher->waitForFinished();
+    // Discovery captures values only. Its parentless watcher owns the completion
+    // callback and deletes itself, so closing the app never blocks on a slow or
+    // unavailable filesystem.
+    scanWatcher_.clear();
 }
 
 void ResourceFolderController::setLibraryModel(LibraryModel* model)
@@ -86,32 +87,41 @@ void ResourceFolderController::rescan()
         scanning_ = true;
         emit scanningChanged();
     }
-    auto* watcher = new QFutureWatcher<QVariantMap>(this);
+    auto* watcher = new QFutureWatcher<QVariantMap>();
     scanWatcher_ = watcher;
-    connect(watcher, &QFutureWatcher<QVariantMap>::finished, this,
-            [this, watcher, cancelled, generation] {
-        watcher->deleteLater();
-        if (cancelled->load() || generation != scanGeneration_) return;
-        scanWatcher_.clear();
+    const QPointer<ResourceFolderController> controller(this);
+    connect(watcher, &QFutureWatcher<QVariantMap>::finished, watcher,
+            [controller, watcher, cancelled, generation] {
         const QVariantMap result = watcher->result();
+        watcher->deleteLater();
+        if (controller.isNull()) return;
+        if (controller->scanWatcher_ == watcher) controller->scanWatcher_.clear();
+        if (cancelled->load() || generation != controller->scanGeneration_) return;
         const QStringList directories = normalizedResourcePaths(
-            result.value(QStringLiteral("directories")).toStringList() + monitoredRoots_);
-        const bool changed = directories != resourceDirectories_;
-        resourceDirectories_ = directories;
-        applyDirectoryWatches(directories);
-        if (changed) emit resourceTopologyChanged();
-        scanning_ = false;
-        emit scanningChanged();
-        emit scanFinished();
+            result.value(QStringLiteral("directories")).toStringList()
+            + controller->monitoredRoots_);
+        const bool changed = directories != controller->resourceDirectories_;
+        controller->resourceDirectories_ = directories;
+        controller->applyDirectoryWatches(directories);
+        if (changed) {
+            emit controller->resourceTopologyChanged();
+            if (controller.isNull()) return;
+        }
+        controller->scanning_ = false;
+        emit controller->scanningChanged();
+        if (controller.isNull()) return;
+        emit controller->scanFinished();
+        if (controller.isNull()) return;
 
-        if (importer_ != nullptr && !importer_->busy()) {
+        if (controller->importer_ != nullptr && !controller->importer_->busy()) {
             QStringList newFiles;
             for (const QString& path : result.value(QStringLiteral("files")).toStringList()) {
-                if (!excludedPaths_.contains(resourceLookupKey(path))
-                    && (library_ == nullptr || !library_->containsPath(path)))
+                if (!controller->excludedPaths_.contains(resourceLookupKey(path))
+                    && (controller->library_ == nullptr
+                        || !controller->library_->containsPath(path)))
                     newFiles.append(path);
             }
-            if (!newFiles.isEmpty()) importer_->importPaths(newFiles);
+            if (!newFiles.isEmpty()) controller->importer_->importPaths(newFiles);
         }
     });
     watcher->setFuture(QtConcurrent::run([roots, cancelled] {

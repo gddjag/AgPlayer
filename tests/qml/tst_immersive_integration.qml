@@ -1087,6 +1087,49 @@ TestCase {
         compare(moveRegion.enabled, false)
     }
 
+    function test_desktop_and_fullscreen_roundtrip_preserves_windowed_geometry() {
+        PlayerExperienceController.immersiveMode =
+                PlayerExperienceController.TerrainReactor
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Windowed, 2000)
+        var immersiveWindow = coordinator.fullscreenWindow
+        verify(immersiveWindow)
+
+        immersiveWindow.x = 47
+        immersiveWindow.y = 53
+        immersiveWindow.width = 1120
+        immersiveWindow.height = 720
+        var windowed = Qt.rect(immersiveWindow.x, immersiveWindow.y,
+                               immersiveWindow.width, immersiveWindow.height)
+
+        PlayerExperienceController.hostMode = PlayerExperienceController.Desktop
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Desktop, 2500)
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Windowed, 2500)
+        compare(immersiveWindow.x, windowed.x)
+        compare(immersiveWindow.y, windowed.y)
+        compare(immersiveWindow.width, windowed.width)
+        compare(immersiveWindow.height, windowed.height)
+
+        PlayerExperienceController.hostMode = PlayerExperienceController.Desktop
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Desktop, 2500)
+        PlayerExperienceController.hostMode = PlayerExperienceController.Fullscreen
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Fullscreen, 2500)
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        tryCompare(coordinator, "attachedHostMode",
+                   PlayerExperienceController.Windowed, 2500)
+        compare(immersiveWindow.x, windowed.x)
+        compare(immersiveWindow.y, windowed.y)
+        compare(immersiveWindow.width, windowed.width)
+        compare(immersiveWindow.height, windowed.height)
+    }
+
     function test_queue_drawer_timers_scope_and_transform_only_magnification() {
         var drawer = queueDrawerComponent.createObject(mainWindow.contentItem)
         verify(drawer)

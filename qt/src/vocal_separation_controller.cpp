@@ -3190,6 +3190,7 @@ void VocalSeparationController::handleResult(const QJsonObject& payload)
             {QStringLiteral("available"), true}});
     }
     const QString fallbackReason = payload.value(QStringLiteral("fallbackReason")).toString();
+    const QString cleanupWarning = payload.value(QStringLiteral("cleanupWarning")).toString();
     const QVariantMap record{
         {QStringLiteral("id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
         {QStringLiteral("createdAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
@@ -3200,6 +3201,7 @@ void VocalSeparationController::handleResult(const QJsonObject& payload)
         {QStringLiteral("outputPath"), context.outputRoot},
         {QStringLiteral("provider"), payload.value(QStringLiteral("provider"))},
         {QStringLiteral("fallbackReason"), fallbackReason},
+        {QStringLiteral("cleanupWarning"), cleanupWarning},
         {QStringLiteral("outputGain"), payload.value(QStringLiteral("outputGain")).toDouble(1.0)},
         {QStringLiteral("rawPeaks"), payload.value(QStringLiteral("rawPeaks"))},
         {QStringLiteral("stems"), historyStems},
@@ -3216,6 +3218,9 @@ void VocalSeparationController::handleResult(const QJsonObject& payload)
     fallbackReason_ = payload.value(QStringLiteral("fallbackReason")).toString();
     outputGain_ = payload.value(QStringLiteral("outputGain")).toDouble(1.0);
     emit actualExecutionChanged();
+    if (!cleanupWarning.isEmpty()) {
+        setError(tr("输出已生成，但临时预约标记清理失败；后续将自动重试清理。"));
+    }
     waveformQueue_.clear();
     for (qsizetype index = 0; index < verifiedPaths.size(); ++index) {
         const QString& path = verifiedPaths.at(index);

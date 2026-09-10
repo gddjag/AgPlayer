@@ -1309,16 +1309,21 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
     QJsonArray outputs;
     for (const QString& path : committed.outputs) outputs.push_back(path);
     progress(1.0, QStringLiteral("completed"));
-    return {true, {}, {},
-            {{QStringLiteral("outputs"), outputs},
-             {QStringLiteral("provider"),
-              provider.provider == ExecutionProvider::Cuda ? QStringLiteral("cuda") : provider.provider == ExecutionProvider::DirectMl
-                  ? QStringLiteral("directml") : QStringLiteral("cpu")},
-             {QStringLiteral("device"), provider.provider == ExecutionProvider::Cpu
-                  ? QStringLiteral("CPU") : QStringLiteral("GPU %1").arg(provider.adapterId)},
-             {QStringLiteral("fallbackReason"), provider.fallbackReason},
-             {QStringLiteral("outputGain"), separated.payload.value(QStringLiteral("outputGain")).toDouble(1.0)},
-             {QStringLiteral("rawPeaks"), separated.payload.value(QStringLiteral("rawPeaks"))}}};
+    QJsonObject completionPayload{
+        {QStringLiteral("outputs"), outputs},
+        {QStringLiteral("provider"),
+         provider.provider == ExecutionProvider::Cuda ? QStringLiteral("cuda") : provider.provider == ExecutionProvider::DirectMl
+             ? QStringLiteral("directml") : QStringLiteral("cpu")},
+        {QStringLiteral("device"), provider.provider == ExecutionProvider::Cpu
+             ? QStringLiteral("CPU") : QStringLiteral("GPU %1").arg(provider.adapterId)},
+        {QStringLiteral("fallbackReason"), provider.fallbackReason},
+        {QStringLiteral("outputGain"), separated.payload.value(QStringLiteral("outputGain")).toDouble(1.0)},
+        {QStringLiteral("rawPeaks"), separated.payload.value(QStringLiteral("rawPeaks"))}};
+    if (!committed.code.isEmpty()) {
+        completionPayload.insert(QStringLiteral("cleanupWarning"), committed.code);
+        completionPayload.insert(QStringLiteral("cleanupWarningMessage"), committed.message);
+    }
+    return {true, {}, {}, completionPayload};
 }
 
 } // namespace agplayer::separation

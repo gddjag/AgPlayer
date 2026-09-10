@@ -82,10 +82,12 @@ private:
     QPointer<QFutureWatcher<QList<QUrl>>> discoveryWatcher_;
     QPointer<QFutureWatcher<QList<Entry>>> loadWatcher_;
     QPointer<QFutureWatcher<RenameResult>> operationWatcher_;
+    QPointer<QFutureWatcher<agplayer::qt::RenameTransactionResult>> undoWatcher_;
     QPointer<LibraryModel> library_;
 
     void setBusy(bool value);
     void setProgress(double value);
+    bool discardLastUndo();
     void startLoad(QList<QUrl> expanded);
     static QString proposedName(const QString& original,
                                 const QVariantMap& rules, int ordinal);

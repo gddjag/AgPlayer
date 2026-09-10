@@ -568,8 +568,16 @@ TransactionResult OutputTransaction::commit(
         outputs.push_back(QDir(finalDirectory).filePath(
             QFileInfo(temporaryPaths_.value(stem)).fileName()));
     }
+    if (!operations_->removeFile(reservationPath_)) {
+        // The outputs are already atomically published. Keep the reservation and
+        // lock alive so cancel() or the destructor can retry only the stale
+        // marker cleanup without touching the published directory.
+        active_ = true;
+        return {true, QStringLiteral("cleanup_pending"),
+                QStringLiteral("Outputs were published, but reservation cleanup is pending"),
+                outputs};
+    }
     active_ = false;
-    (void)operations_->removeFile(reservationPath_);
     reservationPath_.clear();
     lock_.reset();
     return {true, {}, {}, outputs};

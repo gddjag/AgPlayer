@@ -237,6 +237,9 @@ private:
         agplayer::VisualAudioFrameAnalyzer& analyzer,
         agplayer::VisualTerrainResponse& response, const RenderSnapshot& snapshot,
         double wallDelta, agplayer::VisualSnareTrigger& snare);
+    static bool hasVisualPcmDiscontinuity(
+        const agplayer::VisualAudioFrameAnalyzer::Snapshot& previous,
+        const agplayer::VisualAudioFrameAnalyzer::Snapshot& next);
     struct AudioFrameOrigin {
         quint64 visualResetRevision = 0;
         quint64 activityRevision = 0;

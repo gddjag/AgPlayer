@@ -745,6 +745,52 @@ int main(const int argc, char** argv)
     std::filesystem::remove(stream_recovery_path);
 #endif
 
+#ifndef _WIN32
+    // A non-cooperating writer can replace the source path after the final
+    // identity check. The atomic exchange must detect that the displaced path
+    // is not the locked source object, exchange it back, and leave the
+    // competing writer's file at the source path.
+    const std::filesystem::path posix_cas_swap_path =
+        work_dir / "meta-posix-post-check-path-swap.wav";
+    const std::filesystem::path posix_cas_displaced_path =
+        work_dir / "meta-posix-post-check-path-swap.displaced.wav";
+    std::filesystem::copy_file(fixture, posix_cas_swap_path,
+        std::filesystem::copy_options::overwrite_existing);
+    auto posix_cas_replacement_bytes = file_bytes(fixture);
+    assert(posix_cas_replacement_bytes.size() > 96U);
+    posix_cas_replacement_bytes[96] ^= 0x33U;
+    bool posix_cas_swap_hook_called = false;
+    agplayer::MetadataWriterTestHooks posix_cas_swap_hooks;
+    posix_cas_swap_hooks.before_replace_file = [&] {
+        posix_cas_swap_hook_called = true;
+        std::filesystem::rename(posix_cas_swap_path,
+                                posix_cas_displaced_path);
+        std::ofstream replacement(posix_cas_swap_path,
+            std::ios::binary | std::ios::trunc);
+        replacement.write(
+            reinterpret_cast<const char*>(posix_cas_replacement_bytes.data()),
+            static_cast<std::streamsize>(posix_cas_replacement_bytes.size()));
+        replacement.close();
+    };
+    agplayer::MetadataFileResult posix_cas_swap_result;
+    assert(agplayer::write_metadata_plan(posix_cas_swap_path.u8string(),
+        write_plan, posix_cas_swap_result, nullptr, &posix_cas_swap_hooks)
+        == AG_IO_ERROR);
+    assert(posix_cas_swap_hook_called);
+#if defined(__linux__) || defined(__APPLE__)
+    assert(posix_cas_swap_result.error_code
+        == agplayer::MetadataErrorCode::SourceChanged);
+#else
+    assert(posix_cas_swap_result.error_code
+        == agplayer::MetadataErrorCode::AtomicReplaceFailed);
+#endif
+    assert(file_bytes(posix_cas_swap_path) == posix_cas_replacement_bytes);
+    assert(!std::filesystem::exists(
+        posix_cas_swap_path.u8string() + ".agbak"));
+    std::filesystem::remove(posix_cas_swap_path);
+    std::filesystem::remove(posix_cas_displaced_path);
+#endif
+
     // A failed write must not overwrite or delete a pre-existing recovery
     // point. This exercises both failure before replacement and readback
     // failure after replacement/rollback.

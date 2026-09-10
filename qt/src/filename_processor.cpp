@@ -114,7 +114,16 @@ FilenameProcessor::~FilenameProcessor()
     }
     if (operationWatcher_ != nullptr) {
         operationWatcher_->future().waitForFinished();
+        const RenameResult result = operationWatcher_->future().result();
+        if (result.transaction.committed) {
+            agplayer::qt::RenameTransaction::discardUndo(
+                result.transaction.undoRecord);
+        }
     }
+    if (undoWatcher_ != nullptr) {
+        undoWatcher_->future().waitForFinished();
+    }
+    agplayer::qt::RenameTransaction::discardUndo(lastUndoRecord_);
 }
 
 void FilenameProcessor::setLibraryModel(LibraryModel* library)
@@ -170,9 +179,26 @@ void FilenameProcessor::setProgress(double value)
     emit progressChanged();
 }
 
+bool FilenameProcessor::discardLastUndo()
+{
+    if (!canUndo()) {
+        return true;
+    }
+    if (!agplayer::qt::RenameTransaction::discardUndo(lastUndoRecord_)) {
+        emit errorOccurred(tr("上次覆盖备份已变更或无法删除，已保留撤销记录"));
+        return false;
+    }
+    lastUndoRecord_ = {};
+    emit canUndoChanged();
+    return true;
+}
+
 void FilenameProcessor::loadFiles(const QList<QUrl>& urls)
 {
     if (busy()) {
+        return;
+    }
+    if (!discardLastUndo()) {
         return;
     }
     cancelFlag_.store(false, std::memory_order_release);
@@ -210,16 +236,10 @@ void FilenameProcessor::startLoad(QList<QUrl> expanded)
             [this, watcher] {
         loadWatcher_.clear();
         entries_ = watcher->result();
-        const bool undoChanged = canUndo();
-        agplayer::qt::RenameTransaction::discardUndo(lastUndoRecord_);
-        lastUndoRecord_ = {};
         setBusy(false);
         setProgress(1.0);
         emit fileCountChanged();
         emit entriesChanged();
-        if (undoChanged) {
-            emit canUndoChanged();
-        }
         emit entriesLoaded();
         watcher->deleteLater();
     });
@@ -340,6 +360,9 @@ void FilenameProcessor::apply(const QVariantMap& rules,
         emit renameApplied(0, 0, 0);
         return;
     }
+    if (!discardLastUndo()) {
+        return;
+    }
     cancelFlag_.store(false, std::memory_order_release);
     setBusy(true);
     setProgress(0.0);
@@ -351,9 +374,7 @@ void FilenameProcessor::apply(const QVariantMap& rules,
         operationWatcher_.clear();
         const RenameResult result = watcher->result();
         entries_ = result.entries;
-        const bool hadUndo = canUndo();
         if (result.transaction.committed) {
-            agplayer::qt::RenameTransaction::discardUndo(lastUndoRecord_);
             lastUndoRecord_ = result.transaction.undoRecord;
         }
         if (result.transaction.committed && !library_.isNull()) {
@@ -389,7 +410,7 @@ void FilenameProcessor::apply(const QVariantMap& rules,
         setBusy(false);
         setProgress(1.0);
         emit entriesChanged();
-        if (hadUndo != canUndo()) {
+        if (canUndo()) {
             emit canUndoChanged();
         }
         if (!result.error.isEmpty()) {
@@ -450,57 +471,81 @@ void FilenameProcessor::undoLast()
         return;
     }
     const agplayer::qt::RenameUndoRecord undoRecord = lastUndoRecord_;
-    const agplayer::qt::RenameTransactionResult result =
-        agplayer::qt::RenameTransaction().undo(undoRecord);
-    if (!result.committed) {
-        if (!result.errorText.isEmpty()) {
-            emit errorOccurred(result.errorText);
+    setBusy(true);
+    setProgress(0.0);
+    auto* watcher =
+        new QFutureWatcher<agplayer::qt::RenameTransactionResult>(this);
+    undoWatcher_ = watcher;
+    connect(watcher,
+            &QFutureWatcher<agplayer::qt::RenameTransactionResult>::finished,
+            this,
+            [this, watcher, undoRecord] {
+        if (undoWatcher_ == watcher) {
+            undoWatcher_.clear();
         }
-        emit undoCompleted(0, 1);
-        return;
-    }
-    int restoredCount = 0;
-    for (const auto& item : undoRecord.plan.items) {
-        if (item.action != agplayer::qt::RenameAction::Rename
-            && item.action != agplayer::qt::RenameAction::Overwrite) {
-            continue;
+        const agplayer::qt::RenameTransactionResult result = watcher->result();
+        if (!result.committed) {
+            setBusy(false);
+            setProgress(1.0);
+            if (!result.errorText.isEmpty()) {
+                emit errorOccurred(result.errorText);
+            }
+            emit undoCompleted(0, 1);
+            watcher->deleteLater();
+            return;
         }
-        entries_[item.itemId].path = item.sourcePath;
-        entries_[item.itemId].fileName = QFileInfo(item.sourcePath).fileName();
-        ++restoredCount;
-    }
-    if (!library_.isNull()) {
-        QHash<QString, QString> restoredPaths;
-        const QList<TrackRecord> tracks = library_->tracks();
+
+        int restoredCount = 0;
         for (const auto& item : undoRecord.plan.items) {
             if (item.action != agplayer::qt::RenameAction::Rename
                 && item.action != agplayer::qt::RenameAction::Overwrite) {
                 continue;
             }
-            for (const TrackRecord& track : tracks) {
-                if (pathKey(track.path) == pathKey(item.targetPath)) {
-                    restoredPaths.insert(track.trackId, item.sourcePath);
-                    break;
+            if (item.itemId >= 0 && item.itemId < entries_.size()) {
+                entries_[item.itemId].path = item.sourcePath;
+                entries_[item.itemId].fileName = QFileInfo(item.sourcePath).fileName();
+            }
+            ++restoredCount;
+        }
+        if (!library_.isNull()) {
+            QHash<QString, QString> restoredPaths;
+            const QList<TrackRecord> tracks = library_->tracks();
+            for (const auto& item : undoRecord.plan.items) {
+                if (item.action != agplayer::qt::RenameAction::Rename
+                    && item.action != agplayer::qt::RenameAction::Overwrite) {
+                    continue;
+                }
+                for (const TrackRecord& track : tracks) {
+                    if (pathKey(track.path) == pathKey(item.targetPath)) {
+                        restoredPaths.insert(track.trackId, item.sourcePath);
+                        break;
+                    }
                 }
             }
-        }
-        bool libraryUpdateOk = true;
-        if (!restoredPaths.isEmpty()) {
-            for (auto it = restoredPaths.cbegin(); it != restoredPaths.cend(); ++it) {
-                if (!library_->updateTrackPath(it.key(), it.value())) {
-                    libraryUpdateOk = false;
-                    break;
+            bool libraryUpdateOk = true;
+            if (!restoredPaths.isEmpty()) {
+                for (auto it = restoredPaths.cbegin(); it != restoredPaths.cend(); ++it) {
+                    if (!library_->updateTrackPath(it.key(), it.value())) {
+                        libraryUpdateOk = false;
+                        break;
+                    }
                 }
             }
+            if (!restoredPaths.isEmpty() && !libraryUpdateOk) {
+                emit errorOccurred(tr("文件已恢复，但曲库路径同步失败。"));
+            }
         }
-        if (!restoredPaths.isEmpty() && !libraryUpdateOk) {
-            emit errorOccurred(tr("文件已恢复，但曲库路径同步失败。"));
-        }
-    }
-    lastUndoRecord_ = {};
-    emit entriesChanged();
-    emit canUndoChanged();
-    emit undoCompleted(restoredCount, 0);
+        lastUndoRecord_ = {};
+        setBusy(false);
+        setProgress(1.0);
+        emit entriesChanged();
+        emit canUndoChanged();
+        emit undoCompleted(restoredCount, 0);
+        watcher->deleteLater();
+    });
+    watcher->setFuture(QtConcurrent::run([undoRecord] {
+        return agplayer::qt::RenameTransaction().undo(undoRecord);
+    }));
 }
 
 void FilenameProcessor::cancel()
@@ -513,13 +558,10 @@ void FilenameProcessor::clear()
     if (busy()) {
         return;
     }
-    const bool hadUndo = canUndo();
+    if (!discardLastUndo()) {
+        return;
+    }
     entries_.clear();
-    agplayer::qt::RenameTransaction::discardUndo(lastUndoRecord_);
-    lastUndoRecord_ = {};
     emit fileCountChanged();
     emit entriesChanged();
-    if (hadUndo) {
-        emit canUndoChanged();
-    }
 }

@@ -81,6 +81,13 @@ RenameTransactionResult failure(QString code, QString text, QList<Step>& steps,
 
 } // namespace
 
+void RenameTransaction::notifyTestHook(QStringView point, const QString& path) const
+{
+    if (testHook_) {
+        testHook_(point, path);
+    }
+}
+
 RenameTransactionResult RenameTransaction::execute(const RenamePlan& plan,
                                                    const std::atomic_bool* cancel) const
 {
@@ -125,6 +132,14 @@ RenameTransactionResult RenameTransaction::execute(const RenamePlan& plan,
                            steps, backedUp, staged, committed, journalPath);
         }
         ++backedUp;
+        notifyTestHook(u"after-overwrite-backup", step.backup.backupPath);
+        const QFileInfo backupInfo(step.backup.backupPath);
+        if (!backupInfo.exists() || backupInfo.size() != step.backup.size
+            || hashFile(step.backup.backupPath) != step.backup.sha256) {
+            return failure(QStringLiteral("overwrite-target-changed"),
+                           QStringLiteral("要覆盖的目标文件在备份时已变更"),
+                           steps, backedUp, staged, committed, journalPath);
+        }
     }
     for (Step& step : steps) {
         if (cancel != nullptr && cancel->load()) {
@@ -136,6 +151,14 @@ RenameTransactionResult RenameTransaction::execute(const RenamePlan& plan,
             return failure(QStringLiteral("stage-failed"), QStringLiteral("无法创建同目录暂存文件"), steps, backedUp, staged, committed, journalPath);
         }
         ++staged;
+        notifyTestHook(u"after-source-stage", step.stage);
+        const QFileInfo stagedInfo(step.stage);
+        if (!stagedInfo.exists() || stagedInfo.size() != step.item.size
+            || hashFile(step.stage) != step.item.sha256) {
+            return failure(QStringLiteral("source-changed"),
+                           QStringLiteral("文件在暂存时已变更"),
+                           steps, backedUp, staged, committed, journalPath);
+        }
     }
     for (Step& step : steps) {
         if (cancel != nullptr && cancel->load()) {
@@ -143,12 +166,22 @@ RenameTransactionResult RenameTransaction::execute(const RenamePlan& plan,
             result.cancelled = true;
             return result;
         }
-        if (!QFile::rename(step.stage, step.item.targetPath) || hashFile(step.item.targetPath) != step.item.sha256) {
+        if (!QFile::rename(step.stage, step.item.targetPath)) {
             return failure(QStringLiteral("commit-failed"), QStringLiteral("重命名提交或完整性校验失败"), steps, backedUp, staged, committed, journalPath);
         }
         ++committed;
+        notifyTestHook(u"after-target-move", step.item.targetPath);
+        if (hashFile(step.item.targetPath) != step.item.sha256) {
+            return failure(QStringLiteral("commit-failed"), QStringLiteral("重命名提交或完整性校验失败"), steps, backedUp, staged, committed, journalPath);
+        }
     }
-    RenameJournalStore::markCompleted(journalPath, true, QStringLiteral("Committed"));
+    notifyTestHook(u"before-journal-finalize", journalPath);
+    if (!RenameJournalStore::markCompleted(journalPath, true,
+                                           QStringLiteral("Committed"))) {
+        return failure(QStringLiteral("journal-finalize-failed"),
+                       QStringLiteral("无法确认重命名事务日志，已回滚文件操作"),
+                       steps, backedUp, staged, committed, journalPath);
+    }
     RenameUndoRecord undoRecord{plan, {}};
     for (const Step& step : steps) {
         if (!step.backup.backupPath.isEmpty()) {
@@ -203,8 +236,13 @@ bool RenameTransaction::discardUndo(const RenameUndoRecord& record)
 {
     bool complete = true;
     for (const RenameOverwriteBackup& backup : record.overwriteBackups) {
-        if (QFileInfo::exists(backup.backupPath)
-            && !QFile::remove(backup.backupPath)) {
+        const QFileInfo backupInfo(backup.backupPath);
+        if (!backupInfo.exists()) {
+            continue;
+        }
+        if (backupInfo.size() != backup.size
+            || hashFile(backup.backupPath) != backup.sha256
+            || !QFile::remove(backup.backupPath)) {
             complete = false;
         }
     }

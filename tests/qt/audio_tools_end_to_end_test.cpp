@@ -3723,7 +3723,9 @@ void AudioToolsEndToEndTest::filenameProcessorKeepsLibraryPathsInSyncAcrossRenam
              renamedPath);
     QVERIFY(library.trackForId(track.trackId).value(QStringLiteral("available")).toBool());
 
+    QSignalSpy undone(&processor, &FilenameProcessor::undoCompleted);
     processor.undoLast();
+    QVERIFY(undone.wait(30'000));
     QCOMPARE(library.trackForId(track.trackId).value(QStringLiteral("path")).toString(),
              sourcePath);
     QVERIFY(library.trackForId(track.trackId).value(QStringLiteral("available")).toBool());
@@ -3789,6 +3791,7 @@ void AudioToolsEndToEndTest::filenameProcessorPlansConflictsAndUndoes()
     conflict.close();
     QSignalSpy undone(&processor, &FilenameProcessor::undoCompleted);
     processor.undoLast();
+    QVERIFY(undone.wait(30'000));
     QCOMPARE(undone.count(), 1);
     QCOMPARE(undone.first().at(0).toInt(), 0);
     QCOMPARE(undone.first().at(1).toInt(), 1);
@@ -3797,6 +3800,7 @@ void AudioToolsEndToEndTest::filenameProcessorPlansConflictsAndUndoes()
     QVERIFY(QFile::remove(input));
     undone.clear();
     processor.undoLast();
+    QVERIFY(undone.wait(30'000));
     QCOMPARE(undone.count(), 1);
     QCOMPARE(undone.first().at(0).toInt(), 1);
     QCOMPARE(undone.first().at(1).toInt(), 0);
@@ -3837,6 +3841,7 @@ void AudioToolsEndToEndTest::filenameProcessorUsesTwoStageTransactions()
 
     QSignalSpy undone(&processor, &FilenameProcessor::undoCompleted);
     processor.undoLast();
+    QVERIFY(undone.wait(30'000));
     QCOMPARE(undone.count(), 1);
     QCOMPARE(undone.first().at(0).toInt(), 2);
     QCOMPARE(undone.first().at(1).toInt(), 0);
