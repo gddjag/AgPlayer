@@ -153,3 +153,34 @@ body[data-page="download"] .platform .download-sources .button{
   body[data-page="download"] .platform .download-sources .button{padding-inline:8px;font-size:12px}
 }
 
+/* Download-page composition follows the two-card reference layout. */
+body[data-page="download"] .platform>.icon{
+  box-sizing:border-box;
+  width:72px;
+  height:72px;
+  margin:0 0 24px;
+  padding:19px;
+  border:1px solid #b9a0db1c;
+  border-radius:18px;
+  background:linear-gradient(145deg,#17304a,#252044);
+  box-shadow:inset 0 1px 0 #fff0d;
+}
+body[data-page="download"] #macos>.icon{background:linear-gradient(145deg,#32224e,#461b39)}
+body[data-page="download"] .platform h2{display:block;margin:0 0 4px}
+body[data-page="download"] .release-checksum{
+  grid-template-columns:auto minmax(0,1fr) auto;
+  width:100%;
+  max-width:none;
+  margin-top:22px;
+  padding:20px 22px;
+  border-radius:18px;
+}
+body[data-page="download"] .release-checksum code{grid-column:2;grid-row:1}
+body[data-page="download"] .release-checksum button{grid-column:3;grid-row:1}
+@media(max-width:700px){
+  body[data-page="download"] .platform>.icon{width:64px;height:64px;margin-bottom:20px;padding:17px;border-radius:16px}
+  body[data-page="download"] .release-checksum{grid-template-columns:minmax(0,1fr) auto;padding:16px}
+  body[data-page="download"] .release-checksum code{grid-column:1/-1;grid-row:2}
+  body[data-page="download"] .release-checksum button{grid-column:2;grid-row:1}
+}
+
