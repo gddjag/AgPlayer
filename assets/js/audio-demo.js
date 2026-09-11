@@ -2,6 +2,24 @@
   'use strict';
   const root = document.getElementById('audio-demo');
   if (!root) return;
+  const localNote = root.nextElementSibling;
+  const formatNote = localNote?.nextElementSibling;
+  if (localNote?.classList.contains('local-note') && formatNote?.classList.contains('format-note')) {
+    const footer = document.createElement('div');
+    const notes = document.createElement('div');
+    const stageLink = document.createElement('a');
+    footer.className = 'audio-demo-footer';
+    notes.className = 'audio-demo-notes';
+    stageLink.className = 'immersive-stage-link';
+    stageLink.href = 'immersive-stage.html';
+    stageLink.target = '_blank';
+    stageLink.rel = 'noopener';
+    stageLink.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#ag-icon-wave"></use></svg><span data-i18n="audioDemo.immersiveStage"></span><span class="stage-arrow" aria-hidden="true">↗</span>';
+    stageLink.querySelector('[data-i18n]').textContent = AG.t('audioDemo.immersiveStage');
+    localNote.before(footer);
+    notes.append(localNote, formatNote);
+    footer.append(notes, stageLink);
+  }
   const input = document.getElementById('audio-file'), audio = document.getElementById('local-audio'), play = document.getElementById('audio-play'), seek = document.getElementById('audio-seek'), canvas = document.getElementById('audio-canvas'), filename = document.getElementById('audio-filename'), clock = document.getElementById('audio-time'), status = document.getElementById('audio-status'), placeholder = document.getElementById('audio-placeholder');
   let context, analyser, source, url, generation = 0, data, mode = 'solid', state = 'empty', name = '', frame = 0, lastFrame = 0, inView = true;
   const spectrum = new AgWaveform.Spectrum(), samples = new Float32Array(512);
@@ -134,3 +152,4 @@
   addEventListener('pagehide', event => { if (!event.persisted) { ++generation; audio.pause(); if (url) URL.revokeObjectURL(url); if (context) context.close(); } });
   text();
 })();
+
