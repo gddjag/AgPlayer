@@ -6,10 +6,11 @@
   const requestTimeoutMs = 10000;
   const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
   const publishedWindowsRelease = Object.freeze({
-    version: '1.0.0',
-    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe',
-    r2Url: 'https://download.agplayer.com/releases/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe',
-    sha256: 'B379A969A3F61C31C6C0864F7D7EB9A2435BC268F47FDD5A52D5C70B0EE63F78'
+    version: '1.0.1',
+    size: 36185733,
+    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.1/AgPlayer-Setup-1.0.1-x64.exe',
+    r2Url: 'https://download.agplayer.com/releases/v1.0.1/AgPlayer-Setup-1.0.1-x64.exe',
+    sha256: '42CBAB739E254C776B60F48EE544D42C6FF2A97676D6DCC220FEBC3A4B584D30'
   });
 
   function selectWindowsRelease(manifest) {
@@ -27,7 +28,7 @@
     const githubUrl = `https://github.com/gddjag/AgPlayer/releases/download/${tag}/${encodedName}`;
     const r2Url = `https://download.agplayer.com/releases/${tag}/${encodedName}`;
     if (file.githubUrl !== githubUrl || file.r2Url !== r2Url) return null;
-    return { version: manifest.version, githubUrl, r2Url, sha256: file.sha256.toUpperCase() };
+    return { version: manifest.version, size: file.size, githubUrl, r2Url, sha256: file.sha256.toUpperCase() };
   }
 
   function enable(button, url) {
@@ -48,10 +49,10 @@
     const details = (systemKey, systemText, filename, size) => {
       const list = document.createElement('dl');
       list.className = 'platform-meta';
-      list.innerHTML = `<div><dt data-i18n="downloadPage.meta.system">${AG.t('downloadPage.meta.system')}</dt><dd data-i18n="${systemKey}">${systemText}</dd></div><div><dt data-i18n="downloadPage.meta.filename">${AG.t('downloadPage.meta.filename')}</dt><dd>${filename}</dd></div><div><dt data-i18n="downloadPage.meta.size">${AG.t('downloadPage.meta.size')}</dt><dd>${size}</dd></div>`;
+      list.innerHTML = `<div><dt data-i18n="downloadPage.meta.system">${AG.t('downloadPage.meta.system')}</dt><dd data-i18n="${systemKey}">${systemText}</dd></div><div><dt data-i18n="downloadPage.meta.filename">${AG.t('downloadPage.meta.filename')}</dt><dd data-meta="filename">${filename}</dd></div><div><dt data-i18n="downloadPage.meta.size">${AG.t('downloadPage.meta.size')}</dt><dd data-meta="size">${size}</dd></div>`;
       return list;
     };
-    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.0-x64.exe', '34.5 MB'));
+    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.1-x64.exe', '34.5 MB'));
     if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), AG.t('downloadPage.meta.pending'), '—'));
     const platforms = windows.closest('.platforms');
     let checksum = document.querySelector('#windows-checksum');
@@ -60,7 +61,7 @@
       checksum.id = 'windows-checksum';
       checksum.className = 'release-checksum';
       checksum.hidden = true;
-      checksum.innerHTML = `<span data-i18n="downloadPage.checksum.label">${AG.t('downloadPage.checksum.label')}</span><code id="windows-sha256"></code><button type="button" id="windows-sha256-copy" disabled aria-disabled="true" data-i18n="downloadPage.checksum.copy">${AG.t('downloadPage.checksum.copy')}</button>`;
+      checksum.innerHTML = `<div class="checksum-row"><span data-i18n="downloadPage.checksum.windowsLabel">${AG.t('downloadPage.checksum.windowsLabel')}</span><code id="windows-sha256"></code><button type="button" id="windows-sha256-copy" disabled aria-disabled="true" data-i18n="downloadPage.checksum.copy">${AG.t('downloadPage.checksum.copy')}</button></div>`;
     }
     if (platforms && checksum.previousElementSibling !== platforms) platforms.insertAdjacentElement('afterend', checksum);
   }
@@ -106,22 +107,24 @@
     const checksumCopy = document.querySelector('#windows-sha256-copy');
     if (!primary || !github || !status || !checksum || !checksumValue || !checksumCopy) return;
     let activeRelease = publishedWindowsRelease;
-    const renderStatus = () => { status.textContent = AG.t('downloadPage.windows.available', { version: activeRelease.version }); };
     const renderRelease = release => {
       activeRelease = release;
       enable(primary, release.r2Url);
       enable(github, release.githubUrl);
+      const filename = document.querySelector('#windows [data-meta="filename"]');
+      const size = document.querySelector('#windows [data-meta="size"]');
+      if (filename) filename.textContent = `AgPlayer-Setup-${release.version}-x64.exe`;
+      if (size && Number.isSafeInteger(release.size)) size.textContent = `${(release.size / 1048576).toFixed(1)} MB`;
       checksumValue.textContent = release.sha256;
       checksum.removeAttribute('hidden');
       checksumCopy.disabled = false;
       checksumCopy.removeAttribute('aria-disabled');
-      status.removeAttribute('data-i18n');
-      renderStatus();
+      status.textContent = '';
+      status.hidden = true;
     };
     checksumCopy.addEventListener('click', () => {
       void navigator.clipboard?.writeText(activeRelease.sha256).catch(() => {});
     });
-    document.addEventListener('ag:languagechange', renderStatus);
     renderRelease(publishedWindowsRelease);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
