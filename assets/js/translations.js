@@ -118,6 +118,7 @@ window.AG_COPY = {
       },
       "privacyNote": "仅在浏览器本地读取，不上传音频文件。",
       "formatNote": "网页试听支持的格式取决于浏览器，与桌面播放器可能不同。",
+      "immersiveStage": "沉浸式舞台",
       "analysisNote": "波形准备时间取决于文件长度与设备性能。"
     },
     "features": {
@@ -469,6 +470,7 @@ window.AG_COPY = {
       },
       "privacyNote": "Read locally in your browser. No audio files are uploaded.",
       "formatNote": "Audio format support depends on your browser and may differ from the desktop player.",
+      "immersiveStage": "Immersive Stage",
       "analysisNote": "Waveform preparation time depends on the file length and your device."
     },
     "features": {
@@ -702,6 +704,5 @@ window.AG_COPY = {
     }
   }
 };
-
 
 
