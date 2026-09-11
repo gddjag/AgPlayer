@@ -11,7 +11,7 @@
     footer.className = 'audio-demo-footer';
     notes.className = 'audio-demo-notes';
     stageLink.className = 'immersive-stage-link';
-    stageLink.href = 'immersive-stage.html';
+    stageLink.href = 'Beach_Voxel_Festival.html';
     stageLink.target = '_blank';
     stageLink.rel = 'noopener';
     stageLink.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#ag-icon-wave"></use></svg><span data-i18n="audioDemo.immersiveStage"></span><span class="stage-arrow" aria-hidden="true">↗</span>';
