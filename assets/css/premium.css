@@ -193,3 +193,21 @@ body[data-page="download"] .checksum-row button{grid-column:3;grid-row:1}
   body[data-page="download"] .checksum-row button{grid-column:2;grid-row:1}
 }
 
+/* Center the checksum content inside its own full-width panel. */
+body[data-page="download"] .checksum-row{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  text-align:center;
+}
+body[data-page="download"] .checksum-row span{font-weight:600;color:#d8c9e6}
+body[data-page="download"] .checksum-row code{
+  display:block;
+  max-width:100%;
+  overflow-wrap:anywhere;
+  text-align:center;
+}
+body[data-page="download"] .checksum-row button{min-width:76px;margin-top:2px}
+
