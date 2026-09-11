@@ -340,6 +340,21 @@ ApplicationWindow {
         return true
     }
 
+    function resourceDropContainsPoint(x, y): bool {
+        const navigation = (integratedShell || rollingShell) && shellLoader.item
+                         ? (shellLoader.item.libraryNavigation || null) : null
+        if (!navigation)
+            return false
+        const localPoint = navigation.mapFromItem(null, x, y)
+        return navigation.resourceDropContainsPoint(localPoint.x, localPoint.y)
+    }
+
+    function handleResourceDropUrls(urls): bool {
+        const navigation = (integratedShell || rollingShell) && shellLoader.item
+                         ? (shellLoader.item.libraryNavigation || null) : null
+        return navigation ? navigation.submitResourceUrls(urls) : false
+    }
+
     function openFolderDialog() {
         var dialog = folderDialogComponent.createObject(mainWindow)
         if (dialog)

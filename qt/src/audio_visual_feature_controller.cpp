@@ -57,6 +57,7 @@ void AudioVisualFeatureController::resetVisualPcm()
     visualFeatures_ = {};
     visualKick_ = {};
     visualSamplesSinceUpdate_ = 0;
+    visualFramePhase_ = 0;
     visualAnalysisTimer_.invalidate();
     visualPcm_.fill(0.0f);
     visualPcmFrames_ = {};
@@ -102,20 +103,14 @@ void AudioVisualFeatureController::ingestVisualPcm(const ag_visual_pcm_snapshot&
     }
     visualGeneration_ = pcm.generation;
     visualSampleRate_ = pcm.sample_rate;
-    visualNextIndex_ = pcm.first_sample_index + pcm.sample_count;
-    const auto retained = std::min(visualPcmSize_, visualPcm_.size() - pcm.sample_count);
-    // Move the retained tail forward without allocating a second PCM buffer.
-    for (std::size_t i = 0; i < retained; ++i)
-        visualPcm_[i] = visualPcm_[visualPcmSize_ - retained + i];
-    std::copy_n(pcm.samples, pcm.sample_count, visualPcm_.begin() + retained);
-    visualPcmSize_ = retained + pcm.sample_count;
     visualSamplesSinceUpdate_ += pcm.sample_count;
-    if (visualPcmSize_ == visualPcm_.size()) {
+
+    const auto enqueueFrame = [&](std::uint64_t endSampleIndex) {
         agplayer::VisualAudioFrameAnalyzer::Snapshot frame;
         frame.pcm = visualPcm_;
         frame.sampleRate = visualSampleRate_;
         frame.epoch = visualPcmEpoch_;
-        frame.firstSampleIndex = visualNextIndex_ - visualPcm_.size();
+        frame.firstSampleIndex = endSampleIndex - visualPcm_.size();
         frame.sequence = ++visualPcmFrameSequence_;
         frame.valid = true;
         visualPcmFrames_[visualPcmFrameWriteIndex_] = frame;
@@ -123,7 +118,40 @@ void AudioVisualFeatureController::ingestVisualPcm(const ag_visual_pcm_snapshot&
             % visualPcmFrames_.size();
         visualPcmFrameCount_ = std::min(visualPcmFrameCount_ + 1,
                                         visualPcmFrames_.size());
+    };
+
+    std::size_t sourceOffset = 0;
+    if (visualPcmSize_ < visualPcm_.size()) {
+        const auto copied = std::min<std::size_t>(
+            pcm.sample_count, visualPcm_.size() - visualPcmSize_);
+        std::copy_n(pcm.samples, copied, visualPcm_.begin() + visualPcmSize_);
+        visualPcmSize_ += copied;
+        sourceOffset += copied;
+        if (visualPcmSize_ == visualPcm_.size()) {
+            enqueueFrame(pcm.first_sample_index + sourceOffset);
+            visualFramePhase_ = 0;
+        }
     }
+    while (sourceOffset < pcm.sample_count) {
+        const auto unitsUntilFrame = std::uint64_t(visualSampleRate_)
+            - visualFramePhase_;
+        const auto samplesUntilFrame = std::max<std::uint64_t>(
+            1, (unitsUntilFrame + 59) / 60);
+        const auto copied = std::min<std::size_t>(
+            pcm.sample_count - sourceOffset,
+            std::size_t(samplesUntilFrame));
+        for (std::size_t index = 0; index + copied < visualPcm_.size(); ++index)
+            visualPcm_[index] = visualPcm_[index + copied];
+        std::copy_n(pcm.samples + sourceOffset, copied,
+                    visualPcm_.end() - copied);
+        sourceOffset += copied;
+        visualFramePhase_ += std::uint64_t(copied) * 60;
+        if (visualFramePhase_ >= std::uint64_t(visualSampleRate_)) {
+            enqueueFrame(pcm.first_sample_index + sourceOffset);
+            visualFramePhase_ -= std::uint64_t(visualSampleRate_);
+        }
+    }
+    visualNextIndex_ = pcm.first_sample_index + pcm.sample_count;
     if (!deferAnalysis) analyzeVisualPcm();
 }
 

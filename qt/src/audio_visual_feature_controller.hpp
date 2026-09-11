@@ -106,6 +106,10 @@ private:
     agplayer::visual::KickResponse::Output visualKick_{};
     int visualKickSensitivity_ = 50;
     std::size_t visualSamplesSinceUpdate_ = 0;
+    // Phase accumulator for the reference analyser's requestAnimationFrame
+    // cadence. One input sample contributes 60 units; a frame is captured
+    // whenever the accumulator reaches the current sample rate.
+    std::uint64_t visualFramePhase_ = 0;
     QElapsedTimer visualAnalysisTimer_;
     unsigned int renderFrameConsumers_ = 0;
     quint64 visualPcmEpoch_ = 0;

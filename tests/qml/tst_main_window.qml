@@ -988,6 +988,55 @@ TestCase {
         }, 3000)
     }
 
+    function test_embedded_resource_folder_accepts_native_directory_drop_data() {
+        return [
+            { tag: "integrated", shellMode: 1,
+              navigation: "integratedLibraryNavigation" },
+            { tag: "rolling", shellMode: 2,
+              navigation: "rollingLibraryNavigation" }
+        ]
+    }
+
+    function test_embedded_resource_folder_accepts_native_directory_drop(data) {
+        for (let warning = 0;
+             !nativeDropHelper.supportsWindowsDropFiles() && warning < 4;
+             ++warning)
+            ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
+        const previousShell = SettingsController.playerShellMode
+        const folder = nativeDropHelper.createDropDirectory()
+        verify(folder)
+        let folderPath = decodeURIComponent(folder.toString()
+                                             .replace(/^file:\/\/\//, ""))
+        folderPath = folderPath.replace(/\\/g, "/")
+        const initialCount = ResourceFolderController.monitoredFolders.length
+        SettingsController.playerShellMode = data.shellMode
+        try {
+            let navigation = null
+            tryVerify(function() {
+                navigation = findChild(mainWindow, data.navigation)
+                return navigation && navigation.visible
+            }, 1500)
+            const navigationList = findChild(navigation, "libraryNavigationList")
+            verify(navigationList)
+            navigationList.positionViewAtEnd()
+            wait(0)
+            const dropTarget = findChild(navigation, "resourceFolderDropTarget")
+            verify(dropTarget && dropTarget.visible)
+            const delivered = nativeDropHelper.supportsWindowsDropFiles()
+                    ? nativeDropHelper.sendWindowsDropFiles(dropTarget, [folder])
+                    : nativeDropHelper.sendUrls(dropTarget, [folder])
+            verify(delivered,
+                   "native directory drop must be accepted by the embedded resource folder")
+            tryCompare(ResourceFolderController.monitoredFolders, "length",
+                       initialCount + 1, 1000)
+            verify(ResourceFolderController.monitoredFolders.indexOf(folderPath) >= 0,
+                   "the dropped directory must be registered as a monitored resource folder")
+        } finally {
+            ResourceFolderController.removeMonitoredFolder(folderPath)
+            SettingsController.playerShellMode = previousShell
+        }
+    }
+
     // Run after the interaction suite: importing a real file deliberately
     // starts background metadata/waveform work and must not perturb unrelated
     // pointer-animation checks.

@@ -235,6 +235,8 @@ private:
         agplayer::VisualSnareTrigger::Output snare;
         int beatCount = 0;
         double beatStrength = 0.0;
+        int pulseCount = 0;
+        double pulseStrength = 0.0;
     };
     static ReferenceAudioFrame advanceReferenceAudioFrame(
         agplayer::VisualAudioFrameAnalyzer& analyzer,

@@ -288,8 +288,12 @@ public:
 #ifdef Q_OS_WIN
         auto* item = qobject_cast<QQuickItem*>(target);
         auto* window = qobject_cast<QWindow*>(target);
+        QPoint dropPoint;
         if (item != nullptr) {
             window = item->window();
+            const QPointF scenePoint = item->mapToScene(
+                QPointF(item->width() / 2.0, item->height() / 2.0));
+            dropPoint = QPoint(qRound(scenePoint.x()), qRound(scenePoint.y()));
         }
         if (window == nullptr || !window->isVisible()) {
             return false;
@@ -327,6 +331,9 @@ public:
 
         auto* header = reinterpret_cast<DROPFILES*>(payload);
         header->pFiles = sizeof(DROPFILES);
+        header->pt.x = dropPoint.x();
+        header->pt.y = dropPoint.y();
+        header->fNC = FALSE;
         header->fWide = TRUE;
         auto* destination = reinterpret_cast<wchar_t*>(payload
                                                        + sizeof(DROPFILES));
@@ -606,18 +613,33 @@ public slots:
                 nativeDrops_ = std::make_unique<NativeDropRouter>();
                 nativeDrops_->registerWindow(nativeWindow,
                                              NativeDropRouter::Target::Main);
+                const QPointer<QObject> mainDropTarget = mainWindow_;
+                nativeDrops_->registerHitTarget(
+                    nativeWindow, NativeDropRouter::Target::ResourceFolder,
+                    [mainDropTarget](const QPointF& position) {
+                        if (mainDropTarget == nullptr) return false;
+                        bool hit = false;
+                        return QMetaObject::invokeMethod(
+                                   mainDropTarget, "resourceDropContainsPoint",
+                                   Q_RETURN_ARG(bool, hit),
+                                   Q_ARG(QVariant, position.x()),
+                                   Q_ARG(QVariant, position.y()))
+                            && hit;
+                    });
                 QObject::connect(
                     nativeDrops_.get(), &NativeDropRouter::pathsDropped,
                     mainWindow_, [this](NativeDropRouter::Target target,
                                         const QStringList& paths) {
-                        if (target == NativeDropRouter::Target::Main) {
+                        if (target == NativeDropRouter::Target::Main
+                            || target == NativeDropRouter::Target::ResourceFolder) {
                             QList<QUrl> urls;
                             urls.reserve(paths.size());
                             for (const QString& path : paths)
                                 urls.append(QUrl::fromLocalFile(path));
                             bool accepted = false;
                             const bool invoked = QMetaObject::invokeMethod(
-                                mainWindow_, "handleShellDropUrls",
+                                mainWindow_, target == NativeDropRouter::Target::Main
+                                    ? "handleShellDropUrls" : "handleResourceDropUrls",
                                 Qt::DirectConnection,
                                 Q_RETURN_ARG(bool, accepted),
                                 Q_ARG(QVariant, QVariant::fromValue(urls)));

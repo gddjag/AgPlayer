@@ -1474,6 +1474,19 @@ int main(int argc, char* argv[])
             }
             nativeDrops.registerWindow(nativeMainWindow,
                                        NativeDropRouter::Target::Main);
+            const QPointer<QObject> mainDropTarget = mainWindow;
+            nativeDrops.registerHitTarget(
+                nativeMainWindow, NativeDropRouter::Target::ResourceFolder,
+                [mainDropTarget](const QPointF& position) {
+                    if (mainDropTarget == nullptr) return false;
+                    bool hit = false;
+                    return QMetaObject::invokeMethod(
+                               mainDropTarget, "resourceDropContainsPoint",
+                               Q_RETURN_ARG(bool, hit),
+                               Q_ARG(QVariant, position.x()),
+                               Q_ARG(QVariant, position.y()))
+                        && hit;
+                });
             const auto ensureListWindow = [&]() -> QObject* {
                 if (listWindow != nullptr) return listWindow;
                 if (listComponent.isError()) {
@@ -1670,7 +1683,14 @@ int main(int argc, char* argv[])
                         break;
                     case NativeDropRouter::Target::ResourceFolder:
                         {
-                        if (listWindow != nullptr) {
+                        bool accepted = false;
+                        const bool mainInvoked = mainWindow != nullptr
+                            && QMetaObject::invokeMethod(
+                                mainWindow, "handleResourceDropUrls",
+                                Qt::DirectConnection,
+                                Q_RETURN_ARG(bool, accepted),
+                                Q_ARG(QVariant, QVariant::fromValue(urls)));
+                        if ((!mainInvoked || !accepted) && listWindow != nullptr) {
                             QMetaObject::invokeMethod(
                                 listWindow, "handleResourceDropUrls",
                                 Q_ARG(QVariant, QVariant::fromValue(urls)));

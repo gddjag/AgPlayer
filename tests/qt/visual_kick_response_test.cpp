@@ -1,4 +1,5 @@
 #include "visual_kick_response.hpp"
+#include "visual_pulse_trigger.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -9,6 +10,33 @@ void require(bool value, const char* description) {
 }
 bool near(double a, double b) { return std::abs(a-b) < 1e-12; }
 int main() {
+    {
+        agplayer::VisualPulseTrigger pulse;
+        agplayer::VisualSpectrumAnalyzer::Spectrum silence{}, low{};
+        low[1] = low[2] = 255;
+        require(!pulse.process(silence, 1.0 / 60.0).triggered,
+                "reference pulse stays idle in silence");
+        require(!pulse.process(low, 1.0 / 60.0).triggered,
+                "reference pulse waits for the falling-flux peak");
+        const auto wave = pulse.process(low, 1.0 / 60.0);
+        require(wave.triggered && near(wave.strength, 2.4),
+                "reference pulse preserves Auto Beat strength and timing");
+        agplayer::VisualSpectrumAnalyzer::Spectrum mid{};
+        mid[40] = 255;
+        require(!pulse.process(mid, 1.0 / 60.0).triggered,
+                "midrange alone does not manufacture a kick wave");
+
+        pulse.reset();
+        agplayer::VisualPulseTrigger::Output tracked;
+        for (int frame = 0; frame < 62; ++frame) {
+            agplayer::VisualSpectrumAnalyzer::Spectrum candidate{};
+            if ((frame % 12) < 2) candidate[8] = candidate[9] = 255;
+            tracked = pulse.process(candidate, 1.0 / 60.0);
+        }
+        require(tracked.bandStart == 8 && tracked.bandEnd == 9,
+                "reference pulse auto-track follows the two strongest transient bins");
+    }
+
     KickResponse detector;
     KickResponse::Spectrum silence{}, full{};
     full.fill(255);

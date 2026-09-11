@@ -242,28 +242,22 @@ void main()
             for (int waveIndex = 0; waveIndex < 10; ++waveIndex) {
                 vec4 source = ubuf.waveSources[waveIndex];
                 bool white = source.w < 0.0;
-                float strengthControl = runtimeTheme
-                    ? clamp(ubuf.waveParameters.x, 0.0, 2.0)
-                    : max(0.0, ubuf.waveParameters.x);
-                float strengthGain = runtimeTheme && !white
-                    ? 0.85 + 0.65 * sqrt(strengthControl * 0.5)
-                    : 1.0;
-                float strength = abs(source.w) * strengthControl * strengthGain;
+                float strengthControl = max(0.0, ubuf.waveParameters.x);
+                float strength = abs(source.w) * strengthControl;
                 if (strength == 0.0) continue;
                 float speed = white ? 20.0 : 15.0;
+                // The product defaults (120% width, 81% decay) are the
+                // reference shader's neutral 1.0 values; controls remain
+                // linear around that exact baseline.
                 float widthControl = runtimeTheme
-                    ? mix(0.25, 2.80, smoothstep(0.2, 2.0, ubuf.waveParameters.y))
+                    ? max(0.2, ubuf.waveParameters.y / 1.2)
                     : max(0.2, ubuf.waveParameters.y);
                 float decayControl = runtimeTheme
-                    ? mix(0.45, 2.40, smoothstep(0.2, 2.0, ubuf.waveParameters.z))
+                    ? max(0.2, ubuf.waveParameters.z / 0.81)
                     : max(0.2, ubuf.waveParameters.z);
                 float width = (white ? 1.0 : 3.0) * widthControl;
-                float fadeDistance = (white
-                    ? (runtimeTheme ? 13.0 : 8.0)
-                    : (runtimeTheme ? 25.0 : 15.0)) / decayControl;
-                float elevationScale = white
-                    ? (runtimeTheme ? 1.8 : 1.0)
-                    : (runtimeTheme ? 5.6 : 4.0);
+                float fadeDistance = (white ? 8.0 : 15.0) / decayControl;
+                float elevationScale = white ? 1.0 : 4.0;
                 float radius = max(0.0, source.z) * speed;
                 float distanceToRing = length(position.xz - source.xy) - radius;
                 float ring = exp(-(distanceToRing * distanceToRing) / width);
@@ -326,10 +320,13 @@ void main()
         impactLight = clamp(impactStrength * impactDome
                             * ubuf.styleAudio.w * 0.36
                             + impactWave * 0.055, 0.0, 1.0);
+        // Keep the user control visible without letting the native center lamp
+        // overpower the reference material's elevation-driven glow.
+        float centerLampScale = runtimeTheme ? 0.25 : 1.0;
         steadyCoreGlow = pow(center, 1.88)
                        * (0.012 + ubuf.parameters.x * 0.035
                           + slowBass * 0.045 + beatPulse * 0.12)
-                       * ubuf.styleAudio.w;
+                       * ubuf.styleAudio.w * centerLampScale;
         // No extra whole-field gain, shoulders or soft-cap compression.
         // Emitted ripples remain separate from the finite musical relief disk.
         // Keep the legacy42-unit safety budget on native wave overlap only;
@@ -474,7 +471,8 @@ void main()
     }
     if (distanceFromCore < 24.0 && type < 0.5) {
         color = mix(color, peak,
-                    clamp(0.08 * (1.0 - distanceFromCore / 24.0), 0.0, 0.08));
+                    clamp(0.025 * ubuf.styleAudio.w
+                          * (1.0 - distanceFromCore / 24.0), 0.0, 0.025));
     }
     if (type < 0.5 && rippleWave > 0.001) {
         vec3 ringTint = travelingWaveTint / max(0.001, travelingWaveWeight);

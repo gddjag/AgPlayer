@@ -797,15 +797,24 @@ void AudioVisualFeatureControllerTest::renderFrameBatchPreservesDelayedPcmWindow
         }
 
         const auto batch = controller.visualPcmBatch();
-        QCOMPARE(batch.count, std::size_t(3));
+        const std::uint64_t hop = std::uint64_t(sampleRate) / 60;
+        const std::size_t expectedCount = sampleRate == 96000 ? 2 : 3;
+        QCOMPARE(batch.count, expectedCount);
         for (std::size_t index = 0; index < batch.count; ++index) {
             QVERIFY(batch.frames[index].valid);
             QCOMPARE(batch.frames[index].sampleRate, sampleRate);
             QCOMPARE(batch.frames[index].firstSampleIndex,
-                     std::uint64_t(index) * pcm.sample_count);
+                     std::uint64_t(index) * hop);
             QCOMPARE(batch.frames[index].sequence, std::uint64_t(index + 1));
-            QCOMPARE(batch.frames[index].pcm.front(),
-                     0.05F + 0.10F * float(index));
+        }
+        QCOMPARE(batch.frames[0].pcm.front(), 0.05F);
+        if (sampleRate == 96000) {
+            QCOMPARE(batch.frames[1].pcm.front(), 0.15F);
+            QCOMPARE(batch.frames[1].pcm.back(), 0.25F);
+        } else {
+            QCOMPARE(batch.frames[1].pcm.front(), 0.05F);
+            QCOMPARE(batch.frames[1].pcm.back(), 0.15F);
+            QCOMPARE(batch.frames[2].pcm.back(), 0.25F);
         }
     }
 }

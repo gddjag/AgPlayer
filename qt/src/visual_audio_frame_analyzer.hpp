@@ -3,6 +3,7 @@
 #include "visual_spectrum_analyzer.hpp"
 #include "visual_spectrum_features.hpp"
 #include "visual_kick_response.hpp"
+#include "visual_pulse_trigger.hpp"
 
 namespace agplayer {
 
@@ -12,7 +13,10 @@ namespace agplayer {
 // ownership crosses this boundary.
 class VisualAudioFrameAnalyzer {
 public:
-    static constexpr std::size_t BatchCapacity = 16;
+    // One delayed GUI poll can drain sixteen 1024-sample core reads. At the
+    // reference 60 Hz analysis cadence this bound retains every due window
+    // even at the lowest supported sample rates.
+    static constexpr std::size_t BatchCapacity = 32;
 
     struct Snapshot {
         VisualSpectrumAnalyzer::Window pcm{};
@@ -32,6 +36,7 @@ public:
         VisualSpectrumAnalyzer::Spectrum spectrum{};
         VisualSpectrumFeatures::Features descriptors{};
         visual::KickResponse::Output kick{};
+        VisualPulseTrigger::Output pulse{};
         bool valid = false;
     };
 
@@ -39,6 +44,7 @@ public:
         spectrum_.reset();
         features_.reset();
         kick_.reset();
+        pulse_.reset();
         frame_ = {};
         initialized_ = false;
     }
@@ -53,6 +59,7 @@ public:
                                                   snapshot.releasing);
             frame_.kick = kick_.process(frame_.spectrum, dt, sensitivity);
             frame_.kick.onset = 0.0;
+            frame_.pulse = pulse_.suspend();
             frame_.valid = true;
             return frame_;
         }
@@ -72,6 +79,7 @@ public:
         frame_.spectrum = spectrum_.process(snapshot.pcm);
         frame_.descriptors = features_.update(frame_.spectrum, true, false);
         frame_.kick = kick_.process(frame_.spectrum, dt, sensitivity);
+        frame_.pulse = pulse_.process(frame_.spectrum, dt, true);
         frame_.valid = true;
         return frame_;
     }
@@ -82,6 +90,7 @@ private:
     VisualSpectrumAnalyzer spectrum_;
     VisualSpectrumFeatures features_;
     visual::KickResponse kick_;
+    VisualPulseTrigger pulse_;
     Frame frame_{};
     std::uint64_t epoch_ = 0;
     int sampleRate_ = 0;

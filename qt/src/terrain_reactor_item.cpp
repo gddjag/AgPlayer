@@ -327,6 +327,8 @@ protected:
         VisualParameters visual = mapVisualParameters(smoothedFeatures_,
             renderTimeSeconds, snapshot_.style);
         double snareStrength = 0;
+        int pulseWaveCount = 0;
+        double pulseWaveStrength = 0;
         if (snapshot_.referenceAudio) {
             const auto processed = TerrainReactorItem::advanceReferenceAudioFrames(
                 frameAnalyzer_, referenceResponse_, snapshot_, wallElapsedSeconds,
@@ -338,6 +340,8 @@ protected:
             if (performanceProbe_) ++analysisFrames_;
             const auto& response = processed.terrain;
             if (processed.snare.triggered) snareStrength = processed.snare.strength;
+            pulseWaveCount = processed.pulseCount;
+            pulseWaveStrength = processed.pulseStrength;
             for (std::size_t i = 0; i < visual.bands.size(); ++i)
                 visual.bands[i] = float(response.bands[i]);
             visual.energy = float(response.energy);
@@ -410,9 +414,25 @@ protected:
             snapshot_.referenceAudio && snapshot_.style.ripplesEnabled, meteorLanded);
         if (!snapshot_.style.ripplesEnabled) {
             travelingWaves_.fill(QVector4D());
-        } else if (meteorLanded || snareWave.w() < 0 || ((newBeat || (newImpact && !snapshot_.style.meteorsEnabled))
+        } else {
+            // The reference scene's colored waves use its independent Pulse
+            // detector and ten-slot ring buffer. Do not apply the native
+            // 3--6 second presentation gate or substitute Kick confidence.
+            for (int wave = 0; wave < pulseWaveCount; ++wave) {
+                const int slot = nextWave_ % int(travelingWaves_.size());
+                nextWave_ = (slot + 1) % int(travelingWaves_.size());
+                const QVector4D origin = waveSources_[std::size_t(slot)];
+                travelingWaves_[std::size_t(slot)] = QVector4D(
+                    origin.x(), origin.y(), renderTimeSeconds,
+                    float(std::min(pulseWaveStrength * 2.0, 3.0)));
+            }
+        }
+        if (snapshot_.style.ripplesEnabled
+            && (meteorLanded || snareWave.w() < 0
+                || (((!snapshot_.referenceAudio && newBeat)
+                     || (newImpact && !snapshot_.style.meteorsEnabled))
                    && waveStrength > 0.0F
-                   && waveGate_.consume(renderTimeSeconds, waveStrength))) {
+                   && waveGate_.consume(renderTimeSeconds, waveStrength)))) {
             const int slot = nextWave_ % std::max(1, currentRippleCount_);
             nextWave_ = (slot + 1) % std::max(1, currentRippleCount_);
             waveTints_[std::size_t(slot)] = waveSequence_++ % 4U;
@@ -1733,7 +1753,9 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
         snapshot.style.visualEqEnabled, wallDelta, snapshot.style.motionResponse * 100.0);
     const auto snareOutput = snare.process(audio.spectrum, audio.valid);
     return {audio, terrain, snareOutput, audio.kick.onset > 0 ? 1 : 0,
-            audio.kick.onset > 0 ? audio.kick.confidence : 0.0};
+            audio.kick.onset > 0 ? audio.kick.confidence : 0.0,
+            audio.pulse.triggered ? 1 : 0,
+            audio.pulse.triggered ? audio.pulse.strength : 0.0};
 }
 
 TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudioFrames(
@@ -1743,6 +1765,8 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
 {
     int beatCount = 0;
     double beatStrength = 0.0;
+    int pulseCount = 0;
+    double pulseStrength = 0.0;
     agplayer::VisualSnareTrigger::Output strongestSnare;
     const agplayer::VisualAudioFrameAnalyzer::Frame* finalAudio = nullptr;
     const agplayer::VisualSpectrumFeatures::Features* finalTerrain = nullptr;
@@ -1759,7 +1783,9 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
         const auto snareOutput = snare.process(audio.spectrum, audio.valid);
         return ReferenceAudioFrame{audio, terrain, snareOutput,
             audio.kick.onset > 0 ? 1 : 0,
-            audio.kick.onset > 0 ? audio.kick.confidence : 0.0};
+            audio.kick.onset > 0 ? audio.kick.confidence : 0.0,
+            audio.pulse.triggered ? 1 : 0,
+            audio.pulse.triggered ? audio.pulse.strength : 0.0};
     };
 
     for (std::size_t index = 0; index < snapshot.pcmBatch.count; ++index) {
@@ -1779,6 +1805,8 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
         finalTerrain = &analyzed.terrain;
         beatCount += analyzed.beatCount;
         beatStrength = std::max(beatStrength, analyzed.beatStrength);
+        pulseCount += analyzed.pulseCount;
+        pulseStrength = std::max(pulseStrength, analyzed.pulseStrength);
         if (analyzed.snare.triggered
             && analyzed.snare.strength >= strongestSnare.strength) {
             strongestSnare = analyzed.snare;
@@ -1798,6 +1826,8 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
             beatCount = frame.beatCount;
             beatStrength = frame.beatStrength;
             strongestSnare = frame.snare;
+            pulseCount = frame.pulseCount;
+            pulseStrength = frame.pulseStrength;
             if (snapshot.pcm.sequence > consumedSequence)
                 consumedSequence = snapshot.pcm.sequence;
         } else {
@@ -1808,7 +1838,8 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
             finalTerrain = &response.features();
         }
     }
-    return {*finalAudio, *finalTerrain, strongestSnare, beatCount, beatStrength};
+    return {*finalAudio, *finalTerrain, strongestSnare, beatCount, beatStrength,
+            pulseCount, pulseStrength};
 }
 
 void TerrainReactorItem::restoreRenderAudioEvents(BeatEvent& beat, ImpactEvent& impact,
