@@ -1757,20 +1757,19 @@ private slots:
     }
     void sceneTimeChangesColumnsWithoutMovingBase();
     void runtimeSteadyAudioDoesNotFreeRun();
-    void runtimeMotionControlChangesMusicalRelief();
+    void runtimeMotionControlDoesNotDoubleScaleShaderRelief();
     void consecutiveWavesUseDifferentPaletteAnchors();
     void explicitThemeTravellingWaveTintRequiresActiveWave();
     void referenceRippleSeparatesNormalAndWhiteContracts();
-    void centerBeatLiftRemainsSparseAndBounded_data() {
+    void discreteBeatDoesNotMoveCanonicalColumns_data() {
         QTest::addColumn<int>("materialMode");
         QTest::addColumn<float>("randomValue");
-        QTest::addColumn<bool>("selected");
-        QTest::newRow("crystal-unselected") << 0 << 0.90F << false;
-        QTest::newRow("jelly-unselected") << 1 << 0.90F << false;
-        QTest::newRow("crystal-selected") << 0 << 0.10F << true;
-        QTest::newRow("jelly-selected") << 1 << 0.10F << true;
+        QTest::newRow("crystal-unselected") << 0 << 0.90F;
+        QTest::newRow("jelly-unselected") << 1 << 0.90F;
+        QTest::newRow("crystal-selected") << 0 << 0.10F;
+        QTest::newRow("jelly-selected") << 1 << 0.10F;
     }
-    void centerBeatLiftRemainsSparseAndBounded();
+    void discreteBeatDoesNotMoveCanonicalColumns();
     void unsupportedDepthMaterialFallsBack_data() {
         QTest::addColumn<int>("stage");
         QTest::newRow("bindings") << 1;
@@ -1910,7 +1909,7 @@ void TerrainColumnMaterialTest::runtimeSteadyAudioDoesNotFreeRun()
              "Steady audio must not animate columns from a free-running clock");
 }
 
-void TerrainColumnMaterialTest::runtimeMotionControlChangesMusicalRelief()
+void TerrainColumnMaterialTest::runtimeMotionControlDoesNotDoubleScaleShaderRelief()
 {
     auto counters = std::make_shared<StudyCounters>();
     QQuickWindow window;
@@ -1940,10 +1939,10 @@ void TerrainColumnMaterialTest::runtimeMotionControlChangesMusicalRelief()
     QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before || counters->failed, 3000);
     QVERIFY(!counters->failed);
     const auto change = compareFrames(restrained, studyFrame(window));
-    QVERIFY2(change.secondBounds.height() > change.firstBounds.height() + 8,
-             "Motion response slider must visibly change runtime musical column travel");
-    QVERIFY2(std::abs(change.secondBounds.bottom() - change.firstBounds.bottom()) <= 1,
-             "Motion response may change column height, not move the ground anchor");
+    QVERIFY2(nearlySameBounds(change.firstBounds, change.secondBounds),
+             "The material shader must not apply motion response a second time");
+    QVERIFY2(change.silhouetteMismatch <= change.commonVisible / 1000,
+             "Motion response belongs to the terrain response layer, not shader geometry");
 }
 
 void TerrainColumnMaterialTest::consecutiveWavesUseDifferentPaletteAnchors()
@@ -2180,11 +2179,10 @@ void TerrainColumnMaterialTest::referenceRippleSeparatesNormalAndWhiteContracts(
     window.close();
 }
 
-void TerrainColumnMaterialTest::centerBeatLiftRemainsSparseAndBounded()
+void TerrainColumnMaterialTest::discreteBeatDoesNotMoveCanonicalColumns()
 {
     QFETCH(int, materialMode);
     QFETCH(float, randomValue);
-    QFETCH(bool, selected);
     QQuickWindow window;
     window.resize(640, 640);
     // Beat illumination is allowed to change. A chromatic backdrop keeps the
@@ -2227,17 +2225,10 @@ void TerrainColumnMaterialTest::centerBeatLiftRemainsSparseAndBounded()
              "A center transient may lift columns, not expand their width");
     QVERIFY2(std::abs(change.secondBounds.bottom() - change.firstBounds.bottom()) <= 1,
              "The column foot must remain anchored to the fixed ground");
-    if (selected) {
-        QVERIFY2(change.secondBounds.height() > change.firstBounds.height() + 8,
-                 "A selected center column must clearly rise on a real beat in the production scene");
-        QVERIFY2(change.secondBounds.height() <= change.firstBounds.height() * 1.5,
-                 "A sparse center lift must stay bounded, not double the column height");
-    } else {
-        QVERIFY2(nearlySameBounds(change.firstBounds, change.secondBounds),
-                 "Unselected columns must not receive a whole-center beat dome");
-        QVERIFY2(change.silhouetteMismatch <= change.commonVisible / 1000,
-                 "Only selected columns may change geometry on a beat");
-    }
+    QVERIFY2(nearlySameBounds(change.firstBounds, change.secondBounds),
+             "A discrete beat may change lighting, not canonical column geometry");
+    QVERIFY2(change.silhouetteMismatch <= change.commonVisible / 1000,
+             "Continuous frequency response is the only runtime column-height source");
 }
 
 void TerrainColumnMaterialTest::jellyHeightFollowsContinuousBands()

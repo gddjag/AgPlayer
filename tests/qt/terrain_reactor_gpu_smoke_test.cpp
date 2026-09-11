@@ -5,6 +5,8 @@
 #include <agplayer/c_api.h>
 
 #include <QGuiApplication>
+#include <QCoreApplication>
+#include <QEventLoop>
 #include <QFile>
 #include <QDir>
 #include <QQuickWindow>
@@ -37,6 +39,7 @@ class TerrainReactorGpuSmokeTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void cleanup();
     void referencePcmAnalysisFollowsActualFramesAndStopsWhenHidden();
     void densityAndQualityChangesKeepDrawingCompleteFrames();
     void cameraPunchDoesNotMoveTheGroundProjection();
@@ -68,6 +71,16 @@ private slots:
     void nonFiniteFeatureInputsAreSanitizedBeforeExposure();
     void nonFiniteCameraControlsRemainRenderable();
 };
+
+void TerrainReactorGpuSmokeTest::cleanup()
+{
+    // QQuickWindow tears its threaded scene graph down asynchronously on
+    // Windows. Drain teardown events between cases before exposing another
+    // native window backed by the same graphics device.
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    QTest::qWait(20);
+}
 
 void TerrainReactorGpuSmokeTest::referencePcmAnalysisFollowsActualFramesAndStopsWhenHidden()
 {
@@ -622,7 +635,6 @@ void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface_data(
     QTest::newRow("wave-width") << QByteArray("rippleWidth") << 20 << 200 << 200;
     QTest::newRow("wave-decay") << QByteArray("rippleDecay") << 20 << 200 << 1000;
     QTest::newRow("impact-decay") << QByteArray("rippleDecay") << 20 << 200 << 500;
-    QTest::newRow("rhythm-sensitivity") << QByteArray("rhythmSensitivity") << 0 << 100 << 200;
 }
 
 void TerrainReactorGpuSmokeTest::beatMaterialControlsChangeRenderedSurface()
@@ -797,6 +809,19 @@ void TerrainReactorGpuSmokeTest::regularBeatBrieflyBrightensThenReturns()
     }
     QVERIFY2(disabledPeak <= disabled * 103 / 100,
              "Zero rhythm strength must disable the beat flash");
+
+    style.setRhythmStrength(100);
+    style.setRhythmSensitivity(0);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderedStyleRevision(), item.styleRevision(), 3000);
+    const quint64 insensitive = centerLight();
+    source.publishBeat(0.9);
+    quint64 insensitivePeak = insensitive;
+    for (int frame = 0; frame < 5; ++frame) {
+        QTest::qWait(16);
+        insensitivePeak = std::max(insensitivePeak, centerLight());
+    }
+    QVERIFY2(insensitivePeak <= insensitive * 103 / 100,
+             "Zero rhythm sensitivity must suppress an otherwise strong beat flash");
     item.setActive(false);
 }
 
