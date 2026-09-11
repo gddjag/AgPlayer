@@ -113,6 +113,27 @@ ListView {
         && root.thumbnailWindowVisible
     model: trackModel
 
+    FontMetrics {
+        id: trackMenuFontMetrics
+        font.family: Theme.fontPrimary
+        font.pixelSize: Theme.fontSizeBody
+    }
+
+    function fittedMenuWidth(labels, submenuLabels) {
+        var required = 120
+        for (var index = 0; index < labels.length; ++index)
+            required = Math.max(required,
+                                trackMenuFontMetrics.advanceWidth(labels[index]) + 24)
+        for (var submenuIndex = 0; submenuIndex < submenuLabels.length;
+             ++submenuIndex) {
+            required = Math.max(
+                        required,
+                        trackMenuFontMetrics.advanceWidth(
+                            submenuLabels[submenuIndex]) + 42)
+        }
+        return Math.ceil(required)
+    }
+
     // Category navigation is user-directed.  Start each category at its top;
     // only an actual playback-track change may scroll back to the playing row.
     onSelectedCategoryChanged: Qt.callLater(root.positionViewAtBeginning)
@@ -622,7 +643,8 @@ ListView {
                             : Theme.selectedTrackSelection)
             : (currentTrack ? Theme.currentTrackSelectionInactive
                             : Theme.selectedTrackSelectionInactive)
-        readonly property color systemHighlightText: Theme.primaryText
+        readonly property color systemHighlightText:
+            currentTrack ? Theme.accentText : Theme.primaryText
         readonly property var rowTags:
             typeof model !== "undefined" && model.tags !== undefined
             ? model.tags : []
@@ -665,7 +687,7 @@ ListView {
                     id: playingBars
                     objectName: "playingBarsIndicator"
                     readonly property int barCount: 3
-                    readonly property color barColor: Theme.accent
+                    readonly property color barColor: Theme.accentText
                     readonly property real barGap: 2
                     readonly property bool animated:
                         visible && PlaybackController.state === PlaybackController.Playing
@@ -795,6 +817,9 @@ ListView {
                             artist: rowItem.artist
                             album: rowItem.album
                             tags: rowItem.rowTags
+                            color: rowItem.currentTrack
+                                   ? rowItem.systemHighlightText
+                                   : Theme.secondaryText
                             font.pixelSize: root.singleWindowSubtitleFontSize
                         }
 
@@ -956,7 +981,9 @@ ListView {
                 Layout.maximumWidth: root.favoriteWidth
                 Layout.leftMargin: root.singleWindowLayout ? root.trailingColumnGap : 0
                 icon.source: rowItem.favorite ? Theme.icon("heart-fill") : Theme.icon("heart-line")
-                icon.color: rowItem.favorite ? Theme.favoriteRed : Theme.secondaryText
+                icon.color: rowItem.currentTrack ? rowItem.systemHighlightText
+                            : rowItem.favorite ? Theme.favoriteRed
+                                               : Theme.secondaryText
                 icon.width: root.favoriteIconSize
                 icon.height: root.favoriteIconSize
                 onClicked: { var row = LibraryModel.indexForTrackId(rowItem.trackId); if (row >= 0) LibraryModel.setFavorite(row, !rowItem.favorite) }
@@ -1035,7 +1062,9 @@ ListView {
                         required property int index
                         objectName: "trackRatingStar" + index
                         source: index < rowItem.rating ? Theme.icon("star-fill") : Theme.icon("star-line")
-                        tint: index < rowItem.rating ? Theme.ratingColor(index) : Theme.iconSecondary
+                        tint: rowItem.currentTrack ? rowItem.systemHighlightText
+                              : index < rowItem.rating
+                                ? Theme.ratingColor(index) : Theme.iconSecondary
                         sourceSize.width: root.ratingIconSize
                         sourceSize.height: root.ratingIconSize
                         Layout.preferredWidth: root.ratingIconSize
@@ -1082,7 +1111,12 @@ ListView {
     Menu {
         id: trackMenu
         objectName: "trackContextMenu"
-        width: 168
+        width: root.fittedMenuWidth([
+            qsTr("播放"), qsTr("下一首播放"), qsTr("在文件夹中显示"),
+            qsTr("复制文件路径"), qsTr("打标签"),
+            qsTr("移动到指定文件夹"), qsTr("复制到指定文件夹"),
+            qsTr("从列表删除"), qsTr("彻底删除至回收站")
+        ], [qsTr("加入歌单"), qsTr("使用音频工具打开")])
         palette.window: Theme.elevated
         palette.text: Theme.primaryText
         palette.button: Theme.elevated
@@ -1090,7 +1124,10 @@ ListView {
         palette.highlight: Theme.activeSelection
         palette.highlightedText: Theme.activeSelectionText
         palette.mid: Theme.border
-        delegate: ThemedMenuItem {}
+        delegate: ThemedMenuItem {
+            implicitWidth: Math.ceil(contentItem.implicitWidth
+                                     + leftPadding + rightPadding)
+        }
         background: Rectangle {
             color: Theme.elevated
             border.color: Theme.border
@@ -1104,7 +1141,7 @@ ListView {
         SystemMenuItem { objectName: "trackMenuPlayNext"; text: qsTr("下一首播放"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: PlaybackController.queueNext(trackMenu.targetTrackId) }
         Menu {
             id: moveMenu
-            width: 168
+            width: 154
             palette.window: Theme.elevated
             palette.text: Theme.primaryText
             palette.button: Theme.elevated
@@ -1112,7 +1149,10 @@ ListView {
             palette.highlight: Theme.activeSelection
             palette.highlightedText: Theme.activeSelectionText
             palette.mid: Theme.border
-            delegate: ThemedMenuItem {}
+            delegate: ThemedMenuItem {
+                implicitWidth: Math.ceil(contentItem.implicitWidth
+                                         + leftPadding + rightPadding)
+            }
             background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusSm }
             objectName: "moveTracksMenu"
             title: qsTr("加入歌单")
@@ -1142,7 +1182,10 @@ ListView {
         Menu {
             id: audioToolsMenu
             objectName: "audioToolsTrackMenu"
-            width: 168
+            width: root.fittedMenuWidth([
+                qsTr("音频编辑"), qsTr("格式转换"), qsTr("元数据修改"),
+                qsTr("文件名处理"), qsTr("无损鉴别")
+            ], [])
             title: qsTr("使用音频工具打开")
             palette.window: Theme.elevated
             palette.text: Theme.primaryText
@@ -1151,7 +1194,10 @@ ListView {
             palette.highlight: Theme.activeSelection
             palette.highlightedText: Theme.activeSelectionText
             palette.mid: Theme.border
-            delegate: ThemedMenuItem {}
+            delegate: ThemedMenuItem {
+                implicitWidth: Math.ceil(contentItem.implicitWidth
+                                         + leftPadding + rightPadding)
+            }
             background: Rectangle { color: Theme.elevated; border.color: Theme.border; radius: Theme.radiusSm }
             SystemMenuItem { objectName: "trackMenuAudioEditor"; text: qsTr("音频编辑"); onClicked: root.openInAudioTool(0) }
             SystemMenuItem { objectName: "trackMenuFormatConverter"; text: qsTr("格式转换"); onClicked: root.openInAudioTool(1) }
@@ -1175,7 +1221,11 @@ ListView {
         SystemMenuItem { objectName: "trackMenuTrash"; text: qsTr("彻底删除至回收站"); onTriggered: trashConfirm.open() }
     }
 
-    component SystemMenuItem: ThemedMenuItem { width: 186 }
+    component SystemMenuItem: ThemedMenuItem {
+        width: parent ? parent.width : implicitWidth
+        implicitWidth: Math.ceil(contentItem.implicitWidth
+                                 + leftPadding + rightPadding)
+    }
 
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
     Connections {

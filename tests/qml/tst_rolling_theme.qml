@@ -386,7 +386,7 @@ TestCase {
         compare(mainWindow.width, 1386)
         compare(list.mapToItem(rolling, 0, 0).x, 233)
         compare(list.width, 856)
-        compare(list.height, 516)
+        compare(list.height, rolling.defaultTrackListHeight)
         compare((list.height - list.headerItem.height) / list.rowHeight, 10)
     }
 

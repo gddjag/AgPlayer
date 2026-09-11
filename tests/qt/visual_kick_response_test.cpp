@@ -35,6 +35,64 @@ int main() {
         }
         require(tracked.bandStart == 8 && tracked.bandEnd == 9,
                 "reference pulse auto-track follows the two strongest transient bins");
+
+        // At 120 BPM, eighth-note kicks arrive every 250 ms. The native
+        // detector runs at a fixed 60 Hz, so a frame-count hold copied from a
+        // high-refresh browser must not suppress later identical kicks.
+        pulse.reset();
+        int pulseOnsets = 0;
+        for (int frame = 0; frame < 16 * 15; ++frame) {
+            agplayer::VisualSpectrumAnalyzer::Spectrum eighthNotes{};
+            if ((frame % 15) < 2)
+                eighthNotes[1] = eighthNotes[2] = 255;
+            if (pulse.process(eighthNotes, 1.0 / 60.0).triggered)
+                ++pulseOnsets;
+        }
+        require(pulseOnsets == 16,
+                "every sustained 120 BPM eighth-note kick must trigger after warm-up");
+
+        pulse.reset();
+        agplayer::VisualPulseTrigger::Output adjacentBand;
+        for (int frame = 0; frame < 62; ++frame) {
+            agplayer::VisualSpectrumAnalyzer::Spectrum mixed{};
+            if ((frame % 15) < 2) {
+                mixed[1] = 240;
+                mixed[2] = 230;
+                mixed[8] = 255;
+            }
+            adjacentBand = pulse.process(mixed, 1.0 / 60.0);
+        }
+        require(adjacentBand.bandStart == 1 && adjacentBand.bandEnd == 2,
+                "auto-track must keep the strongest adjacent kick pair instead of diluting it across a wide band");
+
+        const auto verifyLongPlayback = [](int minutes) {
+            agplayer::VisualPulseTrigger longPulse;
+            const int frameCount = minutes * 60 * 60;
+            const int expectedOnsets = frameCount / 15;
+            int onsets = 0;
+            int lastOnsetFrame = -1;
+            for (int frame = 0; frame < frameCount; ++frame) {
+                agplayer::VisualSpectrumAnalyzer::Spectrum mixed{};
+                const int beatPhase = frame % 15;
+                if (beatPhase < 2) {
+                    mixed[1] = 240;
+                    mixed[2] = 230;
+                    // A stronger isolated transient must not make auto-track
+                    // normalize the kick across bins 1..8 later in the song.
+                    mixed[8] = 255;
+                }
+                if (longPulse.process(mixed, 1.0 / 60.0).triggered) {
+                    ++onsets;
+                    lastOnsetFrame = frame;
+                }
+            }
+            require(onsets == expectedOnsets,
+                    "long playback must preserve every scheduled kick from intro through tail");
+            require(lastOnsetFrame >= frameCount - 15,
+                    "long playback must still trigger in the final beat interval");
+        };
+        verifyLongPlayback(5);
+        verifyLongPlayback(60);
     }
 
     KickResponse detector;

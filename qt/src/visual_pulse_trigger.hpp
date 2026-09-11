@@ -68,12 +68,16 @@ public:
         const double threshold = (std::max)(.01, mean + std::sqrt(variance) * 1.6);
 
         Output result{false, 0.0, bandStart_, bandEnd_};
-        if (hold_ > 0) --hold_;
-        else if (previousSmoothed_ > threshold && previousSmoothed_ >= smoothed_
-                 && previousSmoothed_ - smoothed_ > .0001) {
+        holdRemaining_ = (std::max)(0.0, holdRemaining_ - dt);
+        if (holdRemaining_ <= 0.0
+            && previousSmoothed_ > threshold && previousSmoothed_ >= smoothed_
+            && previousSmoothed_ - smoothed_ > .0001) {
             result.triggered = true;
             result.strength = previousSmoothed_ * 30.0 * .2;
-            hold_ = 15;
+            // The browser reference expresses this as 15 animation frames.
+            // Normalize its high-refresh (~120 Hz) behavior to time so the
+            // native fixed-rate analyzer does not turn it into a 250 ms gate.
+            holdRemaining_ = 15.0 / 120.0;
         }
         previousSmoothed_ = smoothed_;
         return result;
@@ -116,19 +120,25 @@ private:
                 if (difference > .01) maximum[bin] = (std::max)(maximum[bin], difference);
             }
         }
-        std::size_t first = 0, second = 1;
-        if (maximum[second] > maximum[first]) std::swap(first, second);
-        for (std::size_t bin = 2; bin < maximum.size(); ++bin) {
-            if (maximum[bin] > maximum[first]) {
-                second = first;
-                first = bin;
-            } else if (maximum[bin] > maximum[second]) {
-                second = bin;
+        // WebAudio's smoothed analyser normally spreads one kick across two
+        // neighboring bins. The native FFT can also expose a stronger remote
+        // transient; choosing two unrelated maxima would turn them into one
+        // wide normalized band and dilute the later kick. Score adjacent
+        // pairs so auto-track keeps the reference's intended narrow punch
+        // window while retaining its 0.15 transient guard.
+        std::size_t pairStart = 0;
+        double pairScore = maximum[0] + maximum[1];
+        for (std::size_t bin = 1; bin + 1 < maximum.size(); ++bin) {
+            const double score = maximum[bin] + maximum[bin + 1];
+            if (score > pairScore) {
+                pairStart = bin;
+                pairScore = score;
             }
         }
-        if (maximum[first] < .15) return;
-        bandStart_ = (std::min)(first, second);
-        bandEnd_ = (std::max)(first, second);
+        if ((std::max)(maximum[pairStart], maximum[pairStart + 1]) < .15)
+            return;
+        bandStart_ = pairStart;
+        bandEnd_ = pairStart + 1;
     }
 
     std::array<double, VisualSpectrumAnalyzer::binCount> previous_{};
@@ -143,7 +153,7 @@ private:
     double previousSmoothed_ = 0.0;
     double elapsed_ = 0.0;
     double lastTrackEvaluation_ = 0.0;
-    int hold_ = 0;
+    double holdRemaining_ = 0.0;
 };
 
 } // namespace agplayer

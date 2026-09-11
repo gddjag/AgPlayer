@@ -55,12 +55,13 @@ QtObject {
     readonly property color opaqueDivider: opaqueBorder
     readonly property color disabled: isLight ? "#E5E8ED" : "#2A2D32"
 
-    // Brand emphasis intentionally differs by appearance: purple on dark,
-    // vivid blue on light. Domain colours remain independent below.
-    readonly property color accent: isLight ? "#1F1ED9" : "#7657E8"
-    readonly property color accentHover: isLight ? "#3433E5" : "#886EF0"
-    readonly property color accentPressed: isLight ? "#1716B8" : "#6345CF"
-    readonly property color accentSoft: isLight ? "#1FE8E8FB" : "#66302A45"
+    // Both appearances use the same purple brand family. Light mode keeps a
+    // deeper fill for contrast; dark mode uses a brighter violet. Interaction
+    // variants stay in-family instead of falling back to the old blue.
+    readonly property color accent: isLight ? "#6D28D9" : "#7657E8"
+    readonly property color accentHover: "#7C3AED"
+    readonly property color accentPressed: isLight ? "#5B21B6" : "#6D28D9"
+    readonly property color accentSoft: isLight ? "#1F6D28D9" : "#4D7657E8"
     readonly property color accentText: "#FFFFFF"
     readonly property color accentBorder: accent
     readonly property color focus: accent
@@ -93,8 +94,7 @@ QtObject {
     readonly property color activeSelectionText: highlightText
     readonly property color inactiveSelection: highlight
     readonly property color inactiveSelectionText: highlightText
-    readonly property color currentTrackSurface: isLight ? "#DDE8E8FB"
-                                                        : "#CC302A45"
+    readonly property color currentTrackSurface: accent
     readonly property color currentTrackInactiveSurface: currentTrackSurface
     readonly property color currentTrackSelection: currentTrackSurface
     readonly property color selectedTrackSelection: accentSoft
@@ -186,7 +186,7 @@ QtObject {
     readonly property color listSelectedSurface: selectedSurface
     readonly property color tagAddSurface: selectedSurface
     readonly property color tagSecondaryText: textSecondary
-    readonly property color listWaveformMono: isLight ? "#6B5A70" : "#C7B8CB"
+    readonly property color listWaveformMono: isLight ? "#8A9099" : "#D5D8DE"
     readonly property color tagPillSurface: isLight ? "#B8FFFFFF" : "#D11A2B3B"
     readonly property color tagPillHoverSurface: isLight ? "#E0DEEDF7" : "#EB213D54"
     readonly property color tagPillSelectedSurface: isLight ? "#33407DB3" : "#66407DB3"
@@ -245,8 +245,8 @@ QtObject {
     readonly property int controlHeight: 32
     readonly property int controlHeightProminent: 36
     readonly property int navigationRowHeight: 36
-    readonly property int listRowHeight: 40
-    readonly property int mediaListRowHeight: 48
+    readonly property int listRowHeight: 38
+    readonly property int mediaListRowHeight: 46
     readonly property int settingsRowHeight: 48
     readonly property int tableHeaderHeight: 36
     readonly property int sliderTrackHeight: 2

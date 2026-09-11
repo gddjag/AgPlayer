@@ -1157,6 +1157,18 @@ TestCase {
         verify(!findChild(menu, "trackMenuRelocate"))
         verify(!findChild(menu, "trackMenuDetails"),
                "right-click file information was explicitly removed")
+        var playAction = findChild(menu, "trackMenuPlay")
+        var trashAction = findChild(menu, "trackMenuTrash")
+        verify(playAction && trashAction)
+        verify(menu.width <= 160,
+               "playlist context menu must shrink to its translated labels")
+        compare(playAction.width, menu.width)
+        compare(trashAction.width, menu.width)
+        verify(trashAction.contentItem.implicitWidth
+               <= trashAction.contentItem.width,
+               "the longest action label must remain fully visible: "
+               + trashAction.contentItem.implicitWidth + " > "
+               + trashAction.contentItem.width + " (menu " + menu.width + ")")
         menu.close()
         list.destroy()
     }
@@ -3357,9 +3369,33 @@ TestCase {
         verify(indicator)
         var currentRow = findChild(list, "currentTrackRow")
         verify(currentRow)
-        compare(currentRow.color.toString(), Theme.currentTrackSelection.toString())
+        var currentFavorite = findChild(currentRow, "trackFavoriteCell")
+        var currentRatingStar = findChild(currentRow, "trackRatingStar0")
+        var currentSubtitle = findChild(currentRow, "singleWindowTrackSubtitle")
+        verify(currentFavorite && currentRatingStar && currentSubtitle)
+        var previousMode = SettingsController.themeMode
+        try {
+            for (var mode of [0, 1]) {
+                SettingsController.themeMode = mode
+                wait(0)
+                for (var profile of ["classic", "integrated", "rolling"]) {
+                    list.layoutProfile = profile
+                    wait(0)
+                    compare(currentRow.color.toString(), Theme.accent.toString())
+                    compare(currentRow.color.a, 1)
+                    compare(currentFavorite.icon.color.toString(),
+                            Theme.accentText.toString())
+                    compare(currentRatingStar.tint.toString(),
+                            Theme.accentText.toString())
+                    compare(currentSubtitle.color.toString(),
+                            Theme.accentText.toString())
+                }
+            }
+        } finally {
+            SettingsController.themeMode = previousMode
+        }
         compare(indicator.barCount, 3)
-        compare(indicator.barColor.toString(), Theme.accent.toString())
+        compare(indicator.barColor.toString(), Theme.accentText.toString())
         verify(findChild(indicator, "playingBar0"))
         verify(findChild(indicator, "playingBar1"))
         verify(findChild(indicator, "playingBar2"))
@@ -5531,6 +5567,44 @@ TestCase {
         SettingsController.trackWaveformBrightness = previousBrightness
     }
 
+    function test_z_thumbnail_mono_uses_adaptive_gray_white_without_changing_spectral_palette() {
+        var previousTheme = SettingsController.themeMode
+        var provider = fakeThumbnailProviderComponent.createObject(testCase)
+        var wrapper = trackWaveformThumbnailComponent.createObject(
+                    mainWindow.contentItem, {
+                        "provider": provider,
+                        "trackId": "mono-palette-track",
+                        "sourcePath": "mono-palette.wav",
+                        "delegateGeneration": 1,
+                        "mode": "Mono"
+                    })
+        verify(wrapper)
+        var itemLoader = findChild(wrapper, "trackWaveformThumbnailItemLoader")
+        tryVerify(function() { return itemLoader && itemLoader.item !== null })
+
+        SettingsController.themeMode = 1
+        tryCompare(Theme, "isLight", true)
+        compare(itemLoader.item.waveformColor.toString(), "#8a9099")
+        var low = String(itemLoader.item.lowColor)
+        var mid = String(itemLoader.item.midColor)
+        var high = String(itemLoader.item.highColor)
+
+        wrapper.mode = "Spectral"
+        wait(0)
+        compare(String(itemLoader.item.lowColor), low)
+        compare(String(itemLoader.item.midColor), mid)
+        compare(String(itemLoader.item.highColor), high)
+
+        SettingsController.themeMode = 0
+        tryCompare(Theme, "isLight", false)
+        wrapper.mode = "Mono"
+        compare(itemLoader.item.waveformColor.toString(), "#d5d8de")
+
+        wrapper.destroy()
+        provider.destroy()
+        SettingsController.themeMode = previousTheme
+    }
+
     function test_z_visible_thumbnail_retries_only_matching_cache_ready_source() {
         var provider = fakeThumbnailProviderComponent.createObject(testCase)
         var wrapper = trackWaveformThumbnailComponent.createObject(
@@ -6442,7 +6516,7 @@ TestCase {
         compare(Theme.titleBarSurface.toString(), "#e5e8ed")
         compare(Theme.navigationSurface.toString(), "#eceef2")
         compare(Theme.contentSurface.toString(), "#fafafb")
-        compare(Theme.accent.toString(), "#1f1ed9")
+        compare(Theme.accent.toString(), "#6d28d9")
         compare(Theme.selectedSurface.toString(), "#e8e8fb")
         verify(colorContrast(Theme.accentText, Theme.accent) >= 4.5)
 
@@ -6474,8 +6548,8 @@ TestCase {
         compare(Theme.controlHeight, 32)
         compare(Theme.controlHeightProminent, 36)
         compare(Theme.navigationRowHeight, 36)
-        compare(Theme.listRowHeight, 40)
-        compare(Theme.mediaListRowHeight, 48)
+        compare(Theme.listRowHeight, 38)
+        compare(Theme.mediaListRowHeight, 46)
         compare(Theme.settingsRowHeight, 48)
         compare(Theme.tableHeaderHeight, 36)
         compare(Theme.sliderTrackHeight, 2)
