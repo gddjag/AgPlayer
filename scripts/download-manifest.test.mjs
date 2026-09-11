@@ -93,7 +93,7 @@ async function runDownloadScript(response, timers = {}) {
 }
 
 function manifest(overrides = {}) {
-  const version = '1.0.0';
+  const version = '1.0.1';
   const name = `AgPlayer-Setup-${version}-x64.exe`;
   return {
     schemaVersion: 1,
@@ -127,14 +127,14 @@ test('valid official manifest enables both trusted Windows download routes', asy
   result.primary.click();
   result.github.click();
   assert.deepEqual(result.navigations, [
-    'https://download.agplayer.com/releases/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe',
-    'https://github.com/gddjag/AgPlayer/releases/download/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe'
+    'https://download.agplayer.com/releases/v1.0.1/AgPlayer-Setup-1.0.1-x64.exe',
+    'https://github.com/gddjag/AgPlayer/releases/download/v1.0.1/AgPlayer-Setup-1.0.1-x64.exe'
   ]);
-  assert.equal(result.status.textContent, 'downloadPage.windows.available:1.0.0');
+  assert.equal(result.status.textContent, 'downloadPage.windows.available:1.0.1');
 });
 
 test('published Windows release exposes the real uppercase SHA-256 and copies it', async () => {
-  const expected = 'B379A969A3F61C31C6C0864F7D7EB9A2435BC268F47FDD5A52D5C70B0EE63F78';
+  const expected = '42CBAB739E254C776B60F48EE544D42C6FF2A97676D6DCC220FEBC3A4B584D30';
   const payload = manifest({ files: [{
     ...manifest().files[0],
     sha256: expected.toLowerCase()
@@ -149,7 +149,7 @@ test('published Windows release exposes the real uppercase SHA-256 and copies it
   assert.deepEqual(result.clipboardWrites, [expected]);
 });
 
-test('published 1.0.0 remains available when the live manifest cannot be read', async () => {
+test('published 1.0.1 remains available when the live manifest cannot be read', async () => {
   const cases = [
     { ok: false },
     streamedResponse('x'.repeat(65537)),
@@ -161,12 +161,12 @@ test('published 1.0.0 remains available when the live manifest cannot be read', 
     assert.equal(result.primary.disabled, false);
     assert.equal(result.github.disabled, false);
     assert.equal(result.checksum.hasAttribute('hidden'), false);
-    assert.equal(result.checksumValue.textContent, 'B379A969A3F61C31C6C0864F7D7EB9A2435BC268F47FDD5A52D5C70B0EE63F78');
+    assert.equal(result.checksumValue.textContent, '42CBAB739E254C776B60F48EE544D42C6FF2A97676D6DCC220FEBC3A4B584D30');
     result.primary.click();
     result.github.click();
     assert.deepEqual(result.navigations, [
-      'https://download.agplayer.com/releases/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe',
-      'https://github.com/gddjag/AgPlayer/releases/download/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe'
+      'https://download.agplayer.com/releases/v1.0.1/AgPlayer-Setup-1.0.1-x64.exe',
+      'https://github.com/gddjag/AgPlayer/releases/download/v1.0.1/AgPlayer-Setup-1.0.1-x64.exe'
     ]);
   }
 });
@@ -175,7 +175,7 @@ test('download page hides the removed pre-download FAQ section and divider', asy
   const html = await readFile(downloadPagePath, 'utf8');
   const css = await readFile(siteCssPath, 'utf8');
   assert.match(css, /\.download-faq\s*\{\s*display:\s*none\s*\}/);
-  assert.match(html, /site\.css\?v=20260911-release-1/);
+  assert.match(html, /downloads\.js\?v=20260911-release-101/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
