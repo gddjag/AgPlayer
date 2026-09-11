@@ -6,10 +6,10 @@
   const requestTimeoutMs = 10000;
   const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
   const publishedWindowsRelease = Object.freeze({
-    version: '1.0.0',
-    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe',
-    r2Url: 'https://download.agplayer.com/releases/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe',
-    sha256: 'B379A969A3F61C31C6C0864F7D7EB9A2435BC268F47FDD5A52D5C70B0EE63F78'
+    version: '1.0.1',
+    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.1/AgPlayer-Setup-1.0.1-x64.exe',
+    r2Url: 'https://download.agplayer.com/releases/v1.0.1/AgPlayer-Setup-1.0.1-x64.exe',
+    sha256: '42CBAB739E254C776B60F48EE544D42C6FF2A97676D6DCC220FEBC3A4B584D30'
   });
 
   function selectWindowsRelease(manifest) {
@@ -51,7 +51,7 @@
       list.innerHTML = `<div><dt data-i18n="downloadPage.meta.system">${AG.t('downloadPage.meta.system')}</dt><dd data-i18n="${systemKey}">${systemText}</dd></div><div><dt data-i18n="downloadPage.meta.filename">${AG.t('downloadPage.meta.filename')}</dt><dd>${filename}</dd></div><div><dt data-i18n="downloadPage.meta.size">${AG.t('downloadPage.meta.size')}</dt><dd>${size}</dd></div>`;
       return list;
     };
-    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.0-x64.exe', '34.5 MB'));
+    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.1-x64.exe', '34.5 MB'));
     if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), AG.t('downloadPage.meta.pending'), '—'));
     if (!windows.querySelector('.release-checksum')) {
       windows.insertAdjacentHTML('beforeend', `<div id="windows-checksum" class="release-checksum" hidden><span data-i18n="downloadPage.checksum.label">${AG.t('downloadPage.checksum.label')}</span><code id="windows-sha256"></code><button type="button" id="windows-sha256-copy" disabled aria-disabled="true" data-i18n="downloadPage.checksum.copy">${AG.t('downloadPage.checksum.copy')}</button></div>`);
