@@ -246,6 +246,7 @@ window.AG_COPY = {
       },
       "checksum": {
         "label": "SHA-256 校验值",
+        "windowsLabel": "Windows：SHA-256 校验值",
         "copy": "复制"
       },
       "macos": {
@@ -596,6 +597,7 @@ window.AG_COPY = {
       },
       "checksum": {
         "label": "SHA-256 checksum",
+        "windowsLabel": "Windows: SHA-256 checksum",
         "copy": "Copy"
       },
       "macos": {
