@@ -28,8 +28,8 @@ struct TransactionResult {
     QString code;
     QString message;
     QStringList outputs;
-    QString causeCode;
-    QString causeMessage;
+    QString causeCode{};
+    QString causeMessage{};
 };
 
 class NativeOutputFileOps {

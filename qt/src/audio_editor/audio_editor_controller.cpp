@@ -154,12 +154,6 @@ QVariantList build_variant_peaks(
     return result;
 }
 
-qint64 clamped_int64_to_qint64(const std::size_t value)
-{
-    return value > static_cast<std::size_t>(std::numeric_limits<qint64>::max())
-        ? std::numeric_limits<qint64>::max() : static_cast<qint64>(value);
-}
-
 qint64 scaledBucket(const qint64 frame, const qint64 totalFrames,
                     const qint64 bucketCount)
 {

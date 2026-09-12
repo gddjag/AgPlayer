@@ -143,7 +143,7 @@ bool isValidProjectEditorSettings(const ProjectEditorSettings& settings) noexcep
         || !std::isfinite(settings.speedPercent)
         || settings.speedPercent < 50.0 || settings.speedPercent > 200.0
         || settings.pitchCents < -1'200 || settings.pitchCents > 1'200
-        || settings.trackMuted && settings.trackSolo
+        || (settings.trackMuted && settings.trackSolo)
         || !std::isfinite(settings.trackGainDb)
         || settings.trackGainDb < -60.0 || settings.trackGainDb > 12.0) {
         return false;

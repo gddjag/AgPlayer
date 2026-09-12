@@ -233,14 +233,14 @@ private:
 
     struct ActiveRequestContext {
         RequestKind kind = RequestKind::Probe;
-        QString inputPath;
-        QString modelId;
-        QString outputRoot;
-        QString outputFormat;
+        QString inputPath{};
+        QString modelId{};
+        QString outputRoot{};
+        QString outputFormat{};
         DeviceMode device = DeviceMode::Auto;
-        QList<StemKind> stemKinds;
-        QStringList stemNames;
-        QStringList stemLabels;
+        QList<StemKind> stemKinds{};
+        QStringList stemNames{};
+        QStringList stemLabels{};
         quint64 resultGeneration = 0;
     };
 

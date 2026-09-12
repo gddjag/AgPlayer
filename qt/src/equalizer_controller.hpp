@@ -138,7 +138,7 @@ private:
     [[nodiscard]] std::optional<Preset> findPreset(const QString& id) const;
     void load();
     void persist() const;
-    bool submit();
+    bool submit() override;
     void rememberSubmittedState();
     void restoreSubmittedState();
     void synchronizeSubmittedMetadata();

@@ -21,8 +21,10 @@
 
 namespace {
 
+#ifdef Q_OS_WIN
 constexpr char kProgId[] = "AgPlayerAudioFile";
 constexpr char kProgIdDisplayName[] = "AgPlayer Audio File";
+#endif
 
 QString normalizeExtension(const QString& ext)
 {

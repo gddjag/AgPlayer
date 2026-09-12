@@ -850,7 +850,7 @@ TrackRecord readLibraryMetadata(const QString& path, const ag_metadata* metadata
     const char* coverMime = nullptr;
     const unsigned char* cover = ag_metadata_cover(metadata, &coverSize, &coverMime);
     if (cover == nullptr || coverSize == 0) {
-        track.coverUrl = {};
+        track.coverUrl = QUrl{};
     } else {
         const QUrl cached = cacheEmbeddedCover(
             cover, coverSize, copiedMetadata(coverMime));

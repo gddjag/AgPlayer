@@ -67,7 +67,7 @@ struct ProjectSaveRequest final {
 struct ProjectSaveResult final {
     bool success{};
     QString message;
-    std::vector<ProjectSourceRecord> sources;
+    std::vector<ProjectSourceRecord> sources{};
     [[nodiscard]] bool ok() const noexcept { return success; }
 };
 

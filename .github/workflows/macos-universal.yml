@@ -84,12 +84,12 @@ jobs:
       - name: Build both architectures
         run: |
           cmake --build --preset macos-universal-release --parallel 3 -- -k 0
-          cmake --build build/macos-universal --parallel 3 --target dependency_smoke_test c_api_lifecycle_test decoder_test audio_engine_test queue_gapless_test metadata_writer_test transcoder_test pitch_shifter_test waveform_cache_test qml_main_window_test application_file_open_test global_hotkey_manager_test settings_controller_test file_association_controller_test separation_runtime_test separation_native_backend_test separation_process_client_test vocal_separation_controller_test vocal_separation_install_test
+          cmake --build build/macos-universal --parallel 3 --target dependency_smoke_test c_api_lifecycle_test decoder_test audio_engine_test queue_gapless_test metadata_writer_test transcoder_test pitch_shifter_test waveform_cache_test project_document_test rename_transaction_test lyrics_provider_chain_test equalizer_controller_test separation_output_transaction_test lossless_analysis_controller_test qml_main_window_test application_file_open_test global_hotkey_manager_test settings_controller_test file_association_controller_test separation_runtime_test separation_native_backend_test separation_process_client_test vocal_separation_controller_test vocal_separation_install_test
       - name: Run focused native tests
         run: >-
           ctest --test-dir build/macos-universal --output-on-failure
           --output-junit macos-native-tests.xml
-          -R '^(dependency_smoke_test|c_api_lifecycle_test|decoder_test|audio_engine_test|queue_gapless_test|metadata_writer_test|transcoder_test|pitch_shifter_test|waveform_cache_test|qml_main_window_test|application_file_open_test|global_hotkey_manager_test|settings_controller_test|file_association_controller_test|separation_runtime_test|separation_native_backend_test|separation_process_client_test|vocal_separation_controller_test|vocal_separation_install_test)$'
+          -R '^(dependency_smoke_test|c_api_lifecycle_test|decoder_test|audio_engine_test|queue_gapless_test|metadata_writer_test|transcoder_test|pitch_shifter_test|waveform_cache_test|project_document_test|rename_transaction_test|lyrics_provider_chain_test|equalizer_controller_test|separation_output_transaction_test|lossless_analysis_controller_test|qml_main_window_test|application_file_open_test|global_hotkey_manager_test|settings_controller_test|file_association_controller_test|separation_runtime_test|separation_native_backend_test|separation_process_client_test|vocal_separation_controller_test|vocal_separation_install_test)$'
       - name: Deploy and audit a single Universal development package
         run: >-
           python scripts/package-macos.py

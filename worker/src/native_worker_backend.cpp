@@ -1181,7 +1181,9 @@ BackendResult NativeWorkerBackend::probeCancellable(const QJsonObject& payload, 
              static_cast<double>(adapter.dedicatedVideoMemory)}});
     }
     const bool hasHardwareCandidate = !adapters.isEmpty();
+#ifndef Q_OS_MACOS
     const bool cuda = QFileInfo(QDir(QFileInfo(runtimePath).absolutePath()).filePath("onnxruntime_providers_cuda.dll")).isFile();
+#endif
     const QString family = payload.value("family").toString();
     if (!family.isEmpty()) {
 #ifdef Q_OS_MACOS

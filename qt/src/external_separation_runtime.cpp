@@ -140,8 +140,8 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
         stopInstaller();
     });
     ioPoll_.setInterval(2000);
-    connect(&ioPoll_, &QTimer::timeout, this, [this] {
 #ifdef Q_OS_WIN
+    connect(&ioPoll_, &QTimer::timeout, this, [this] {
         const auto pid = process_.processId();
         if (!pid || stopping_ || paused_) return;
         HANDLE handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, DWORD(pid));
@@ -154,8 +154,8 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
             processIoBytes_ = bytes;
             inactivity_.start();
         }
-#endif
     });
+#endif
     stopDeadline_.setSingleShot(true);
     stopDeadline_.setInterval(1500);
     connect(&stopDeadline_, &QTimer::timeout, this, [this] {

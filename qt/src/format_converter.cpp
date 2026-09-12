@@ -414,17 +414,6 @@ QVariantList presets_for(const QString& format, bool lossy)
                    320000, QStringLiteral("cbr"), 0, 85)};
 }
 
-bool list_contains_string(const QVariantList& values, const QString& needle,
-                          const QString& valueKey = {})
-{
-    return std::any_of(values.cbegin(), values.cend(),
-                       [&needle, &valueKey](const QVariant& value) {
-        return (valueKey.isEmpty() ? value.toString()
-                                   : value.toMap().value(valueKey).toString())
-            == needle;
-    });
-}
-
 bool is_video_file(const QString& path)
 {
     static const QSet<QString> extensions = {

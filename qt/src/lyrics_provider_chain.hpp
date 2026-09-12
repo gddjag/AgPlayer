@@ -40,7 +40,7 @@ private:
         int nextRouteIndex = 0;
         int activeRouteIndex = -1;
         quint64 activeInternalId = 0;
-        QList<RouteAttempt> attempts;
+        QList<RouteAttempt> attempts{};
         bool encounteredNoMatch = false;
         bool encounteredUnavailableRoute = false;
     };

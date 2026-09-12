@@ -202,7 +202,7 @@ bool agplayer::qt::macos::loginItemEnabled(QString* error)
 {
     @autoreleasepool {
         if (@available(macOS 13.0, *)) {
-            const SMAppServiceStatus status = SMAppService.mainApp.status;
+            const SMAppServiceStatus status = SMAppService.mainAppService.status;
             if (status == SMAppServiceStatusEnabled) return true;
             if (error != nullptr && status == SMAppServiceStatusRequiresApproval) {
                 *error = QStringLiteral("登录项等待用户在系统设置中批准");
@@ -218,7 +218,7 @@ bool agplayer::qt::macos::setLoginItemEnabled(bool enabled, QString* error)
 {
     @autoreleasepool {
         if (@available(macOS 13.0, *)) {
-            SMAppService* const service = SMAppService.mainApp;
+            SMAppService* const service = SMAppService.mainAppService;
             NSError* nativeError = nil;
             const bool operationOk = enabled
                 ? [service registerAndReturnError:&nativeError]

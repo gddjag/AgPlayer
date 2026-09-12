@@ -20,9 +20,12 @@ public:
     Q_ENUM(State)
 
     struct Deadlines {
-        int helloMs = 3000;
-        int heartbeatMs = 30'000;
-        int cancelGraceMs = 1500;
+        constexpr Deadlines(int hello = 3000, int heartbeat = 30'000,
+                            int cancelGrace = 1500) noexcept
+            : helloMs(hello), heartbeatMs(heartbeat), cancelGraceMs(cancelGrace) {}
+        int helloMs;
+        int heartbeatMs;
+        int cancelGraceMs;
     };
 
     explicit SeparationProcessClient(QString program,

@@ -29,7 +29,7 @@ struct RenameTransactionResult {
     QString errorCode;
     QString errorText;
     QString journalPath;
-    RenameUndoRecord undoRecord;
+    RenameUndoRecord undoRecord{};
 };
 
 class RenameTransaction final {
