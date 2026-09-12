@@ -1346,16 +1346,18 @@ int main(int argc, char* argv[])
         // a row to the existing QML layout. Roles place Settings/Quit in the app menu.
         QMenuBar macMenuBar;
         QMenu* appMenu = macMenuBar.addMenu(QStringLiteral("AgPlayer"));
-        QAction* macSettings = appMenu->addAction(QString());
+        QAction* macSettings = new QAction(appMenu);
         macSettings->setMenuRole(QAction::PreferencesRole);
         macSettings->setShortcut(QKeySequence::Preferences);
+        appMenu->addAction(macSettings);
         QObject::connect(macSettings, &QAction::triggered, &engine, [&windows, &engine] {
             windows.showMain();
             QMetaObject::invokeMethod(engine.rootObjects().first(), "openSettingsPage");
         });
-        QAction* macQuit = appMenu->addAction(QString());
+        QAction* macQuit = new QAction(appMenu);
         macQuit->setMenuRole(QAction::QuitRole);
         macQuit->setShortcut(QKeySequence::Quit);
+        appMenu->addAction(macQuit);
         QObject::connect(macQuit, &QAction::triggered, &windows, &WindowController::requestExit);
         QMenu* macWindowMenu = macMenuBar.addMenu(QString());
         QAction* macMinimize = macWindowMenu->addAction(QString());

@@ -46,45 +46,6 @@ double relativeLuminance(const QColor& color)
         + 0.0722 * linearChannel(color.blueF());
 }
 
-double contrastRatio(const QString& foreground, const QString& background)
-{
-    const double first = relativeLuminance(QColor(foreground));
-    const double second = relativeLuminance(QColor(background));
-    return (std::max(first, second) + 0.05) / (std::min(first, second) + 0.05);
-}
-
-struct TestOklch {
-    double lightness = 0.0;
-    double chroma = 0.0;
-    double hue = 0.0;
-};
-
-TestOklch testOklch(const QString& value)
-{
-    const QColor color(value);
-    const double r = linearChannel(color.redF());
-    const double g = linearChannel(color.greenF());
-    const double b = linearChannel(color.blueF());
-    const double l = std::cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-    const double m = std::cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-    const double s = std::cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-    const double a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
-    const double yellowBlue = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
-    double hue = std::atan2(yellowBlue, a) * 180.0 / 3.14159265358979323846;
-    if (hue < 0.0) {
-        hue += 360.0;
-    }
-    const double lightness = 0.2104542553 * l + 0.7936177850 * m
-        - 0.0040720468 * s;
-    return {lightness, std::hypot(a, yellowBlue), hue};
-}
-
-double hueDistance(double first, double second)
-{
-    const double distance = std::abs(first - second);
-    return std::min(distance, 360.0 - distance);
-}
-
 } // namespace
 
 class SettingsControllerTest final : public QObject {
