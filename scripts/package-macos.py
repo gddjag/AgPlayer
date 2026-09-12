@@ -336,14 +336,43 @@ def deploy_qt(app, qt_root, repo_root):
     # Qt 6.7 defaults to no signing and does not accept -no-codesign.
     # Later releases default to ad-hoc; disable it when the option exists.
     help_text = run([tool, "-help"], check=False)
-    args = [tool, app, "-verbose=2", f"-qmldir={repo_root / 'app/qml'}",
+    # Qt 6.8 macdeployqt has no per-plugin exclusion option. Preserve its
+    # standard runtime plugin families, selecting SQLite for SQL support.
+    # Unused Mimer/ODBC/PostgreSQL drivers depend on external database clients.
+    # Copy into staging only; the installed Qt SDK is never modified.
+    plugin_root = qt_root / "plugins"
+    for required in ("platforms/libqcocoa.dylib", "platforms/libqoffscreen.dylib",
+                     "sqldrivers/libqsqlite.dylib"):
+        if not (plugin_root / required).is_file():
+            raise PackageError(f"Missing required Qt runtime plugin: {required}")
+    plugin_binaries = []
+    for family in ("platforms", "styles", "imageformats", "iconengines", "printsupport",
+                   "accessible", "platforminputcontexts", "tls", "networkinformation",
+                   "audio", "multimedia", "sqldrivers"):
+        source = plugin_root / family
+        if not source.is_dir():
+            continue
+        for plugin in sorted(source.glob("*.dylib")):
+            if plugin.stem.endswith("_debug"):
+                continue
+            if family == "sqldrivers" and plugin.name != "libqsqlite.dylib":
+                continue
+            destination = app / "Contents/PlugIns" / family / plugin.name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(plugin, destination)
+            plugin_binaries.append(destination)
+    args = [tool, app, "-verbose=2", "-no-plugins", f"-qmldir={repo_root / 'app/qml'}",
             f"-executable={app / 'Contents/MacOS/AgSeparationWorker'}"]
+    args.extend(f"-executable={plugin}" for plugin in plugin_binaries)
     if "-no-codesign" in help_text:
         args.append("-no-codesign")
     output = run(args)
+    print(output, file=sys.stderr, flush=True)
     # Some Qt deployment failures are logged without a nonzero process exit.
     if re.search(r"(?im)^\s*(?:ERROR|Error):", output):
-        raise PackageError(f"macdeployqt reported an error: {output[-6000:]}")
+        errors = "\n".join(line for line in output.splitlines()
+                           if re.match(r"\s*(?:ERROR|Error):", line))
+        raise PackageError(f"macdeployqt reported an error: {errors[-6000:]}")
 
 
 def clean_development_rpaths(app):

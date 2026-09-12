@@ -200,6 +200,9 @@ class PackageFlowTests(BundleFixture):
         self.qt = self.root / "Qt/macos"
         (self.qt / "bin").mkdir(parents=True)
         (self.qt / "bin/macdeployqt").write_bytes(b"tool")
+        for relative in ("platforms/libqcocoa.dylib", "platforms/libqoffscreen.dylib",
+                         "sqldrivers/libqsqlite.dylib", "sqldrivers/libqsqlpsql.dylib"):
+            universal(self.qt / "plugins" / relative, filetype=6)
         self.output = self.root / "dist"
         self.commands = []
         self.staged = None
@@ -216,6 +219,7 @@ class PackageFlowTests(BundleFixture):
                 self.staged = Path(args[1])
                 self.assertNotEqual(self.staged, self.app)
                 self.assertIn("-qmldir=" + str(self.repo / "app/qml"), args)
+                self.assertIn("-no-plugins", args)
                 self.assertIn("-executable=" + str(self.staged / "Contents/MacOS/AgSeparationWorker"), args)
         elif tool == "sips":
             Path(args[args.index("--out") + 1]).write_bytes(b"sized icon")
@@ -256,6 +260,23 @@ class PackageFlowTests(BundleFixture):
         self.assertEqual(Path(signing[-1][-1]).suffix, ".app")
         report = json.loads(Path(result["report"]).read_text(encoding="utf-8"))
         self.assertEqual(report["required_architectures"], ["arm64", "x86_64"])
+
+    def test_runtime_plugins_preserve_sqlite_without_mutating_sdk(self):
+        result = self.package()
+        plugins = Path(result["app"]) / "Contents/PlugIns"
+        self.assertTrue((plugins / "platforms/libqcocoa.dylib").is_file())
+        self.assertTrue((plugins / "platforms/libqoffscreen.dylib").is_file())
+        self.assertTrue((plugins / "sqldrivers/libqsqlite.dylib").is_file())
+        self.assertFalse((plugins / "sqldrivers/libqsqlpsql.dylib").exists())
+        self.assertTrue((self.qt / "plugins/sqldrivers/libqsqlpsql.dylib").is_file())
+        deploy = next(args for args in self.commands if "-no-plugins" in args)
+        self.assertTrue(any("-executable=" in arg and "libqsqlite.dylib" in arg for arg in deploy))
+
+    def test_missing_cocoa_plugin_prevents_packaging(self):
+        (self.qt / "plugins/platforms/libqcocoa.dylib").unlink()
+        with self.assertRaisesRegex(packaging.PackageError, "libqcocoa"):
+            self.package()
+        self.assertFalse(any("--sign" in args or "hdiutil" in args for args in self.commands))
 
     def test_invalid_bundle_is_not_signed_or_packaged(self):
         universal(self.worker, arches=("arm64",))
