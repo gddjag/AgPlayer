@@ -551,25 +551,16 @@ int main(const int argc, char** argv)
         ag_cancel_token_destroy(token);
     }
 
-    // The read-only-file rejection test is POSIX-only. On Windows,
-    // MoveFileExW(MOVEFILE_REPLACE_EXISTING) - used by atomic_replace() - can
-    // substitute a read-only destination when the process runs with
-    // Administrator privileges, so the assertion would not hold in CI on that
-    // platform. The impossible-path case below still exercises the
-    // "save cannot write the destination" branch on Windows.
-#ifndef _WIN32
-    std::filesystem::permissions(
-        cache_path,
-        std::filesystem::perms::owner_read
-            | std::filesystem::perms::group_read
-            | std::filesystem::perms::others_read,
-        std::filesystem::perm_options::replace);
-    assert(!agplayer::WaveformCache::save(cache_path, source_path, {1.0F}));
-    assert(!path_exists(temporary_path_for(cache_path)));
-    std::filesystem::permissions(
-        cache_path, std::filesystem::perms::owner_all,
-        std::filesystem::perm_options::replace);
-#endif
+    // Replacing a directory with a file must fail on every platform, even
+    // with elevated privileges. A read-only file is not sufficient: POSIX
+    // rename checks the containing directory's permissions, not the file's.
+    const auto blocked_cache = case_dir / "blocked-cache.agwf";
+    std::filesystem::create_directory(blocked_cache);
+    const auto preserved_entry = blocked_cache / "keep.txt";
+    { std::ofstream marker(preserved_entry); marker << "keep"; }
+    assert(!agplayer::WaveformCache::save(blocked_cache, source_path, {1.0F}));
+    assert(!path_exists(temporary_path_for(blocked_cache)));
+    assert(path_exists(preserved_entry));
 
     const std::filesystem::path impossible_cache =
         source_path / "child" / "cache.agwf";

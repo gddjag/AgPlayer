@@ -68,7 +68,11 @@ Item {
         id: volumeSlider
         objectName: "volumeSlider"
         anchors.left: muteButton.right; anchors.verticalCenter: parent.verticalCenter
-        width: root.expandedSliderWidth
+        property real animatedWidth: root.expandedSliderWidth
+        // Resizing must clamp the animated flyout immediately to the new room.
+        width: Math.max(0, Math.min(animatedWidth,
+            root.maximumExpandedWidth - root.buttonExtent
+            - volumePercent.width - (volumePercent.width > 0 ? 4 : 0)))
         leftPadding: 0
         rightPadding: 0
         opacity: width > 0 ? 1 : 0; visible: !root.emptyMode
@@ -85,7 +89,7 @@ Item {
                 : root.playback.muted ? 0 : root.playback.volume
             restoreMode: Binding.RestoreBindingOrValue
         }
-        Behavior on width { NumberAnimation { duration: root.expanded ? 160 : 220; easing.type: Easing.OutCubic } }
+        Behavior on animatedWidth { NumberAnimation { duration: root.expanded ? 160 : 220; easing.type: Easing.OutCubic } }
         Behavior on opacity { NumberAnimation { duration: 140 } }
         background: Rectangle {
             x: volumeSlider.leftPadding; y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
@@ -110,14 +114,16 @@ Item {
         id: volumePercent
         objectName: "volumePercentLabel"
         anchors.left: volumeSlider.right; anchors.leftMargin: width > 0 ? 4 : 0; anchors.verticalCenter: parent.verticalCenter
-        width: root.showExpandedPercent ? 38 : 0
+        property real animatedWidth: root.showExpandedPercent ? 38 : 0
+        width: Math.max(0, Math.min(animatedWidth,
+            root.maximumExpandedWidth - root.buttonExtent - 4))
         opacity: width > 0 ? 1 : 0; visible: !root.emptyMode
         horizontalAlignment: Text.AlignLeft
         text: Math.round((root.playback ? root.playback.volume : 0) * 100) + "%"
         color: Theme.primaryText
         font.family: Theme.fontPrimary
         font.pixelSize: Theme.fontSizeCaption
-        Behavior on width { NumberAnimation { duration: root.expanded ? 160 : 220; easing.type: Easing.OutCubic } }
+        Behavior on animatedWidth { NumberAnimation { duration: root.expanded ? 160 : 220; easing.type: Easing.OutCubic } }
         Behavior on opacity { NumberAnimation { duration: 140 } }
     }
 }

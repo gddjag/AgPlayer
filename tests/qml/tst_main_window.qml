@@ -3482,6 +3482,8 @@ TestCase {
             var list = findChild(window, "sharedTrackList")
             verify(list)
             compare(list.layoutProfile, "classic")
+            window.show()
+            verify(waitForRendering(list))
 
             var title = findChild(list, "trackHeaderTitle")
             var duration = findChild(list, "trackHeaderDuration")
@@ -5825,6 +5827,10 @@ TestCase {
             nativeDropHelper.ensureSortableTracks()
         var oldWidth = mainWindow.width
         var oldHeight = mainWindow.height
+        var resizedVolume = findChild(mainWindow, "mainVolumeControl")
+        verify(resizedVolume)
+        resizedVolume.expandedForQa = true
+        wait(180)
         mainWindow.width = mainWindow.minimumWidth
         mainWindow.height = mainWindow.minimumHeight
         wait(50)
