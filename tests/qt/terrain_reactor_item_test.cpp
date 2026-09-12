@@ -292,10 +292,10 @@ void TerrainReactorItemTest::firstTerrainFrameUsesActualDelta()
     const auto expected = oracle.update(resumed.audio.descriptors, resumed.audio.kick.envelope,
         eq, {true,true,true,true,true,true,true,true}, .008, 50);
     QCOMPARE(resumed.terrain.bands[0], expected.bands[0]);
-    agplayer::visual::KickResponse kick;
+    agplayer::visual::KickResponse kick(agplayer::visual::KickResponse::Mode::Reference);
     agplayer::VisualSpectrumAnalyzer spectrum;
-    spectrum.process(snapshot.pcm.pcm);
-    const auto expectedKick = kick.process(spectrum.onsetSpectrum(), 1.0 / 60.0, 100);
+    const auto display = spectrum.process(snapshot.pcm.pcm);
+    const auto expectedKick = kick.process(display, 1.0 / 60.0, 100);
     QCOMPARE(resumed.audio.kick.envelope, expectedKick.envelope);
     QCOMPARE(resumed.audio.kick.level, expectedKick.level);
 }
@@ -748,14 +748,14 @@ void TerrainReactorItemTest::cameraPropertiesSupportTaskFourInput()
     QCOMPARE(item.punchRevision(), originalPunchRevision + 1);
     const quint64 firstPunchRevision = item.punchRevision();
     item.orbitBy(0.25, -0.1, 1.0);
-    item.zoomBy(-10000.0, 1.0);
+    item.zoomBy(10000.0, 1.0);
     QCOMPARE(item.punchRevision(), firstPunchRevision);
     item.triggerCameraPunch(0.7);
     QCOMPARE(item.punchRevision(), firstPunchRevision + 1);
     item.triggerCameraPunch(0.2);
     QCOMPARE(item.punchRevision(), firstPunchRevision + 2);
     QCOMPARE(item.cameraYaw(), originalYaw + 0.25);
-    QCOMPARE(item.cameraDistance(), 42.0);
+    QCOMPARE(item.cameraDistance(), 5.0);
     QVERIFY(item.cameraPunch() >= 0.19);
 }
 

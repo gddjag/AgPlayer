@@ -331,9 +331,12 @@ protected:
         int pulseWaveCount = 0;
         double pulseWaveStrength = 0;
         if (snapshot_.referenceAudio) {
-            const auto processed = TerrainReactorItem::advanceReferenceAudioFrames(
+            // AudioEngine/MapScene read the latest analyser once per rendered
+            // frame. Replaying a backlog here completes lifts before display
+            // and changes both the frame-count trigger gates and glow response.
+            const auto processed = TerrainReactorItem::advanceReferenceAudioFrame(
                 frameAnalyzer_, referenceResponse_, snapshot_, wallElapsedSeconds,
-                snareTrigger_, lastPcmFrameSequence_);
+                snareTrigger_);
             const auto& frame = processed.audio;
             floatingParameters_ = advanceFloatingBlocks(floatingParameters_.x(), float(frame.kick.envelope),
                 float(wallElapsedSeconds), snapshot_.style.floatingBlockMinSize, snapshot_.style.floatingBlockMaxSize,
@@ -616,6 +619,15 @@ protected:
         telemetry_->uploads.fetch_add(1, std::memory_order_relaxed);
         publishRenderedRevisions();
         notifyCounters();
+        if (snapshot_.style.rippleColor.w() > .5F
+            && snapshot_.quality == TerrainReactorItem::Quality::High) {
+            // Dirty the item on the GUI thread: renderer::update() alone can
+            // render repeatedly without synchronizing new PCM or control state.
+            TerrainReactorItem* const target = item_;
+            QMetaObject::invokeMethod(target, [target] {
+                if (target->renderingRequested()) target->update();
+            }, Qt::QueuedConnection);
+        }
     }
 
 private:
@@ -734,6 +746,19 @@ private:
                 config.rippleCount = 8;
             break;
         }
+        if (snapshot_.style.rippleColor.w() > .5F) {
+            // Original scene has meteor debris, not the legacy star sphere.
+            config.particleCount = 0;
+            if (snapshot_.quality == TerrainReactorItem::Quality::High) {
+                config.gridSize = referenceTerrainGridSize(snapshot_.style.topographyDensity);
+                gridCeiling = 224;
+                config.floatingCount = 80;
+                config.meteorCount = 10;
+                config.rippleCount = 10;
+                config.internalScale = 1;
+                config.sampleCount = 4;
+            }
+        }
         if (!snapshot_.style.floatingCubesEnabled) config.floatingCount = 0;
         if (!snapshot_.style.meteorsEnabled) config.meteorCount = 0;
         if (!snapshot_.style.ripplesEnabled) config.rippleCount = 0;
@@ -804,9 +829,9 @@ private:
         const CameraSnapshot defaults;
         const float yaw = finiteOr(camera.yaw, defaults.yaw);
         const float pitch = std::clamp(
-            finiteOr(camera.pitch, defaults.pitch), 0.12F, 1.15F);
+            finiteOr(camera.pitch, defaults.pitch), 0.1F, 1.5707953F);
         const float distance = std::clamp(
-            finiteOr(camera.distance, defaults.distance), 42.0F, 220.0F);
+            finiteOr(camera.distance, defaults.distance), 5.0F, 120.0F);
         const float punch = finiteUnit(camera.punch * snapshot_.style.cinemaShake);
         projection.perspective(45.0F, aspect, 0.1F, 1000.0F);
         const float radius = distance;
@@ -952,8 +977,7 @@ private:
             result.timbre[1] = float(referenceDescriptors_.brightness);
             result.timbre[2] = float(referenceDescriptors_.sharpness);
         }
-        // 0: reference replay clock; 1: canonical theme with fixed idle terrain;
-        // 2: user-custom material. Both runtime modes keep idle terrain fixed.
+        // 0: replay; 1: canonical theme; 2: user-custom material.
         result.timbre[3] = snapshot_.style.bodyColor.w() > 0.5F ? 1.0F : 2.0F;
         return result;
     }
@@ -1835,7 +1859,8 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
     for (std::size_t i = 0; i < eq.size(); ++i) eq[i] = snapshot.style.visualEqGains[i];
     const auto& terrain = response.update(audio.descriptors, audio.kick.envelope, eq,
         snapshot.style.visualEqEnabled, wallDelta, snapshot.style.motionResponse * 100.0);
-    const auto snareOutput = snare.process(audio.spectrum, audio.valid);
+    const auto snareOutput = snapshot.pcm.paused ? snare.suspend()
+        : snare.process(audio.spectrum, audio.valid);
     return {audio, terrain, snareOutput, audio.kick.onset > 0 ? 1 : 0,
             audio.kick.onset > 0 ? audio.kick.confidence : 0.0,
             audio.pulse.triggered ? 1 : 0,
@@ -2002,8 +2027,9 @@ void TerrainReactorItem::scheduleIfRunnable()
     const int interval = quality_ == Quality::Eco ? 33
         : quality_ == Quality::Balanced ? 22 : 16;
     if (renderTick_.interval() != interval) renderTick_.setInterval(interval);
-    if (running && !renderTick_.isActive()) renderTick_.start();
-    else if (!running) renderTick_.stop();
+    const bool frameDriven = renderStyle_.rippleColor.w() > .5F && quality_ == Quality::High;
+    if (running && !frameDriven && !renderTick_.isActive()) renderTick_.start();
+    else if (!running || frameDriven) renderTick_.stop();
     if (running != lastScheduledRunning_) {
         lastScheduledRunning_ = running;
         ++activityRevision_;

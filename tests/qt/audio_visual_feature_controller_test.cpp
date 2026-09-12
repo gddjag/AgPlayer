@@ -338,10 +338,10 @@ void AudioVisualFeatureControllerTest::renderFrameAnalysisOwnsCadenceAndResets()
     const auto first = analyzer.process(pcm, .2);
     QVERIFY(first.valid);
     QVERIFY(first.descriptors.energy > 0);
-    agplayer::visual::KickResponse kick;
+    agplayer::visual::KickResponse kick(agplayer::visual::KickResponse::Mode::Reference);
     agplayer::VisualSpectrumAnalyzer spectrum;
-    spectrum.process(pcm.pcm);
-    const auto expected = kick.process(spectrum.onsetSpectrum(), 1.0 / 60.0);
+    const auto display = spectrum.process(pcm.pcm);
+    const auto expected = kick.process(display, 1.0 / 60.0);
     QCOMPARE(first.kick.envelope, expected.envelope);
     // No new audio callback is needed for the next actual display frame.
     const auto second = analyzer.process(pcm, 1.0 / 60.0);
@@ -369,8 +369,10 @@ void AudioVisualFeatureControllerTest::pausedRenderFrameUsesOriginalVisualReleas
     pcm.valid = true;
     pcm.pcm.fill(.18f);
 
-    const double playingEnergy = analyzer.process(pcm, 1.0 / 60.0)
-                                     .descriptors.energy;
+    const auto playing = analyzer.process(pcm, 1.0 / 60.0);
+    const double playingEnergy = playing.descriptors.energy;
+    agplayer::visual::KickResponse original(agplayer::visual::KickResponse::Mode::Reference);
+    original.process(playing.spectrum, 1.0/60);
     QVERIFY(playingEnergy > 0.0);
 
     pcm.valid = false;
@@ -380,12 +382,12 @@ void AudioVisualFeatureControllerTest::pausedRenderFrameUsesOriginalVisualReleas
     QVERIFY(released.valid);
     QVERIFY(released.descriptors.energy > 0.0);
     QVERIFY(released.descriptors.energy < playingEnergy);
-    QCOMPARE(released.kick.onset, 0.0);
+    QCOMPARE(released.kick.onset, original.process(released.spectrum, 1.0/60).onset);
+    QCOMPARE(released.descriptors.energy, playingEnergy * .965);
     double releaseEnergy = released.descriptors.energy;
     for (int frame = 0; frame < 11; ++frame)
         releaseEnergy = analyzer.process(pcm, 1.0 / 60.0).descriptors.energy;
-    QVERIFY2(releaseEnergy < playingEnergy * 0.20,
-             "Paused terrain must return near rest before the next DJ beat");
+    QVERIFY(std::abs(releaseEnergy - playingEnergy * std::pow(.965,12)) < 1e-12);
 
     pcm.paused = false;
     pcm.releasing = false;
@@ -767,12 +769,15 @@ void AudioVisualFeatureControllerTest::visualPcmPauseRetainsWindowForRelease()
     QVERIFY(std::equal(paused.pcm.cbegin(), paused.pcm.cend(),
                        playing.pcm.cbegin()));
     QTest::qWait(550);
+    QVERIFY(features.visualPcmSnapshot().releasing);
+    QTest::qWait(1100);
     QVERIFY(!features.visualPcmSnapshot().releasing);
 
     QCOMPARE(ag_player_play(player), AG_OK);
     QCOMPARE(ag_player_set_muted(player, 1), AG_OK);
     features.pollOutputLevels();
-    QVERIFY(features.visualPcmSnapshot().paused);
+    // Original analyzer is before the user's volume/mute gain.
+    QVERIFY(!features.visualPcmSnapshot().paused);
     QCOMPARE(ag_player_set_muted(player, 0), AG_OK);
     features.pollOutputLevels();
     QVERIFY(!features.visualPcmSnapshot().paused);

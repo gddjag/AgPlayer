@@ -81,6 +81,7 @@ layout(location = 19) flat out vec4 travelingWave;
 // Reference ripple normal/white channels; main pass only, constant across a
 // column. Shadow receives the same height deformation but no color interface.
 layout(location = 20) flat out vec2 referenceRippleAnim;
+layout(location = 21) flat out vec2 referenceInstancePosition;
 #endif
 
 // 2D simplex kernel adapted directly from Ashima Arts' MIT-licensed
@@ -153,6 +154,7 @@ void main()
 #ifndef TERRAIN_SHADOW_PASS
     travelingWave = vec4(0.0);
     referenceRippleAnim = vec2(0.0);
+    referenceInstancePosition = instancePosition.xz;
 #endif
 
     if (type < 0.5) {
@@ -169,7 +171,6 @@ void main()
         float smoothness = clamp(ubuf.waveParameters.w, 0.0, 1.0);
         float density = clamp(ubuf.sceneLighting.w, 0.0, 1.0);
         // The canonical stage uses the original geometry in the player too.
-        // Runtime differs only in freezing the unexcited idle relief below.
         bool referenceGeometry = ubuf.timbre.w < 1.5 && ubuf.sceneControls.z <= 84.5;
         vec2 p = position.xz;
         float terrainRandom = fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453123);
@@ -184,9 +185,10 @@ void main()
                          0.2 + smoothness * 0.5) * 0.8 * reliefDisk
                      * ubuf.styleToggles.w;
         float subRegion = 1.0 - smoothstep(0.0, 25.0, distanceFromCore);
-        // Runtime silence should settle instead of looking like a false beat.
+        // The original has a subtle moving ocean even without audio. Only
+        // custom materials retain the older energy-dependent idle suppression.
         bool runtimeTheme = ubuf.timbre.w >= 0.5;
-        if (runtimeTheme) {
+        if (!referenceGeometry && runtimeTheme) {
             float audibleIdle = smoothstep(0.006, 0.075, ubuf.parameters.x);
             idle *= audibleIdle;
         }

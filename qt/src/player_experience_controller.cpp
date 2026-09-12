@@ -159,7 +159,7 @@ QVariantList PlayerExperienceController::builtInThemeChoices() const
                                    {QStringLiteral("title"), titles.at(index)},
                                    {QStringLiteral("from"), color(agplayer::immersive::ThemeColorRole::CoolCore)},
                                    {QStringLiteral("to"), color(agplayer::immersive::ThemeColorRole::WarmCore)},
-                                   {QStringLiteral("background"), color(agplayer::immersive::ThemeColorRole::BasePrimary)}});
+                                   {QStringLiteral("background"), color(agplayer::immersive::ThemeColorRole::Fog)}});
     }
     return choices;
 }
@@ -851,7 +851,8 @@ bool PlayerExperienceController::applyTheme(const QString& id)
     setBaseColor(encodedColor(agplayer::immersive::ThemeColorRole::BasePrimary)
                      .name(QColor::HexRgb));
     themeGlow_ = theme->glowIntensity;
-    themeBackground_ = encodedColor(agplayer::immersive::ThemeColorRole::BasePrimary);
+    // App.tsx uses uFogColor as its CSS backdrop, not the terrain base color.
+    themeBackground_ = encodedColor(agplayer::immersive::ThemeColorRole::Fog);
     applyingTheme_ = false;
     setThemeId(id);
     return true;
@@ -948,7 +949,7 @@ void PlayerExperienceController::load()
     const QString storedThemeId = persistedTheme.metaType().id() == QMetaType::QString
         ? persistedTheme.toString() : QString{};
     const bool resetReferenceDefaults = !storedThemeId.isEmpty()
-        && settings_.value(QStringLiteral("referenceDefaultsRevision"), 0).toInt() < 1;
+        && settings_.value(QStringLiteral("referenceDefaultsRevision"), 0).toInt() < 2;
     const auto integer = [this, resetReferenceDefaults](const QString& key, const int fallback) {
         // One-time upgrade of the original-theme dynamics; keep the library,
         // playback preferences, selected palette and unrelated settings intact.
@@ -959,12 +960,18 @@ void PlayerExperienceController::load()
             QStringLiteral("rhythmSensitivity"), QStringLiteral("glowIntensity"),
             QStringLiteral("floatingBlockMinSize"), QStringLiteral("floatingBlockMaxSize"),
             QStringLiteral("floatingBlockSpeed"), QStringLiteral("floatingBlockIntensity"),
-            QStringLiteral("autoRotateSpeed"), QStringLiteral("topographyDensity")};
+            QStringLiteral("autoRotateSpeed"), QStringLiteral("topographyDensity"),
+            QStringLiteral("columnSize"), QStringLiteral("columnOpacity"),
+            QStringLiteral("autoRotate"), QStringLiteral("materialMode")};
         if (resetReferenceDefaults && referenceKeys.contains(key)) return fallback;
         return storedInteger(settings_.value(key)).value_or(fallback);
     };
     const auto boolean = [this, resetReferenceDefaults](const QString& key, const bool fallback) {
         if (resetReferenceDefaults && key == QStringLiteral("themeCycleEnabled")) return false;
+        if (resetReferenceDefaults && key == QStringLiteral("songAdaptiveColorEnabled")) return false;
+        if (resetReferenceDefaults && (key == QStringLiteral("idleBreathingEnabled")
+            || key == QStringLiteral("floatingCubesEnabled") || key == QStringLiteral("ripplesEnabled")
+            || key == QStringLiteral("meteorsEnabled") || key == QStringLiteral("streamHighlightEnabled"))) return true;
         return storedBoolean(settings_.value(key)).value_or(fallback);
     };
     const auto decimal = [this](const QString& key, const double fallback) {
@@ -1151,7 +1158,7 @@ void PlayerExperienceController::load()
     settings_.setValue(QStringLiteral("subjectClarity"), subjectClarity_);
     settings_.setValue(QStringLiteral("autoRotateSpeed"), autoRotateSpeed_);
     settings_.setValue(QStringLiteral("rhythmSensitivity"), rhythmSensitivity_);
-    settings_.setValue(QStringLiteral("referenceDefaultsRevision"), 1);
+    settings_.setValue(QStringLiteral("referenceDefaultsRevision"), 2);
     settings_.endGroup();
 
     if (agplayer::immersive::findBuiltInTheme(storedThemeId.toStdString()) != nullptr) {

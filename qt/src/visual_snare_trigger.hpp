@@ -19,6 +19,7 @@ public:
         previous_.fill(0); history_.fill(0); next_ = 0;
         smoothed_ = previousSmoothed_ = 0; hold_ = 0;
     }
+    Output suspend() noexcept { previous_.fill(0); return {}; }
     Output process(const VisualSpectrumAnalyzer::Spectrum& spectrum, bool valid = true) noexcept {
         if (!valid) { reset(); return {}; }
         double flux = 0;

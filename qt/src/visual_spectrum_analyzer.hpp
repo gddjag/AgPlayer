@@ -32,14 +32,21 @@ public:
     }
 
     // Reset on seek, track/sample-rate change, discontinuity or visual restart.
-    void reset() noexcept { smoothed_.fill(0.0); onsetSpectrum_.fill(0); }
+    void reset() noexcept { smoothed_.fill(0.0); onsetSpectrum_.fill(0); attackMagnitudes_.fill(0); rms_ = 0; }
 
     const Spectrum& onsetSpectrum() const noexcept { return onsetSpectrum_; }
+    const std::array<double, 8>& attackMagnitudes() const noexcept { return attackMagnitudes_; }
+    double rootMeanSquare() const noexcept { return rms_; }
 
     Spectrum process(const Window& mono) noexcept
     {
-        for (std::size_t i = 0; i < windowSize; ++i)
-            scratch_[i] = {(std::isfinite(mono[i]) ? static_cast<double>(mono[i]) : 0.0) * window_[i], 0.0};
+        double energy = 0;
+        for (std::size_t i = 0; i < windowSize; ++i) {
+            const double value = std::isfinite(mono[i]) ? static_cast<double>(mono[i]) : 0.0;
+            energy += value * value;
+            scratch_[i] = {value * window_[i], 0.0};
+        }
+        rms_ = std::sqrt(energy / windowSize);
 
         // In-place radix-2 Cooley-Tukey FFT, bit-reversed input permutation.
         for (std::size_t i = 1, j = 0; i < windowSize; ++i) {
@@ -64,6 +71,7 @@ public:
         Spectrum result{};
         for (std::size_t i = 0; i < binCount; ++i) {
             const double magnitude = std::abs(scratch_[i]) / static_cast<double>(windowSize);
+            if (i < attackMagnitudes_.size()) attackMagnitudes_[i] = magnitude;
             // Detection needs the transient before display smoothing and the
             // -30 dB display ceiling. Reuse this FFT, with full headroom.
             // KickResponse reads only bins 0..7. DC is excluded below; no
@@ -93,5 +101,7 @@ private:
     std::array<std::complex<double>, windowSize> scratch_{};
     std::array<double, binCount> smoothed_{};
     Spectrum onsetSpectrum_{};
+    std::array<double, 8> attackMagnitudes_{};
+    double rms_ = 0;
 };
 }

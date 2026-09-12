@@ -2311,12 +2311,37 @@ TestCase {
         for (var deadKey of ["columnInnerLight", "columnLightSpill", "columnLightRadius",
                              "centerHighlight", "depthOfField", "inputCompression", "rhythmStrength"])
             compare(findChild(panel, "dynamicSlider_" + deadKey), null, deadKey)
+        compare(findChild(panel, "effectToggle_burstEnabled"), null)
         var host = findChild(mainWindow, "immersiveCoordinator").fullscreenWindow
         var drop = findChild(host, "immersiveFileDropArea")
         verify(drop && drop.enabled)
         verify(typeof drop.urlsSubmitter === "function")
         compare(drop.submitUrls([]), false)
         PlayerExperienceController.colorMode = PlayerExperienceController.Custom
+    }
+
+    function test_effect_sliders_require_their_effect_and_have_unique_keys() {
+        verify(PlayerExperienceController.applyTheme("nocturnal"))
+        var panel = windowedPresetPanel()
+        panel.currentTab = 2
+        var seen = {}
+        for (var group of panel.dynamicsGroups) {
+            for (var slider of group.sliders) {
+                verify(!seen[slider.key], "duplicate setting: " + slider.key)
+                seen[slider.key] = true
+            }
+        }
+        for (var control of [
+                 { toggle: "ripplesEnabled", value: false, key: "rippleWidth", restore: true },
+                 { toggle: "floatingCubesEnabled", value: false, key: "floatingBlockSpeed", restore: true },
+                 { toggle: "autoRotate", value: 0, key: "autoRotateSpeed", restore: 54 }]) {
+            PlayerExperienceController[control.toggle] = control.value
+            var item = findChild(panel, "dynamicSlider_" + control.key)
+            verify(item)
+            tryCompare(item, "enabled", false)
+            PlayerExperienceController[control.toggle] = control.restore
+            tryCompare(item, "enabled", true)
+        }
     }
 
     function test_visual_eq_sliders_change_only_the_selected_frequency_band() {
@@ -2466,8 +2491,9 @@ TestCase {
                              "dynamicSlider_" + motionKeys[motionIndex]))
         verify(findChild(impactGroup, "dynamicSlider_rhythmStrength"))
         verify(findChild(lightGroup, "effectToggle_streamHighlightEnabled"))
-        verify(findChild(lightGroup,
-                         "effectToggle_songAdaptiveColorEnabled"))
+        compare(findChild(lightGroup,
+                          "effectToggle_songAdaptiveColorEnabled"), null)
+        verify(findChild(panel, "songColorToggle"))
         verify(findChild(motionGroup, "effectToggle_autoRotate"))
         verify(findChild(motionGroup, "effectToggle_idleBreathingEnabled"))
         verify(findChild(motionGroup, "effectToggle_floatingCubesEnabled"))

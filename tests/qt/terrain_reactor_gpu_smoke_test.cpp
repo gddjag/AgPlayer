@@ -8,6 +8,7 @@
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QDir>
 #include <QQuickWindow>
 #include <QScreen>
@@ -49,6 +50,7 @@ private slots:
     void columnLayeringReferenceFixture_data();
     void columnLayeringReferenceFixture();
     void shaderFalloffsKeepSmoothstepEdgesAscending();
+    void referenceSharpnessReachesSideGlowUnclipped();
     void firstActiveCreatesResourcesAndRendersStaticFeatures();
     void wideGroundFadesBeforeCircularBoundary();
     void staticFeaturesKeepRenderingWithoutGuiFeatureUpdates();
@@ -107,6 +109,27 @@ void TerrainReactorGpuSmokeTest::spatialLyricsAndPointerRippleRender()
             if (lyrics.pixelColor(x,y).lightness() > baseline.pixelColor(x,y).lightness() + 30) ++changed;
     QVERIFY2(changed > 300, "World-space lyric glyphs must actually reach the framebuffer");
     QVERIFY(lyrics.save(QCoreApplication::applicationDirPath() + QStringLiteral("/immersive-native-lyrics.png")));
+    // Change the live controller while the scene is active: assert actual
+    // framebuffer differences, not just property storage or signal delivery.
+    for (const auto& setting : {
+             std::pair<const char*, int>{"lyricPositionX", 60},
+             {"lyricPositionY", 65}, {"lyricSize", 130},
+             {"lyricDepth", 85}, {"lyricOpacity", 20}}) {
+        const QVariant saved = style.property(setting.first);
+        const QImage before = window.grabWindow();
+        QVERIFY(style.setProperty(setting.first, setting.second));
+        QTest::qWait(100);
+        const QImage after = window.grabWindow();
+        int pixels = 0;
+        for (int y = 0; y < before.height(); ++y)
+            for (int x = 0; x < before.width(); ++x)
+                if (std::abs(before.pixelColor(x,y).lightness()
+                             - after.pixelColor(x,y).lightness()) > 20) ++pixels;
+        qInfo() << setting.first << "lyric changed pixels" << pixels;
+        QVERIFY2(pixels > 100, setting.first);
+        QVERIFY(style.setProperty(setting.first, saved));
+        QTest::qWait(100);
+    }
     item.setSpatialLyrics({});
     QTest::qWait(100);
     item.triggerRipple(480, 350);
@@ -402,6 +425,20 @@ void TerrainReactorGpuSmokeTest::columnLayeringReferenceFixture()
         QTest::qWait(100);
     }
     item.setActive(false);
+}
+
+void TerrainReactorGpuSmokeTest::referenceSharpnessReachesSideGlowUnclipped()
+{
+    const QDir directory = QFileInfo(QString::fromUtf8(AGPLAYER_TERRAIN_SHADER_SOURCE)).dir();
+    QFile shader(directory.filePath(QStringLiteral("terrain_reactor.frag")));
+    QVERIFY(shader.open(QIODevice::ReadOnly));
+    const QString source = QString::fromUtf8(shader.readAll());
+    const int begin = source.indexOf(QStringLiteral("if (referenceMode) {"));
+    const int end = source.indexOf(QStringLiteral("if (ubuf.bodyColor.a > 0.5) {"), begin);
+    QVERIFY(begin >= 0 && end > begin);
+    const QString material = source.mid(begin, end-begin);
+    QVERIFY2(!material.contains(QStringLiteral("clamp(ubuf.timbre.z")),
+             "Original sharpness may exceed one; clipping it lengthens the side glow on sharp attacks");
 }
 
 void TerrainReactorGpuSmokeTest::shaderFalloffsKeepSmoothstepEdgesAscending()

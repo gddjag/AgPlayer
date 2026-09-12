@@ -85,6 +85,8 @@ Item {
             return TerrainReactorItem.Eco
         switch (PlayerExperienceController.qualityPreset) {
         case PlayerExperienceController.Eco: return TerrainReactorItem.Eco
+        case PlayerExperienceController.Auto:
+            return referenceThemeActive ? TerrainReactorItem.High : TerrainReactorItem.Balanced
         case PlayerExperienceController.High:
         case PlayerExperienceController.Ultra: return TerrainReactorItem.High
         default: return TerrainReactorItem.Balanced
@@ -282,8 +284,8 @@ Item {
                 return
             orbitDragged = orbitDragged || Math.hypot(mouse.x - pressX, mouse.y - pressY) > 6
             if (!orbitDragged) return
-            root.terrainItem.orbitBy(-(mouse.x - lastX) * 0.004,
-                                     (mouse.y - lastY) * 0.003,
+            root.terrainItem.orbitBy(-(mouse.x - lastX) * 2 * Math.PI / Math.max(1, height),
+                                     (mouse.y - lastY) * 2 * Math.PI / Math.max(1, height),
                                      Date.now() / 1000.0)
             lastX = mouse.x
             lastY = mouse.y

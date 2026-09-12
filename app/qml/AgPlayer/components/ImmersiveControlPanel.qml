@@ -37,7 +37,11 @@ Rectangle {
         "baseColor": "#050206" // theme-color-allow: default immersive media palette, not UI chrome
     })
     readonly property var dynamicsGroups: authoredDynamicsGroups.map(function(group) {
-        if (!PlayerExperienceController.themeId.length) return group
+        if (!PlayerExperienceController.themeId.length)
+            return {key: group.key, title: group.title, sliders: group.sliders,
+                effects: group.effects.filter(function(item) {
+                    return item.key !== "songAdaptiveColorEnabled"
+                })}
         // Only expose controls consumed by the canonical material/EQ path.
         var supported = ["rippleStrength", "rippleWidth", "rippleDecay",
             "topographyDensity", "terrainAmplitude", "motionResponse",
@@ -47,7 +51,8 @@ Rectangle {
         return {key: group.key, title: group.title,
             sliders: group.sliders.filter(function(item) { return supported.indexOf(item.key) >= 0 }),
             effects: group.effects.filter(function(item) {
-                return ["songAdaptiveColorEnabled", "streamHighlightEnabled"].indexOf(item.key) < 0
+                return ["songAdaptiveColorEnabled", "streamHighlightEnabled",
+                        "burstEnabled"].indexOf(item.key) < 0
             })}
     })
     readonly property var authoredDynamicsGroups: [
@@ -139,6 +144,18 @@ Rectangle {
     function setControllerValue(key, value) {
         PlayerExperienceController[key] = key === "cinemaShake"
                 ? value : Math.round(value)
+    }
+
+    function controlEnabled(key) {
+        if (["rippleStrength", "rippleWidth", "rippleDecay"].indexOf(key) >= 0)
+            return PlayerExperienceController.ripplesEnabled
+        if (key.indexOf("floatingBlock") === 0)
+            return PlayerExperienceController.floatingCubesEnabled
+        if (key === "autoRotateSpeed")
+            return PlayerExperienceController.autoRotate > 0
+        if (key.indexOf("lyric") === 0)
+            return PlayerExperienceController.lyricsVisible
+        return true
     }
 
     function displayValue(item) {
@@ -604,6 +621,7 @@ Rectangle {
                         Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                         ThemedSlider {
                             objectName: "lyricSlider_" + modelData.key
+                            enabled: root.controlEnabled(modelData.key)
                             Layout.fillWidth: true
                             implicitHeight: 20
                             from: modelData.from
@@ -660,6 +678,7 @@ Rectangle {
                                 Text { Layout.preferredWidth: 62; text: modelData.label; color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                                 ThemedSlider {
                                     objectName: "dynamicSlider_" + modelData.key
+                                    enabled: root.controlEnabled(modelData.key)
                                     Layout.fillWidth: true
                                     implicitHeight: 20
                                     from: modelData.from
@@ -726,6 +745,14 @@ Rectangle {
                         }
                     }
                 }
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("灰色滑条需先开启对应效果；设置即时生效")
+                    wrapMode: Text.WordWrap
+                    color: Theme.textTertiary
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizeCaption
+                }
                 Text { text: qsTr("视觉 EQ · 8 音域"); color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
                 Text {
                     Layout.fillWidth: true
@@ -772,6 +799,7 @@ Rectangle {
                         }
                         ThemedSlider {
                             objectName: "visualEqSlider_" + bandIndex
+                            enabled: PlayerExperienceController.visualEqEnabled[bandIndex]
                             Layout.fillWidth: true
                             implicitHeight: 20
                             from: 0; to: 100; stepSize: 1

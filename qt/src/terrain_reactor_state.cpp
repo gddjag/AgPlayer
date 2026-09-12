@@ -126,17 +126,17 @@ CameraSnapshot sanitizedCameraSnapshot(
     const CameraSnapshot defaults;
     CameraSnapshot safeFallback;
     safeFallback.yaw = finiteOr(fallback.yaw, defaults.yaw);
-    safeFallback.pitch = clampRange(fallback.pitch, 0.12F, 1.15F,
+    safeFallback.pitch = clampRange(fallback.pitch, 0.1F, 1.5707953F,
                                     defaults.pitch);
-    safeFallback.distance = clampRange(fallback.distance, 42.0F, 220.0F,
+    safeFallback.distance = clampRange(fallback.distance, 5.0F, 120.0F,
                                        defaults.distance);
     safeFallback.punch = clampUnit(fallback.punch, defaults.punch);
 
     CameraSnapshot result;
     result.yaw = finiteOr(candidate.yaw, safeFallback.yaw);
-    result.pitch = clampRange(candidate.pitch, 0.12F, 1.15F,
+    result.pitch = clampRange(candidate.pitch, 0.1F, 1.5707953F,
                               safeFallback.pitch);
-    result.distance = clampRange(candidate.distance, 42.0F, 220.0F,
+    result.distance = clampRange(candidate.distance, 5.0F, 120.0F,
                                  safeFallback.distance);
     result.punch = clampUnit(candidate.punch, safeFallback.punch);
     return result;
@@ -394,16 +394,18 @@ SceneLayout makeSceneLayout(quint32 seed, int gridSize, int floatingCount,
 
     DeterministicRandom random(seed);
     constexpr float extent = kTerrainStageExtent;
-    const float spacing = extent / static_cast<float>(boundedGrid);
-    for (int z = 0; z < boundedGrid; ++z) {
-        for (int x = 0; x < boundedGrid; ++x) {
+    // JS computes in double, then InstancedMesh stores Float32. Preserve both
+    // that rounding and x-outer/z-inner submission order for transparency.
+    const double spacing = double(extent) / boundedGrid;
+    for (int x = 0; x < boundedGrid; ++x) {
+        for (int z = 0; z < boundedGrid; ++z) {
             SceneInstance instance;
-            const float worldX = -extent * 0.5F + static_cast<float>(x) * spacing;
-            const float worldZ = -extent * 0.5F + static_cast<float>(z) * spacing;
+            const float worldX = float(-double(extent) * .5 + double(x) * spacing);
+            const float worldZ = float(-double(extent) * .5 + double(z) * spacing);
             instance.position = QVector3D(worldX, 0.0F, worldZ);
             // Instances carry physical box dimensions. The shader must not
             // apply another hidden gutter to this reference width ratio.
-            const float columnWidth = spacing * (0.9F / 1.05F);
+            const float columnWidth = float(spacing * (0.9 / 1.05));
             instance.scale = QVector3D(columnWidth, 1.0F, columnWidth);
             instance.random = random.unit();
             // Submit the complete Cartesian grid. The vertex shader owns the
@@ -965,15 +967,15 @@ void CameraMotion::orbitBy(float yawDelta, float pitchDelta,
     if (!std::isfinite(yawDelta) || !std::isfinite(pitchDelta)
         || !std::isfinite(nowSeconds)) return;
     snapshot_.yaw += yawDelta;
-    snapshot_.pitch = std::clamp(snapshot_.pitch + pitchDelta, 0.12F, 1.15F);
+    snapshot_.pitch = std::clamp(snapshot_.pitch + pitchDelta, 0.1F, 1.5707953F);
     markManual(nowSeconds);
 }
 void CameraMotion::zoomBy(float wheelDelta, double nowSeconds) noexcept
 {
     snapshot_ = sanitizedCameraSnapshot(snapshot_);
     if (!std::isfinite(wheelDelta) || !std::isfinite(nowSeconds)) return;
-    snapshot_.distance = std::clamp(snapshot_.distance + wheelDelta * 0.04F,
-                                     42.0F, 220.0F);
+    snapshot_.distance = std::clamp(snapshot_.distance
+        * std::pow(.95F, std::clamp(wheelDelta * .01F, -100.0F, 100.0F)), 5.0F, 120.0F);
     markManual(nowSeconds);
 }
 void CameraMotion::applyBeatPunch(float strength) noexcept
@@ -1067,8 +1069,8 @@ void CameraMotion::applyManualDelta(const CameraSnapshot& previous,
         || std::abs(pitchDelta) > 0.000001F
         || std::abs(distanceDelta) > 0.000001F;
     snapshot_.yaw += yawDelta;
-    snapshot_.pitch = std::clamp(snapshot_.pitch + pitchDelta, 0.12F, 1.15F);
-    snapshot_.distance = std::clamp(next.distance, 42.0F, 220.0F);
+    snapshot_.pitch = std::clamp(snapshot_.pitch + pitchDelta, 0.1F, 1.5707953F);
+    snapshot_.distance = std::clamp(next.distance, 5.0F, 120.0F);
     if (manuallyMoved) markManual(nowSeconds);
 }
 void CameraMotion::markManual(double nowSeconds) noexcept

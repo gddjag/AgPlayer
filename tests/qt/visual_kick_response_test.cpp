@@ -39,6 +39,120 @@ int main(int argc, char** argv) {
         std::cout << "FFT analysis median_us=" << samples[2] << " checksum=" << checksum << '\n';
         return 0;
     }
+    // Independent numeric contract from beatDetector.ts / kickEnvelope.ts.
+    // A recovery pulse or a rejected swell must not shift the source clock.
+    {
+        constexpr double dt = 1.0 / 60.0;
+        KickResponse reference(KickResponse::Mode::Reference);
+        KickResponse recovered(KickResponse::Mode::Reference);
+        KickResponse filtered(KickResponse::Mode::Reference);
+        KickResponse::Spectrum step{};
+        step.fill(128);
+        const double raw = 128.0 / 255.0;
+        reference.process(step, dt);
+        recovered.process(step, dt, 100, true, true);
+        filtered.process(step, dt);
+        const auto second = reference.process(step, dt);
+        const double flux = raw * .35;
+        const double mean = flux / 90;
+        const double deviation = std::sqrt(((flux-mean)*(flux-mean) + 89*mean*mean) / 90);
+        require(near(second.threshold, std::max(.016, mean + 1.1*deviation)),
+                "reference threshold must use mean/std of smoothed flux");
+        require(second.onset == 1 && recovered.process(step, dt).onset == 1,
+                "recovery must not veto the next original onset");
+        const double floor1 = raw * (1-std::exp(-1.15*dt));
+        const double level1 = raw-floor1-.025;
+        const double breath1 = std::min(.11, level1*.18);
+        const double floor2 = floor1+(raw-floor1)*(1-std::exp(-1.15*dt));
+        const double target2 = std::max(.48, (raw-floor2-.025)*.95);
+        require(near(second.envelope, breath1+(target2-breath1)*(1-std::exp(-42*dt))),
+                "lift envelope must retain the original level/floor/attack formula");
+        require(filtered.process(step,dt,100,false).onset == 0
+                    && filtered.process(step,dt).onset == 0,
+                "a rejected source onset must not reappear on its decaying tail");
+        reference.reset();
+        reference.process(step,dt);
+        require(near(reference.process(step,dt).threshold, second.threshold),
+                "reset must retain reference mode");
+    }
+    // A rising full-band arrangement must not veto the reference drum clock.
+    {
+        agplayer::VisualAudioFrameAnalyzer analyzer;
+        KickResponse original(KickResponse::Mode::Reference);
+        agplayer::VisualAudioFrameAnalyzer::Snapshot pcm;
+        pcm.valid = true; pcm.sampleRate = 48000; pcm.epoch = 1;
+        int referenceOnsets = 0;
+        for (int frame = 0; frame < 1200; ++frame) {
+            pcm.sequence = frame+1; pcm.firstSampleIndex = std::uint64_t(frame)*800;
+            for (std::size_t i = 0; i < pcm.pcm.size(); ++i) {
+                const double t = double(pcm.firstSampleIndex+i)/48000;
+                const double tau = 6.283185307179586;
+                const double swell = .15 + .12 * std::sin(tau*.7*t);
+                pcm.pcm[i] = float(.3*std::sin(tau*70*t)*std::exp(-std::fmod(t,.25)*35)
+                    + swell*(std::sin(tau*600*t)+std::sin(tau*2600*t)));
+            }
+            const auto& actual = analyzer.process(pcm,1.0/60);
+            const auto expected = original.process(actual.spectrum,1.0/60);
+            if (expected.onset > 0) {
+                ++referenceOnsets;
+                require(actual.kick.onset > 0, "full-mix swell must preserve every reference onset on its frame");
+            }
+        }
+        require(referenceOnsets > 30, "mixed-arrangement fixture must exercise repeated source onsets");
+    }
+    // Original parity is the contract, not a custom drum/melody classifier.
+    // Every frame (including quiet low-tone interference) must retain exactly
+    // the source onset and envelope, with neither a veto nor a recovery pulse.
+    for (int kind = 0; kind < 7; ++kind) {
+        agplayer::VisualAudioFrameAnalyzer analyzer;
+        KickResponse original(KickResponse::Mode::Reference);
+        int originalOnsets = 0;
+        agplayer::VisualAudioFrameAnalyzer::Snapshot pcm;
+        pcm.valid = true; pcm.sampleRate = 48000; pcm.epoch = 1;
+        int onsets = 0;
+        double peakEnvelope = 0;
+        for (int frame = 0; frame < 1200; ++frame) {
+            pcm.sequence = frame + 1; pcm.firstSampleIndex = std::uint64_t(frame) * 800;
+            for (std::size_t i = 0; i < pcm.pcm.size(); ++i) {
+                const double t = double(pcm.firstSampleIndex + i) / 48000;
+                const double tau = 6.283185307179586;
+                const double fade = std::min(1.0, t / .5);
+                double sample = 0;
+                if (kind == 0) // Continuous upper-register chord, no attacks.
+                    sample = .18 * (std::sin(tau * 261.63 * t) + std::sin(tau * 329.63 * t)
+                        + std::sin(tau * 392 * t));
+                if (kind == 1) // Legato low melody with vibrato, no percussion.
+                    sample = .35 * std::sin(tau * 146.83 * t + 1.2 * std::sin(tau * 4.7 * t));
+                if (kind == 2) // Slow pad swelling, not a kick attack.
+                    sample = .25 * (.6 + .4 * std::sin(tau * .7 * t))
+                        * (std::sin(tau * 110 * t) + .4 * std::sin(tau * 220 * t));
+                if (kind == 3) // Near-silent tonal background.
+                    sample = .0003 * (std::sin(tau * 73 * t) + std::sin(tau * 127 * t));
+                if (kind == 4) // Sustained bass chord with interfering partials.
+                    sample = .18 * (std::sin(tau * 65.41 * t) + std::sin(tau * 82.41 * t)
+                        + std::sin(tau * 98 * t));
+                if (kind == 5) // Quiet version must not be promoted to loud kicks.
+                    sample = .0018 * (std::sin(tau * 65.41 * t) + std::sin(tau * 82.41 * t)
+                        + std::sin(tau * 98 * t));
+                if (kind == 6) // Soft legato phrase with smooth 250 ms note attacks.
+                    sample = .2 * std::pow(std::sin(tau * .5 * t), 2)
+                        * (std::sin(tau * 73.42 * t) + .5 * std::sin(tau * 146.84 * t));
+                pcm.pcm[i] = float(sample * fade);
+            }
+            const auto& result = analyzer.process(pcm, 1.0 / 60.0);
+            const auto referenceFrame = original.process(result.spectrum, 1.0 / 60.0);
+            require(result.kick.onset == referenceFrame.onset && near(result.kick.envelope, referenceFrame.envelope),
+                    "PCM analyzer must preserve exact original onset and lift, including quiet melody");
+            if (frame >= 60) {
+                originalOnsets += referenceFrame.onset > 0 ? 1 : 0;
+                onsets += result.kick.onset > 0 ? 1 : 0;
+                peakEnvelope = std::max(peakEnvelope, result.kick.envelope);
+            }
+        }
+        std::cout << "no-percussion kind=" << kind << " onsets=" << onsets
+                  << " peakEnvelope=" << peakEnvelope << " originalOnsets=" << originalOnsets << std::endl;
+        require(onsets == originalOnsets, "PCM output must neither add nor remove original low-tone events");
+    }
     // Exercise actual PCM -> windowed/smoothed FFT -> onset, rather than
     // injecting ideal 0/255 spectra that cannot reveal analyzer saturation.
     struct PcmCase { double gain; int seconds; int sampleRate; int beatFrames = 15; };
@@ -48,6 +162,7 @@ int main(int argc, char** argv) {
                            PcmCase{0.5, 20, 48000, 30}}) {
         const double gain = test.gain;
         agplayer::VisualAudioFrameAnalyzer analyzer;
+        KickResponse original(KickResponse::Mode::Reference);
         agplayer::VisualAudioFrameAnalyzer::Snapshot pcm;
         pcm.valid = true;
         pcm.sampleRate = test.sampleRate;
@@ -67,19 +182,17 @@ int main(int argc, char** argv) {
                 pcm.pcm[i] = float(gain * (kick + bass));
             }
             const auto& result = analyzer.process(pcm, 1.0 / 60.0);
-            require(result.pulse.triggered == (result.kick.onset > 0),
-                    "a confirmed PCM kick must also produce its colored wave");
+            const auto expected = original.process(result.spectrum, 1.0/60);
+            require(result.kick.onset == expected.onset && near(result.kick.envelope, expected.envelope),
+                    "every frame through the 60-minute tail must match original lift, without extra or missing events");
             onsets += result.kick.onset > 0 ? 1 : 0;
             if (result.kick.onset > 0) ++beatCounts[std::size_t(frame / test.beatFrames)];
         }
         std::cout << "PCM gain=" << gain << " seconds=" << test.seconds
                   << " sampleRate=" << test.sampleRate << " onsets=" << onsets
                   << "/" << beatCounts.size() << std::endl;
-        if (onsets != int(beatCounts.size())) for (std::size_t beat = 0; beat < beatCounts.size(); ++beat)
-            if (beatCounts[beat] != 1) std::cout << " beat=" << beat << " count=" << beatCounts[beat] << '\n';
-        require(onsets == int(beatCounts.size()), "repeated PCM kicks must survive FFT smoothing and sustained bass");
-        for (const int count : beatCounts)
-            require(count == 1, "each beat interval must contain exactly one PCM onset, including the tail");
+        // Frame-exact source equality above replaces the old metronome-count
+        // assertion, which encouraged adding events the original never emits.
     }
     {
         agplayer::VisualAudioFrameAnalyzer analyzer;
@@ -132,8 +245,8 @@ int main(int argc, char** argv) {
             if (pulse.process(eighthNotes, 1.0 / 60.0).triggered)
                 ++pulseOnsets;
         }
-        require(pulseOnsets == 16,
-                "every sustained 120 BPM eighth-note kick must trigger after warm-up");
+        require(pulseOnsets == 9,
+                "source Pulse holds 15 frames independently of the 120ms terrain kick detector");
 
         pulse.reset();
         agplayer::VisualPulseTrigger::Output adjacentBand;
@@ -146,13 +259,13 @@ int main(int argc, char** argv) {
             }
             adjacentBand = pulse.process(mixed, 1.0 / 60.0);
         }
-        require(adjacentBand.bandStart == 1 && adjacentBand.bandEnd == 2,
-                "auto-track must keep the strongest adjacent kick pair instead of diluting it across a wide band");
+        require(adjacentBand.bandStart == 1 && adjacentBand.bandEnd == 8,
+                "original auto-track selects the strongest two bins even when nonadjacent");
 
         const auto verifyLongPlayback = [](int minutes) {
             agplayer::VisualPulseTrigger longPulse;
             const int frameCount = minutes * 60 * 60;
-            const int expectedOnsets = frameCount / 15;
+            const int expectedOnsets = frameCount / 30;
             int onsets = 0;
             int lastOnsetFrame = -1;
             for (int frame = 0; frame < frameCount; ++frame) {
@@ -172,8 +285,8 @@ int main(int argc, char** argv) {
             }
             require(onsets == expectedOnsets,
                     "long playback must preserve every scheduled kick from intro through tail");
-            require(lastOnsetFrame >= frameCount - 15,
-                    "long playback must still trigger in the final beat interval");
+            require(lastOnsetFrame >= frameCount - 30,
+                    "long playback must retain the source Pulse cadence through the tail");
         };
         verifyLongPlayback(5);
         verifyLongPlayback(60);

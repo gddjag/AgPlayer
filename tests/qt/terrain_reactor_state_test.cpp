@@ -126,7 +126,8 @@ private slots:
         const auto& last=layout.terrain.back();
         QVERIFY(std::abs(first.position.x()+84)<0.00001F);
         QVERIFY(std::abs(first.position.z()+84)<0.00001F);
-        QVERIFY(std::abs(next.position.x()-(-82.916129032258))<0.00001F);
+        QCOMPARE(next.position.x(), -84.0F);
+        QCOMPARE(next.position.z(), float(-82.916129032258));
         QVERIFY(std::abs(last.position.x()-82.916129032258)<0.00001F);
         QVERIFY(std::abs(last.position.z()-82.916129032258)<0.00001F);
         QCOMPARE(first.position.y(),0.0F);
@@ -1616,9 +1617,9 @@ void TerrainReactorStateTest::nonFiniteCameraInputsPreserveFiniteBoundedState()
     const auto isFiniteBounded = [](const CameraSnapshot& snapshot) {
         return std::isfinite(snapshot.yaw)
             && std::isfinite(snapshot.pitch)
-            && snapshot.pitch >= 0.12F && snapshot.pitch <= 1.15F
+            && snapshot.pitch >= 0.1F && snapshot.pitch <= 1.5707953F
             && std::isfinite(snapshot.distance)
-            && snapshot.distance >= 42.0F && snapshot.distance <= 220.0F
+            && snapshot.distance >= 5.0F && snapshot.distance <= 120.0F
             && std::isfinite(snapshot.punch)
             && snapshot.punch >= 0.0F && snapshot.punch <= 1.0F;
     };
@@ -1807,15 +1808,15 @@ void TerrainReactorStateTest::manualCameraControlRecoversAfterFourSeconds()
     QVERIFY(initial.distance >= 102.8F && initial.distance <= 103.0F);
     QVERIFY(initial.pitch >= 0.25F && initial.pitch <= 0.26F);
     CameraMotion zoomedOut;
-    zoomedOut.zoomBy(10000.0F, 1.0);
-    QCOMPARE(zoomedOut.snapshot().distance, 220.0F);
+    zoomedOut.zoomBy(-10000.0F, 1.0);
+    QCOMPARE(zoomedOut.snapshot().distance, 120.0F);
     camera.orbitBy(0.4F, -0.2F, 1.0);
-    camera.zoomBy(-10000.0F, 1.0);
+    camera.zoomBy(10000.0F, 1.0);
     camera.applyBeatPunch(0.8F);
     const CameraSnapshot manual = camera.snapshot();
     QVERIFY(manual.yaw != initial.yaw);
     QVERIFY(manual.pitch != initial.pitch);
-    QCOMPARE(manual.distance, 42.0F);
+    QCOMPARE(manual.distance, 5.0F);
     QVERIFY(manual.punch > 0.0F);
 
     camera.advance(4.99, 0.5F, 1.0F);

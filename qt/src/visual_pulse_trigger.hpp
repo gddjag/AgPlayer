@@ -22,11 +22,12 @@ public:
 
     void reset() noexcept { *this = {}; }
 
-    Output suspend() noexcept
+    Output suspend(double dt = 0) noexcept
     {
         // AudioEngine clears prevData while playback is stopped, but does not
         // advance or reset the Auto Beat trigger's history and hold counters.
         previous_.fill(0.0);
+        elapsed_ += std::isfinite(dt) ? (std::max)(0.0, dt) * 1000.0 : 0.0;
         return {false, 0.0, bandStart_, bandEnd_};
     }
 
@@ -38,9 +39,9 @@ public:
             return {};
         }
         dt = std::isfinite(dt) ? std::clamp(dt, 0.0, .25) : 0.0;
-        elapsed_ += dt;
+        elapsed_ += dt * 1000.0;
         appendTrackerFrame(spectrum);
-        if (elapsed_ - lastTrackEvaluation_ > 1.0) {
+        if (elapsed_ - lastTrackEvaluation_ > 1000.0) {
             lastTrackEvaluation_ = elapsed_;
             evaluateTrackedBand();
         }
@@ -68,16 +69,12 @@ public:
         const double threshold = (std::max)(.01, mean + std::sqrt(variance) * 1.6);
 
         Output result{false, 0.0, bandStart_, bandEnd_};
-        holdRemaining_ = (std::max)(0.0, holdRemaining_ - dt);
-        if (holdRemaining_ <= 0.0
-            && previousSmoothed_ > threshold && previousSmoothed_ >= smoothed_
+        if (holdFrames_ > 0) --holdFrames_;
+        else if (previousSmoothed_ > threshold && previousSmoothed_ >= smoothed_
             && previousSmoothed_ - smoothed_ > .0001) {
             result.triggered = true;
             result.strength = previousSmoothed_ * 30.0 * .2;
-            // The browser reference expresses this as 15 animation frames.
-            // Normalize its high-refresh (~120 Hz) behavior to time so the
-            // native fixed-rate analyzer does not turn it into a 250 ms gate.
-            holdRemaining_ = 15.0 / 120.0;
+            holdFrames_ = 15;
         }
         previousSmoothed_ = smoothed_;
         return result;
@@ -100,7 +97,7 @@ private:
         while (trackerCount_ > 0) {
             const std::size_t oldest = (trackerWrite_ + tracker_.size()
                                       - trackerCount_) % tracker_.size();
-            if (elapsed_ - tracker_[oldest].time <= 3.0) break;
+            if (elapsed_ - tracker_[oldest].time <= 3000.0) break;
             --trackerCount_;
         }
     }
@@ -120,30 +117,21 @@ private:
                 if (difference > .01) maximum[bin] = (std::max)(maximum[bin], difference);
             }
         }
-        // WebAudio's smoothed analyser normally spreads one kick across two
-        // neighboring bins. The native FFT can also expose a stronger remote
-        // transient; choosing two unrelated maxima would turn them into one
-        // wide normalized band and dilute the later kick. Score adjacent
-        // pairs so auto-track keeps the reference's intended narrow punch
-        // window while retaining its 0.15 transient guard.
-        std::size_t pairStart = 0;
-        double pairScore = maximum[0] + maximum[1];
-        for (std::size_t bin = 1; bin + 1 < maximum.size(); ++bin) {
-            const double score = maximum[bin] + maximum[bin + 1];
-            if (score > pairScore) {
-                pairStart = bin;
-                pairScore = score;
-            }
-        }
-        if ((std::max)(maximum[pairStart], maximum[pairStart + 1]) < .15)
-            return;
-        bandStart_ = pairStart;
-        bandEnd_ = pairStart + 1;
+        // Stable descending ranking, including nonadjacent bins, as upstream.
+        std::array<std::size_t,30> order{};
+        for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
+        std::sort(order.begin(), order.end(), [&maximum](auto a, auto b) {
+            return maximum[a] == maximum[b] ? a < b : maximum[a] > maximum[b];
+        });
+        if (maximum[order[0]] < .15) return;
+        bandStart_ = (std::min)(order[0], order[1]);
+        bandEnd_ = (std::max)(order[0], order[1]);
     }
 
     std::array<double, VisualSpectrumAnalyzer::binCount> previous_{};
     std::array<double, 40> history_{};
-    std::array<TrackerFrame, 192> tracker_{};
+    // Three seconds at high-refresh rates, without allocating per frame.
+    std::array<TrackerFrame, 1024> tracker_{};
     std::size_t historyCursor_ = 0;
     std::size_t trackerWrite_ = 0;
     std::size_t trackerCount_ = 0;
@@ -153,7 +141,7 @@ private:
     double previousSmoothed_ = 0.0;
     double elapsed_ = 0.0;
     double lastTrackEvaluation_ = 0.0;
-    double holdRemaining_ = 0.0;
+    int holdFrames_ = 0;
 };
 
 } // namespace agplayer

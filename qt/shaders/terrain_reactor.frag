@@ -21,6 +21,7 @@ layout(location = 17) flat in float reliefHeight;
 layout(location = 18) flat in float columnRandom;
 layout(location = 19) flat in vec4 travelingWave;
 layout(location = 20) flat in vec2 referenceRippleAnim;
+layout(location = 21) flat in vec2 referenceInstancePosition;
 layout(binding = 1) uniform sampler2D shadowDepth;
 layout(location = 0) out vec4 fragColor;
 
@@ -268,7 +269,7 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
         float relativeY = clamp(surfacePosition.y + 0.5, 0.0, 1.0);
         float distanceFromTop = 1.0 - relativeY;
         float normalizedElevation = clamp(reliefHeight / 8.0, 0.0, 1.0);
-        float centerDistance = length(columnCenter.xz);
+        float centerDistance = length(referenceInstancePosition);
         vec3 base1 = srgbToLinear(ubuf.colors[0].rgb);
         vec3 base2 = srgbToLinear(ubuf.bodyColor.rgb);
         vec3 coolCore = srgbToLinear(ubuf.colors[1].rgb);
@@ -325,8 +326,10 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
                 && fract(columnRandom * 89.0 + ubuf.parameters.w * 2.0) > 0.98)
                 result += vec3(1.0) * ubuf.bandsHigh.z * 3.0 * twinkleMultiplier;
         } else {
-            float verticalFalloff = mix(1.0, 3.0,
-                                        clamp(ubuf.timbre.z, 0.0, 1.0));
+            // AudioEngine sharpness is a positive brightness delta * 10,
+            // not a percentage. Preserve the source's sharper side-light
+            // contraction above one instead of flattening strong attacks.
+            float verticalFalloff = mix(1.0, 3.0, ubuf.timbre.z);
             float sideGlow = smoothstep(0.5 / verticalFalloff, 0.0,
                                         distanceFromTop) * normalizedElevation;
             if (normalizedElevation < 0.02) sideGlow = 0.0;

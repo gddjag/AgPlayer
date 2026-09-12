@@ -46,6 +46,7 @@ public:
         spectrum_.reset();
         features_.reset();
         kick_.reset();
+        pulse_.reset();
         meteor_.reset();
         frame_ = {};
         initialized_ = false;
@@ -56,13 +57,13 @@ public:
         if ((!snapshot.valid || snapshot.sampleRate <= 0)
             && snapshot.paused && initialized_) {
             dt = std::isfinite(dt) ? std::clamp(dt, 0.0, .25) : 0.0;
-            frame_.spectrum.fill(0);
+            for (auto& value : frame_.spectrum)
+                value = snapshot.releasing ? std::uint8_t(std::floor(value * .94)) : 0;
             frame_.descriptors = features_.update(frame_.spectrum, false,
                                                   snapshot.releasing);
             frame_.kick = kick_.process(frame_.spectrum, dt, sensitivity);
-            frame_.kick.onset = 0.0;
-            frame_.pulse = {};
-            frame_.meteor = {};
+            frame_.pulse = pulse_.suspend(dt);
+            frame_.meteor = meteor_.suspend();
             frame_.valid = true;
             return frame_;
         }
@@ -70,6 +71,7 @@ public:
             reset();
             return frame_;
         }
+        const double trackingDt = std::isfinite(dt) ? std::clamp(dt, 0.0, .25) : 0.0;
         if (!initialized_ || epoch_ != snapshot.epoch || sampleRate_ != snapshot.sampleRate) {
             reset();
             epoch_ = snapshot.epoch;
@@ -81,11 +83,10 @@ public:
         }
         frame_.spectrum = spectrum_.process(snapshot.pcm);
         frame_.descriptors = features_.update(frame_.spectrum, true, false);
-        frame_.kick = kick_.process(spectrum_.onsetSpectrum(), dt, sensitivity);
-        // One confirmed onset drives both the lift and its colored wave.
-        // Independent adaptive gates previously made the same drum visible
-        // in only one of those effects. Keep the reference strength scaling.
-        frame_.pulse = {frame_.kick.onset > 0.0, frame_.kick.flux * 6.0, 1, 2};
+        // Original AudioEngine: terrain kick and colored wave are independent.
+        // No recovery, BPM extrapolation or melody veto modifies source events.
+        frame_.kick = kick_.process(frame_.spectrum, dt, sensitivity);
+        frame_.pulse = pulse_.process(frame_.spectrum, trackingDt);
         frame_.meteor = meteor_.process(frame_.spectrum);
         frame_.valid = true;
         return frame_;
@@ -96,7 +97,8 @@ public:
 private:
     VisualSpectrumAnalyzer spectrum_;
     VisualSpectrumFeatures features_;
-    visual::KickResponse kick_;
+    visual::KickResponse kick_{visual::KickResponse::Mode::Reference};
+    VisualPulseTrigger pulse_;
     VisualSnareTrigger meteor_{159, 174, .45, 241, .5};
     Frame frame_{};
     std::uint64_t epoch_ = 0;

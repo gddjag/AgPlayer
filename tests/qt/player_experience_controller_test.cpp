@@ -27,11 +27,19 @@ private slots:
         original.setTerrainAmplitude(38);
         original.setRippleWidth(120);
         original.setReactorBrightness(68);
-        QSettings().setValue(QStringLiteral("immersiveVisual/referenceDefaultsRevision"), 0);
+        original.setColumnSize(140);
+        original.setColumnOpacity(65);
+        original.setAutoRotateSpeed(0);
+        original.setIdleBreathingEnabled(false);
+        QSettings().setValue(QStringLiteral("immersiveVisual/referenceDefaultsRevision"), 1);
         PlayerExperienceController upgraded;
         QCOMPARE(upgraded.terrainAmplitude(), 50);
         QCOMPARE(upgraded.rippleWidth(), 100);
         QCOMPARE(upgraded.reactorBrightness(), 100);
+        QCOMPARE(upgraded.columnSize(), 100);
+        QCOMPARE(upgraded.columnOpacity(), 100);
+        QCOMPARE(upgraded.autoRotateSpeed(), 15);
+        QVERIFY(upgraded.idleBreathingEnabled());
         QCOMPARE(upgraded.themeId(), QStringLiteral("nocturnal"));
         upgraded.setTerrainAmplitude(72);
         upgraded.setRippleWidth(145);
@@ -935,7 +943,7 @@ void PlayerExperienceControllerTest::themePersistsAndLegacyColorsRemainManual()
     PlayerExperienceController restored;
     QCOMPARE(restored.themeId(), QStringLiteral("glacier-day"));
     QCOMPARE(restored.themeBackground().name(QColor::HexRgb).toUpper(),
-             QStringLiteral("#D8E6EA"));
+             QStringLiteral("#E5EEF0"));
 
     settings.clear();
     settings.setValue(QStringLiteral("immersiveVisual/coolColor"), QStringLiteral("#123456"));
