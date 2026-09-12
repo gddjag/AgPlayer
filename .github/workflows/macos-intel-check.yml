@@ -1,0 +1,43 @@
+name: macOS existing-package Intel check
+
+# Recheck the immutable candidate without rebuilding the application.
+on:
+  push:
+    branches: [codex/macos-universal]
+    paths: ['.github/workflows/macos-intel-check.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  intel-launch:
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-universal-development
+          path: package
+          repository: ${{ github.repository }}
+          run-id: 34715503391 # source 15a3259997bacca5e5a07ca8184390cde443fe26
+          github-token: ${{ github.token }}
+      - name: Validate and launch the existing Universal package on Intel
+        shell: bash
+        run: |
+          test "$(uname -m)" = x86_64
+          ditto -x -k package/AgPlayer-universal-test.zip "$RUNNER_TEMP/agplayer-test"
+          app_path="$RUNNER_TEMP/agplayer-test/AgPlayer.app"
+          lipo "$app_path/Contents/MacOS/AgPlayer" -verify_arch x86_64 arm64
+          codesign --verify --deep --strict "$app_path"
+          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+            "$app_path/Contents/MacOS/AgPlayer" --qa-test-mode \
+            --qa-log "$RUNNER_TEMP/agplayer-intel.log" --qa-exit-after-ms 3000
+      - name: Save Intel launch evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel-launch-log
+          path: ${{ runner.temp }}/agplayer-intel.log
+          retention-days: 7
