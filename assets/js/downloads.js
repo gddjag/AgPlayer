@@ -6,11 +6,11 @@
   const requestTimeoutMs = 10000;
   const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
   const publishedWindowsRelease = Object.freeze({
-    version: '1.0.2',
-    size: 36202989,
-    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.2/AgPlayer-Setup-1.0.2-x64.exe',
-    r2Url: 'https://download.agplayer.com/releases/v1.0.2/AgPlayer-Setup-1.0.2-x64.exe',
-    sha256: 'AF6839CFAC746E66DFF61091FB53C73B5F730E1FB04564A34A5855C902E676CB'
+    version: '1.0.3',
+    size: 36203853,
+    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.3/AgPlayer-Setup-1.0.3-x64.exe',
+    r2Url: 'https://download.agplayer.com/releases/v1.0.3/AgPlayer-Setup-1.0.3-x64.exe',
+    sha256: '44247C0FFA169E19AA6B5E23D62D47F1B57AFFBC95AE738C0E184E81C8D28BED'
   });
 
   function selectWindowsRelease(manifest) {
@@ -52,7 +52,7 @@
       list.innerHTML = `<div><dt data-i18n="downloadPage.meta.system">${AG.t('downloadPage.meta.system')}</dt><dd data-i18n="${systemKey}">${systemText}</dd></div><div><dt data-i18n="downloadPage.meta.filename">${AG.t('downloadPage.meta.filename')}</dt><dd data-meta="filename">${filename}</dd></div><div><dt data-i18n="downloadPage.meta.size">${AG.t('downloadPage.meta.size')}</dt><dd data-meta="size">${size}</dd></div>`;
       return list;
     };
-    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.2-x64.exe', '34.5 MB'));
+    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.3-x64.exe', '34.5 MB'));
     if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), AG.t('downloadPage.meta.pending'), '—'));
     const platforms = windows.closest('.platforms');
     let checksum = document.querySelector('#windows-checksum');
