@@ -995,6 +995,8 @@ bool file_can_be_replaced(const std::filesystem::path& path)
         OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (handle == INVALID_HANDLE_VALUE) return false;
     CloseHandle(handle);
+#else
+    (void)path;
 #endif
     return true;
 }

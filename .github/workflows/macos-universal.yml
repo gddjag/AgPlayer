@@ -42,8 +42,9 @@ jobs:
         with:
           path: ${{ runner.temp }}/Qt
           key: macos-universal-qt${{ env.QT_VERSION }}
-      - name: Cache compiled dependencies
-        uses: actions/cache@v4
+      - name: Restore compiled dependencies
+        id: dependency-cache
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/vcpkg/archives
           key: macos-universal-13-qt${{ env.QT_VERSION }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*.cmake', 'cmake/vcpkg-overlays/**') }}
@@ -72,9 +73,16 @@ jobs:
           python -m unittest discover -s tests/scripts -p 'test_package_macos.py' -v
           python -m unittest discover -s tests/python -p 'test_external_separation_worker.py' -v
           cmake -P tests/scripts/macos_target_contract_test.cmake
-      - name: Configure and build both architectures
+      - name: Configure both architectures and compile dependencies
+        run: cmake --preset macos-universal-release -DBUILD_TESTING=ON
+      - name: Preserve compiled dependencies before application compilation
+        if: steps.dependency-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/vcpkg/archives
+          key: ${{ steps.dependency-cache.outputs.cache-primary-key }}
+      - name: Build both architectures
         run: |
-          cmake --preset macos-universal-release -DBUILD_TESTING=ON
           cmake --build --preset macos-universal-release --parallel 3
           cmake --build build/macos-universal --parallel 3 --target dependency_smoke_test c_api_lifecycle_test decoder_test audio_engine_test queue_gapless_test metadata_writer_test transcoder_test pitch_shifter_test qml_main_window_test application_file_open_test global_hotkey_manager_test settings_controller_test file_association_controller_test separation_runtime_test separation_native_backend_test separation_process_client_test vocal_separation_controller_test vocal_separation_install_test
       - name: Run focused native tests
