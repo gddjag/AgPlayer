@@ -1,0 +1,16 @@
+{
+  "source": "Sonic Topography ec8ecbaec0c9c5094b6b1480df0d6b2d32d6349b, original MapShaderMaterial GPU diagnostic probe",
+  "probe": "build/qa/immersive-parity/reference-study/reference-ripple-samples.html",
+  "referenceMapShaderSourceSha256": "f0e544d638f8206e2135faa7bb355cc0e467da4ee70bab773f1adb36d61d0ab1",
+  "encoding": "original fragment RGBA8_UNORM; elevation RGB24 range [0,8]",
+  "samples": [
+    {"name":"idle","events":[],"actualRgba":[61,77,102,255],"actualElevation":0.4000001206172588,"rippleAnim":[0,0]},
+    {"name":"normal-age0","events":[{"slot":0,"pos":[0,0],"time":0,"strength":0.5,"type":0}],"actualRgba":[82,216,248,255],"actualElevation":2.399999758765482,"rippleAnim":[0.4980392156862745,0]},
+    {"name":"normal-quarter-age0","events":[{"slot":0,"pos":[0,0],"time":0,"strength":0.25,"type":0}],"actualRgba":[72,129,158,255],"actualElevation":1.4000001809258882,"rippleAnim":[0.25098039215686274,0]},
+    {"name":"normal-age1","events":[{"slot":0,"pos":[-15,0],"time":-1,"strength":0.5,"type":0}],"actualRgba":[69,112,140,255],"actualElevation":1.1357586448650971,"rippleAnim":[0.1843137254901961,0]},
+    {"name":"white-age0","events":[{"slot":0,"pos":[0,0],"time":0,"strength":0.5,"type":1}],"actualRgba":[234,247,255,255],"actualElevation":0.9000001507715736,"rippleAnim":[0,0.4980392156862745]},
+    {"name":"white-quarter-age0","events":[{"slot":0,"pos":[0,0],"time":0,"strength":0.25,"type":1}],"actualRgba":[143,158,183,255],"actualElevation":0.6500001356944162,"rippleAnim":[0,0.25098039215686274]},
+    {"name":"normal-white-overlap","events":[{"slot":0,"pos":[0,0],"time":0,"strength":0.5,"type":0},{"slot":1,"pos":[0,0],"time":0,"strength":0.5,"type":1}],"actualRgba":[255,255,255,255],"actualElevation":2.899999788919797,"rippleAnim":[0.4980392156862745,0.4980392156862745]},
+    {"name":"tenth-slot-normal-age0","events":[{"slot":9,"pos":[0,0],"time":0,"strength":0.5,"type":0}],"actualRgba":[82,216,248,255],"actualElevation":2.399999758765482,"rippleAnim":[0.4980392156862745,0]}
+  ]
+}

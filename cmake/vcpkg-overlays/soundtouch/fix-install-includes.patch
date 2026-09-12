@@ -1,0 +1,25 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 1234567..abcdefg 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -100,10 +100,10 @@ install(FILES
+ 
+ install(TARGETS SoundTouch
+   EXPORT SoundTouchTargets
++  COMPONENT SoundTouch
+   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+   RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+   INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+-  COMPONENT SoundTouch
+ )
+ 
+@@ -112,7 +112,7 @@ install(TARGETS SoundTouch
+ #######################
+ # soundstretch utility
+ 
+-option(SOUNDSTRETCH "Build soundstretch command line utility." ON)
++option(SOUNDSTRETCH "Build soundstretch command line utility." OFF)
+ if(SOUNDSTRETCH)
+   add_executable(soundstretch
+     source/SoundStretch/main.cpp

@@ -1,0 +1,22 @@
+{
+  "name": "agplayer",
+  "version-string": "1.0.0-dev",
+  "builtin-baseline": "3ddaad9be959816602453ecb05533f8732464ef4",
+  "dependencies": [
+    {
+      "name": "ffmpeg",
+      "default-features": false,
+      "features": [
+        "avcodec",
+        "avformat",
+        "mp3lame",
+        "opus",
+        "swresample",
+        "swscale",
+        "vorbis"
+      ]
+    },
+    "miniaudio",
+    "soundtouch"
+  ]
+}

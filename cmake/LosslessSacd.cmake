@@ -1,0 +1,6 @@
+add_executable(sacd_reader_test ${CMAKE_SOURCE_DIR}/tests/core/sacd_reader_test.cpp)
+set_target_properties(sacd_reader_test PROPERTIES AUTOMOC ON)
+target_include_directories(sacd_reader_test PRIVATE ${CMAKE_SOURCE_DIR}/core/src)
+target_link_libraries(sacd_reader_test PRIVATE agplayer_core Qt6::Test)
+add_test(NAME sacd_reader_test COMMAND sacd_reader_test)
+set_tests_properties(sacd_reader_test PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>")

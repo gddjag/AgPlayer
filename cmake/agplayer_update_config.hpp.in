@@ -1,0 +1,4 @@
+#pragma once
+namespace agplayer::updates {
+inline constexpr char kEndpoint[] = "@AGPLAYER_UPDATE_MANIFEST_URL@";
+}

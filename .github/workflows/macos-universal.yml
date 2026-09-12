@@ -1,0 +1,138 @@
+name: macOS Universal development build
+
+# Development artifacts only. Formal publication is separately authorized
+# after the user's manual acceptance, via the requested release branch.
+on:
+  push:
+    branches: [codex/macos-universal]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-universal-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: '6.8.3'
+  MACOSX_DEPLOYMENT_TARGET: '13.0'
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Configure tool locations
+        shell: bash
+        run: |
+          echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
+          echo "VCPKG_DEFAULT_BINARY_CACHE=$HOME/.cache/vcpkg/archives" >> "$GITHUB_ENV"
+          echo "AGPLAYER_QT_ROOT=$RUNNER_TEMP/Qt/$QT_VERSION/macos" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/agplayer-tests"
+          echo "TMPDIR=$(python -c 'import os; from pathlib import Path; print((Path(os.environ["RUNNER_TEMP"]) / "agplayer-tests").resolve())')" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.cache/vcpkg/archives"
+      - name: Cache Qt and compiled dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/Qt
+            ~/.cache/vcpkg/archives
+          key: macos-universal-13-qt${{ env.QT_VERSION }}-${{ hashFiles('vcpkg.json', 'cmake/triplets/*.cmake', 'cmake/vcpkg-overlays/**') }}
+      - name: Install build and test tools
+        shell: bash
+        run: |
+          brew install cmake ninja pkg-config autoconf automake libtool nasm
+          brew install --cask powershell
+          python -m pip install aqtinstall==3.3.0
+          if [ ! -x "$AGPLAYER_QT_ROOT/bin/qt-cmake" ]; then
+            python -m aqt install-qt mac desktop "$QT_VERSION" clang_64 -m qtshadertools -O "$RUNNER_TEMP/Qt"
+          fi
+          git init "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" remote add origin https://github.com/microsoft/vcpkg.git
+          baseline="$(python -c 'import json; print(json.load(open("vcpkg.json"))["builtin-baseline"])')"
+          git -C "$VCPKG_ROOT" fetch --depth 1 origin "$baseline"
+          git -C "$VCPKG_ROOT" checkout --detach FETCH_HEAD
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+      - name: Test packaging and target validation
+        run: |
+          python -m unittest discover -s tests/scripts -p 'test_package_macos.py' -v
+          python -m unittest discover -s tests/python -p 'test_external_separation_worker.py' -v
+          cmake -P tests/scripts/macos_target_contract_test.cmake
+      - name: Configure and build both architectures
+        run: |
+          cmake --preset macos-universal-release -DBUILD_TESTING=ON
+          cmake --build --preset macos-universal-release --parallel 3
+          cmake --build build/macos-universal --parallel 3 --target dependency_smoke_test c_api_lifecycle_test decoder_test audio_engine_test queue_gapless_test metadata_writer_test transcoder_test pitch_shifter_test qml_main_window_test application_file_open_test global_hotkey_manager_test settings_controller_test file_association_controller_test separation_runtime_test separation_native_backend_test separation_process_client_test vocal_separation_controller_test vocal_separation_install_test
+      - name: Run focused native tests
+        run: >-
+          ctest --test-dir build/macos-universal --output-on-failure
+          --output-junit macos-native-tests.xml
+          -R '^(dependency_smoke_test|c_api_lifecycle_test|decoder_test|audio_engine_test|queue_gapless_test|metadata_writer_test|transcoder_test|pitch_shifter_test|qml_main_window_test|application_file_open_test|global_hotkey_manager_test|settings_controller_test|file_association_controller_test|separation_runtime_test|separation_native_backend_test|separation_process_client_test|vocal_separation_controller_test|vocal_separation_install_test)$'
+      - name: Deploy and audit a single Universal development package
+        run: >-
+          python scripts/package-macos.py
+          --app build/macos-universal/app/AgPlayer.app
+          --qt-root "$AGPLAYER_QT_ROOT"
+          --output-dir build/macos-package
+      - name: Archive the deployed app with executable bits and framework symlinks
+        run: |
+          app_path="build/macos-package/staging/AgPlayer.app"
+          test -d "$app_path"
+          test "$(uname -m)" = arm64
+          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+            "$app_path/Contents/MacOS/AgPlayer" --qa-test-mode \
+            --qa-log "$RUNNER_TEMP/agplayer-arm.log" --qa-exit-after-ms 3000
+          ditto -c -k --sequesterRsrc --keepParent "$app_path" build/macos-package/AgPlayer-universal-test.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal-development
+          path: |
+            build/macos-package/*.dmg
+            build/macos-package/*.json
+            build/macos-package/*.zip
+          retention-days: 7
+          if-no-files-found: error
+      - name: Save test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build-test-logs
+          path: |
+            build/macos-universal/macos-native-tests.xml
+            build/macos-universal/Testing/Temporary/LastTest.log
+            build/macos-universal/CMakeFiles/CMakeConfigureLog.yaml
+            ${{ runner.temp }}/agplayer-arm.log
+          retention-days: 7
+
+  intel-launch:
+    needs: build
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-universal-development
+          path: package
+      - name: Run the same packaged app on Intel without Qt or vcpkg installed
+        shell: bash
+        run: |
+          test "$(uname -m)" = x86_64
+          ditto -x -k package/AgPlayer-universal-test.zip "$RUNNER_TEMP/agplayer-test"
+          app_path="$RUNNER_TEMP/agplayer-test/AgPlayer.app"
+          lipo -verify_arch x86_64 arm64 "$app_path/Contents/MacOS/AgPlayer"
+          codesign --verify --deep --strict "$app_path"
+          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+            "$app_path/Contents/MacOS/AgPlayer" --qa-test-mode \
+            --qa-log "$RUNNER_TEMP/agplayer-intel.log" --qa-exit-after-ms 3000
+      - name: Save Intel launch evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel-launch-log
+          path: ${{ runner.temp }}/agplayer-intel.log
+          retention-days: 7

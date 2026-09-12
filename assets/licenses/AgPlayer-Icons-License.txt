@@ -1,0 +1,47 @@
+AgPlayer UI Icons Notice
+=========================
+
+AgPlayer project icons
+----------------------
+
+Except for the files listed below, the SVG files under assets/icons/ are
+original works created by the AgPlayer project. Their visual style (24x24
+viewBox, currentColor fill) is inspired by the Remix Icon layout convention,
+but their path data is hand-authored for AgPlayer.
+
+Icons not listed in the third-party section below remain AgPlayer project
+assets and retain the license that applies to the AgPlayer source tree.
+
+Third-party Remix Icon assets
+-----------------------------
+
+The following unmodified SVG assets are redistributed from Remix Icon v4.6.0:
+
+  - assets/icons/arrow-down-s-line.svg
+  - assets/icons/arrow-up-s-line.svg
+  - assets/icons/checkbox-blank-fill.svg
+  - assets/icons/checkbox-circle-line.svg
+  - assets/icons/check-line.svg
+  - assets/icons/error-warning-line.svg
+  - assets/icons/file-music-fill.svg
+  - assets/icons/filter-3-line.svg
+
+Upstream source and selected tag:
+  https://github.com/Remix-Design/RemixIcon/tree/v4.6.0
+
+These assets are licensed under the Apache License, Version 2.0. The complete
+upstream license text from the v4.6.0 release is included in
+assets/licenses/RemixIcon-Apache-2.0.txt. The selected SVG files and that
+upstream license file do not carry an additional per-file copyright notice.
+
+Third-party Lucide assets
+-------------------------
+
+The following functional UI icons are redistributed from Lucide under the
+ISC License in Lucide-Icons-License.txt:
+
+- lucide-audio-lines.svg
+- lucide-box.svg
+- lucide-drum.svg
+- lucide-guitar.svg
+- lucide-mic.svg
