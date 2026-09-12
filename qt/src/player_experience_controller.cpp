@@ -141,7 +141,7 @@ QVariantList PlayerExperienceController::builtInThemeChoices() const
         QStringLiteral("赛博森林"), QStringLiteral("极简黑白"), QStringLiteral("冰川白昼"),
         QStringLiteral("锦鲤池"), QStringLiteral("珊瑚礁"), QStringLiteral("苔藓玻璃"),
         QStringLiteral("蓝调时刻"), QStringLiteral("青瓷"), QStringLiteral("绯红信号"),
-        QStringLiteral("黎明青柠"),
+        QStringLiteral("紫夜霓心"),
     };
     QVariantList choices;
     choices.reserve(static_cast<qsizetype>(agplayer::immersive::builtInThemes().size()));
@@ -858,6 +858,61 @@ bool PlayerExperienceController::applyTheme(const QString& id)
     return true;
 }
 
+void PlayerExperienceController::applyCustomPalette(const QVariantMap& colors, bool preview)
+{
+    // Preview only changes the live render state. The independent saved palette
+    // and settings on disk are untouched until the user confirms.
+    previewingCustomColor_ = preview;
+    applyingTheme_ = true;
+    setMaterialMode(0);
+    setColorMode(MultiRegion);
+    setSongAdaptiveColorEnabled(false);
+    setThemeCycleEnabled(false);
+    setThemeSongCycleEnabled(false);
+    setCoolColor(colors.value(QStringLiteral("coolColor")).toString());
+    setWarmColor(colors.value(QStringLiteral("warmColor")).toString());
+    setAccentColor(colors.value(QStringLiteral("accentColor")).toString());
+    setPeakColor(colors.value(QStringLiteral("peakColor")).toString());
+    setBaseColor(colors.value(QStringLiteral("baseColor")).toString());
+    themeGlow_ = 1.0F;
+    const QColor background(baseColor_);
+    const bool backgroundChanged = themeBackground_ != background;
+    themeBackground_ = background;
+    applyingTheme_ = false;
+    if (themeId_ != QStringLiteral("custom")) setThemeId(QStringLiteral("custom"));
+    else if (backgroundChanged) emit themeChanged();
+    previewingCustomColor_ = false;
+}
+
+void PlayerExperienceController::applyCustomColors()
+{
+    applyCustomPalette(customColors_, false);
+    persist(QStringLiteral("themeId"), themeId_);
+}
+
+bool PlayerExperienceController::setCustomColor(const QString& key, const QString& value)
+{
+    const QString normalized = normalizedColor(value, {});
+    if (!customColors_.contains(key) || normalized.isEmpty()) return false;
+    if (customColors_.value(key).toString() != normalized) {
+        customColors_[key] = normalized;
+        persist(QStringLiteral("customColors"), customColors_);
+        emit customColorsChanged();
+    }
+    applyCustomColors();
+    return true;
+}
+
+bool PlayerExperienceController::previewCustomColor(const QString& key, const QString& value)
+{
+    const QString normalized = normalizedColor(value, {});
+    if (!customColors_.contains(key) || normalized.isEmpty()) return false;
+    auto colors = customColors_;
+    colors[key] = normalized;
+    applyCustomPalette(colors, true);
+    return true;
+}
+
 void PlayerExperienceController::restoreDynamicDefaults()
 {
     setRippleStrength(100);
@@ -945,6 +1000,11 @@ void PlayerExperienceController::load()
 {
     settings_.beginGroup(QLatin1String(kSettingsGroup));
     const bool isNewInstall = settings_.allKeys().isEmpty();
+    const auto savedCustomColors = settings_.value(QStringLiteral("customColors")).toMap();
+    for (auto it = customColors_.begin(); it != customColors_.end(); ++it) {
+        it.value() = normalizedColor(savedCustomColors.value(it.key()).toString(),
+                                     it.value().toString());
+    }
     const QVariant persistedTheme = settings_.value(QStringLiteral("themeId"));
     const QString storedThemeId = persistedTheme.metaType().id() == QMetaType::QString
         ? persistedTheme.toString() : QString{};
@@ -1161,7 +1221,11 @@ void PlayerExperienceController::load()
     settings_.setValue(QStringLiteral("referenceDefaultsRevision"), 2);
     settings_.endGroup();
 
-    if (agplayer::immersive::findBuiltInTheme(storedThemeId.toStdString()) != nullptr) {
+    if (storedThemeId == QStringLiteral("custom")) {
+        applyCustomColors();
+    } else if (storedThemeId == QStringLiteral("daybreak-lime")) {
+        applyTheme(QStringLiteral("violet-heart"));
+    } else if (agplayer::immersive::findBuiltInTheme(storedThemeId.toStdString()) != nullptr) {
         applyTheme(storedThemeId);
     } else if (isNewInstall) {
         applyTheme(QString::fromUtf8(
@@ -1172,6 +1236,7 @@ void PlayerExperienceController::load()
 
 void PlayerExperienceController::persist(const QString& key, const QVariant& value)
 {
+    if (previewingCustomColor_) return;
     settings_.setValue(QLatin1String(kSettingsGroup) + QLatin1Char('/') + key, value);
 }
 

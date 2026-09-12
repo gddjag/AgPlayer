@@ -262,7 +262,8 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
     vec3 albedo = srgbToLinear(color);
     vec3 columnCenter = worldPosition - surfacePosition * columnExtent;
     if (referenceMode) {
-        // Fixed Sonic Topography material contract. Keep this branch literal:
+        // Fixed Sonic Topography material contract. Except for the explicitly
+        // authored localized-core material, keep this branch literal:
         // AgPlayer's optional gel lighting below must never perturb the
         // reference theme palette, cap edge, side gradient, ripple channels,
         // aerial perspective, or direct linear output.
@@ -278,6 +279,8 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
         vec3 warmEdge = srgbToLinear(ubuf.colors[4].rgb);
         float warmBlend = smoothstep(0.0, 1.0,
             clamp(ubuf.timbre.x, 0.0, 1.0) * 1.5 + 0.5 - centerDistance / 80.0);
+        bool localizedCore = ubuf.bodyColor.a > 1.5;
+        if (localizedCore) warmBlend = 0.0;
         vec3 zoneCore = mix(coolCore, warmCore, warmBlend);
         vec3 zoneEdge = mix(coolEdge, warmEdge, warmBlend);
         vec3 targetGlow = mix(zoneCore, zoneEdge, fract(columnRandom * 11.0));
@@ -341,6 +344,21 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
         result += srgbToLinear(ubuf.rippleColor.rgb)
                 * referenceRippleAnim.x * 0.6;
         result += referenceWhite * referenceRippleAnim.y * 1.2;
+        if (localizedCore) {
+            // Violet Heart: pink is an interior accent, not an audio-warmth
+            // wash over the entire field. Use actual elevation (no new beat
+            // clock); keep caps/ripples violet and let a small hot center warm
+            // towards yellow only as the middle rises.
+            float center = 1.0 - smoothstep(6.0, 22.0, centerDistance);
+            float raised = smoothstep(0.02, 0.60, normalizedElevation);
+            float hotCenter = (1.0 - smoothstep(0.0, 6.0, centerDistance))
+                            * smoothstep(0.30, 0.80, normalizedElevation);
+            vec3 innerTint = mix(warmCore, warmEdge, hotCenter * 0.85);
+            float interior = isTop ? 0.0 : smoothstep(0.08, 0.22, relativeY)
+                * (1.0 - smoothstep(0.68, 0.92, relativeY));
+            result = mix(result, innerTint * ubuf.styleParameters.z,
+                         center * raised * interior * 0.85);
+        }
         vec3 atmosphere = mix(base1, base2, 0.4);
         result = mix(result, atmosphere,
                      smoothstep(30.0, 65.0, centerDistance) * 0.35);
@@ -666,6 +684,7 @@ void main()
         float distance = length(columnExtent.xz), pulse = ubuf.floatingParameters.y;
         float height = clamp(pulse * 2.5, 0.0, 1.0);
         float warm = smoothstep(0.0,1.0,ubuf.timbre.x*1.5+.5-distance/80.0);
+        if (ubuf.bodyColor.a > 1.5) warm = 0.0;
         vec3 base = srgbToLinear(ubuf.bodyColor.rgb), fogColor = srgbToLinear(ubuf.atmosphereColor.rgb);
         vec3 cool = srgbToLinear(ubuf.colors[1].rgb);
         vec3 core = mix(cool,srgbToLinear(ubuf.colors[2].rgb),warm);

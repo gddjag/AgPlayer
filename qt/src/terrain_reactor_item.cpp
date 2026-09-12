@@ -868,7 +868,8 @@ private:
                                            : snapshot_.style.atmosphereColor[channel])
                 : result.colors[0][channel];
         }
-        result.bodyColor[3] = 1.0F;
+        // Material mode is discrete, not an interpolated palette alpha.
+        result.bodyColor[3] = snapshot_.style.bodyColor.w() > 1.5F ? 2.0F : 1.0F;
         result.atmosphereColor[3] = 1.0F;
         for (int channel = 0; channel < 4; ++channel)
             result.rippleColor[channel] = themePaletteInitialized_
@@ -1766,8 +1767,9 @@ void TerrainReactorItem::copyStyleSource()
     next.streamHighlightEnabled = styleSource_->streamHighlightEnabled();
     using namespace agplayer::immersive;
     const QByteArray themeId = styleSource_->themeId().toUtf8();
-    if (const auto* theme = findBuiltInTheme(std::string_view(themeId.constData(),
-                                                            std::size_t(themeId.size())))) {
+    const auto* theme = findBuiltInTheme(std::string_view(themeId.constData(),
+                                                        std::size_t(themeId.size())));
+    if (theme || themeId == "custom") {
         // Canonical shader consumes half of the original amplitude multiplier.
         // Preserve the stored UI percentage and the custom-material contract.
         if (next.terrainAmplitude > 0.5F) {
@@ -1778,15 +1780,35 @@ void TerrainReactorItem::copyStyleSource()
             const auto value = workingLinearToSrgb(toWorkingLinear(theme->colors[themeColorIndex(role)]));
             return QVector4D(value.red, value.green, value.blue, 1.0F);
         };
-        next.colors = {encodedRole(ThemeColorRole::BasePrimary),
+        if (theme) {
+            next.colors = {encodedRole(ThemeColorRole::BasePrimary),
                        encodedRole(ThemeColorRole::CoolCore),
                        encodedRole(ThemeColorRole::WarmCore),
                        encodedRole(ThemeColorRole::CoolEdge),
                        encodedRole(ThemeColorRole::WarmEdge)};
-        next.bodyColor = encodedRole(ThemeColorRole::BaseSecondary);
-        next.rippleColor = encodedRole(ThemeColorRole::Ripple);
+            next.bodyColor = encodedRole(ThemeColorRole::BaseSecondary);
+            // Authored Violet Heart keeps purple surfaces; its pink/yellow
+            // warm roles illuminate only the raised central interior.
+            if (themeId == "violet-heart") next.bodyColor.setW(2.0F);
+            next.rippleColor = encodedRole(ThemeColorRole::Ripple);
+            next.atmosphereColor = encodedRole(ThemeColorRole::Fog);
+        } else {
+            // Five independent user roles share the canonical shader/audio
+            // path: body, beat core, ripple, hot edge, and environment.
+            next.rippleColor = next.colors[3];
+            next.atmosphereColor = next.colors[0];
+            const auto blendLinear = [](QVector4D a, QVector4D b, float weight) {
+                QVector4D result(0, 0, 0, 1);
+                for (int channel = 0; channel < 3; ++channel)
+                    result[channel] = workingLinearChannelToSrgb(
+                        srgbChannelToLinear(a[channel]) * (1.0F - weight)
+                        + srgbChannelToLinear(b[channel]) * weight);
+                return result;
+            };
+            next.bodyColor = blendLinear(next.colors[0], next.colors[1], .06F);
+            next.colors[3] = blendLinear(next.colors[1], next.colors[0], .35F);
+        }
         next.topographyDensity = styleSource_->topographyDensity();
-        next.atmosphereColor = encodedRole(ThemeColorRole::Fog);
         // Keep the theme's authored glow as the baseline while preserving the
         // user-facing surface-sheen slider as a live multiplier.
         next.glowIntensity = float(styleSource_->themeGlow())

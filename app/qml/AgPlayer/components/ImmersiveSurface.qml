@@ -51,6 +51,8 @@ Item {
     function notePointerActivity() {
         if (!active || !hostExposed)
             return
+        if (controlPanel.colorPickerOpen)
+            return
         if (PlayerExperienceController.panelVisible && !panelAutoHidden)
             panelAutoHideTimer.restart()
         if (hostMode !== PlayerExperienceController.Fullscreen) {
@@ -435,6 +437,16 @@ Item {
                              ? root.terrainItem.featureSpectralFlux : 0
         featureKick: root.terrainItem ? root.terrainItem.featureKick : false
         onPointerActivity: root.notePointerActivity()
+        onColorPickerOpenChanged: {
+            if (colorPickerOpen) {
+                panelAutoHideTimer.stop()
+                panelIdleTimer.stop()
+                root.panelAutoHidden = false
+                root.panelIdle = false
+            } else {
+                root.notePointerActivity()
+            }
+        }
         Behavior on opacity { NumberAnimation { duration: 220 } }
     }
 
@@ -542,7 +554,7 @@ Item {
         id: panelAutoHideTimer
         objectName: "immersivePanelAutoHideTimer"
         interval: 5000
-        onTriggered: root.panelAutoHidden = true
+        onTriggered: if (!controlPanel.colorPickerOpen) root.panelAutoHidden = true
     }
 
     Timer {

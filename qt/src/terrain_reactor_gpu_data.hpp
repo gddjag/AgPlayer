@@ -52,6 +52,7 @@ struct alignas(16) UniformBlock {
     float shadowParameters[4]{}; // enabled, texel size, depth zero-to-one, texture Y flip
     // Display-encoded colors, like colors above. A=0 selects the palette
     // fallback; A=1 supplies an explicit material/atmosphere color.
+    // Body A=2 additionally confines warm colors to the raised central interior.
     float bodyColor[4]{};
     float atmosphereColor[4]{};
     float timbre[4]{}; // warmth, brightness, sharpness, reserved; normalized descriptors

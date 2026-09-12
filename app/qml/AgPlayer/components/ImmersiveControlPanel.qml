@@ -7,6 +7,7 @@ Rectangle {
     id: root
     objectName: "immersiveControlPanel"
     property bool collapsed: false
+    property bool colorPickerOpen: false
     property int currentTab: 0
     property var featureBands: []
     property real featureEnergy: 0
@@ -32,9 +33,9 @@ Rectangle {
 
     readonly property var presetCards: PlayerExperienceController.builtInThemeChoices
     readonly property var paletteDefaults: ({
-        "coolColor": "#8BDCFF", "warmColor": "#EB7894", // theme-color-allow: default immersive media palette, not UI chrome
-        "accentColor": "#FFD7DF", "peakColor": "#FFF7FB", // theme-color-allow: default immersive media palette, not UI chrome
-        "baseColor": "#050206" // theme-color-allow: default immersive media palette, not UI chrome
+        "coolColor": "#8B4AF0", "warmColor": "#FF469E", // theme-color-allow: default custom media palette, not UI chrome
+        "accentColor": "#BE6AFF", "peakColor": "#FF9ACD", // theme-color-allow: default custom media palette, not UI chrome
+        "baseColor": "#05020A" // theme-color-allow: default custom media palette, not UI chrome
     })
     readonly property var dynamicsGroups: authoredDynamicsGroups.map(function(group) {
         if (!PlayerExperienceController.themeId.length)
@@ -485,6 +486,23 @@ Rectangle {
                 }
                 RowLayout {
                     Layout.fillWidth: true
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("自定义颜色")
+                        color: Theme.textSecondary
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeCaption
+                    }
+                    Button {
+                        objectName: "immersiveCustomColorsButton"
+                        text: PlayerExperienceController.themeId === "custom"
+                              ? qsTr("正在使用") : qsTr("使用自定义")
+                        implicitHeight: 28
+                        onClicked: PlayerExperienceController.applyCustomColors()
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
                     spacing: Theme.spacingSm
                     Repeater {
                         model: ["coolColor", "warmColor", "accentColor", "peakColor", "baseColor"]
@@ -494,11 +512,22 @@ Rectangle {
                             objectName: "immersiveColorField" + index
                             Layout.alignment: Qt.AlignHCenter
                             showText: false
-                            colorValue: PlayerExperienceController[modelData]
+                            livePreview: true
+                            colorLabel: [qsTr("柱体颜色"), qsTr("鼓点内光"), qsTr("冲击波颜色"),
+                                         qsTr("高光边缘"), qsTr("环境颜色")][index]
+                            colorValue: PlayerExperienceController.customColors[modelData]
                             defaultColor: root.paletteDefaults[modelData]
+                            onPickerVisibleChanged: {
+                                root.colorPickerOpen = pickerVisible
+                                // Opening selects the independent custom palette;
+                                // closing restores its saved value after cancel.
+                                PlayerExperienceController.applyCustomColors()
+                            }
+                            onColorPreviewed: function(value) {
+                                PlayerExperienceController.previewCustomColor(modelData, value)
+                            }
                             onColorEdited: function(value) {
-                                PlayerExperienceController[modelData] = value
-                                PlayerExperienceController.songAdaptiveColorEnabled = false
+                                PlayerExperienceController.setCustomColor(modelData, value)
                             }
                         }
                     }

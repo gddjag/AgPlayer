@@ -10,7 +10,11 @@ Control {
     property color defaultColor: colorValue
     property string targetProperty: ""
     property bool showText: true
+    property bool livePreview: false
+    property string colorLabel: qsTr("颜色")
+    readonly property bool pickerVisible: picker.visible
     signal colorEdited(string value)
+    signal colorPreviewed(string value)
 
     onColorEdited: function(value) {
         if (targetProperty.length > 0)
@@ -22,7 +26,12 @@ Control {
     padding: 1
     focusPolicy: Qt.StrongFocus
     Accessible.role: Accessible.Button
-    Accessible.name: qsTr("颜色 %1").arg(root.normalized(root.colorValue))
+    Accessible.name: colorLabel + " " + root.normalized(root.colorValue)
+    hoverEnabled: true
+    ToolTip.visible: hovered || activeFocus
+    ToolTip.text: Accessible.name
+    Keys.onSpacePressed: openPicker()
+    Keys.onReturnPressed: openPicker()
 
     function normalized(value) {
         var text = String(value || "").trim().toUpperCase()
@@ -97,6 +106,12 @@ Control {
         function updateWorkingColor() {
             workingColor = Qt.hsva(hue, saturation, brightness, 1.0)
             hexField.text = workingColor.toString().toUpperCase()
+            previewWorkingColor()
+        }
+
+        function previewWorkingColor() {
+            if (root.livePreview && visible)
+                root.colorPreviewed(workingColor.toString().toUpperCase())
         }
 
         function setWorkingColor(value) {
@@ -105,6 +120,7 @@ Control {
             saturation = workingColor.hsvSaturation
             brightness = workingColor.hsvValue
             hexField.text = workingColor.toString().toUpperCase()
+            previewWorkingColor()
         }
 
         function applyHexText(value) {
@@ -156,6 +172,7 @@ Control {
             }
 
             Item {
+                objectName: "colorPickerSaturationValue"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumHeight: 86
@@ -218,6 +235,7 @@ Control {
 
             Slider {
                 id: hueSlider
+                objectName: "colorPickerHueSlider"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 22
                 from: 0

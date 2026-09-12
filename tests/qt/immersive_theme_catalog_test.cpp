@@ -11,6 +11,20 @@ class ImmersiveThemeCatalogTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void violetHeartHasDarkPurpleBodyAndPinkBeatLight()
+    {
+        const auto* theme = findBuiltInTheme("violet-heart");
+        QVERIFY(theme);
+        const std::array<SrgbRgb, 8> expected{{{5,2,10},{107,57,155},{4,2,8},
+            {201,122,255},{165,90,218},{255,164,218},{255,246,159},{201,122,255}}};
+        for (std::size_t i = 0; i < expected.size(); ++i) {
+            const auto color = workingLinearToSrgb(toWorkingLinear(theme->colors[i]));
+            QCOMPARE(int(std::round(color.red * 255)), int(expected[i].red));
+            QCOMPARE(int(std::round(color.green * 255)), int(expected[i].green));
+            QCOMPARE(int(std::round(color.blue * 255)), int(expected[i].blue));
+        }
+        QCOMPARE(theme->glowIntensity, 1.10F);
+    }
     void hasStableOrderAndMinimalMonochromeDefault();
     void lookupAndReferenceNumericColorsAreExact();
     void colorEncodingBoundaryProducesWorkingLinearRgb();
@@ -23,7 +37,8 @@ void ImmersiveThemeCatalogTest::hasStableOrderAndMinimalMonochromeDefault()
     QCOMPARE(static_cast<int>(themes.size()), 13);
     QVERIFY(themes.front().id == "ink-wash");
     QVERIFY(themes.at(4).id == "minimal-monochrome");
-    QVERIFY(themes.back().id == "daybreak-lime");
+    QVERIFY(themes.back().id == "violet-heart");
+    QVERIFY(findBuiltInTheme("daybreak-lime") == nullptr);
     QVERIFY(defaultBuiltInTheme().id == "minimal-monochrome");
 }
 
@@ -79,7 +94,7 @@ void ImmersiveThemeCatalogTest::hexBackedThemesConvertFromTheirOriginalBytes()
         Expected{"glacier-day", 216, 230, 234}, Expected{"koi-pond", 18, 58, 54},
         Expected{"coral-reef", 64, 37, 42}, Expected{"moss-glass", 46, 58, 36},
         Expected{"blue-hour", 39, 60, 85}, Expected{"porcelain-teal", 221, 232, 228},
-        Expected{"wine-signal", 58, 36, 48}, Expected{"daybreak-lime", 217, 231, 200},
+        Expected{"wine-signal", 58, 36, 48}, Expected{"violet-heart", 5, 2, 10},
     };
     for (const Expected& expectedTheme : expected) {
         const auto* theme = findBuiltInTheme(expectedTheme.id);

@@ -43,6 +43,8 @@ private slots:
     void cleanup();
     void spatialLyricsAndPointerRippleRender();
     void referencePcmAnalysisFollowsActualFramesAndStopsWhenHidden();
+    void independentCustomColorsChangeGpuPixels();
+    void violetHeartKeepsPurpleSurfacesAndLocalizedWarmInterior();
     void densityAndQualityChangesKeepDrawingCompleteFrames();
     void cameraPunchDoesNotMoveTheGroundProjection();
     void denseMaterialFrameBudgetProbe_data();
@@ -218,6 +220,13 @@ void TerrainReactorGpuSmokeTest::referencePcmAnalysisFollowsActualFramesAndStops
         QCOMPARE(features.visualSpectrumUpdateCount(),quint64{0});
     }
     item.setActive(true);
+    for (const auto& key : {"coolColor", "warmColor", "accentColor", "peakColor", "baseColor"}) {
+        const auto revision = item.featureRevision();
+        QVERIFY(style.setCustomColor(QString::fromLatin1(key), QStringLiteral("#AC38E8")));
+        QCOMPARE(style.themeId(), QStringLiteral("custom"));
+        QTRY_VERIFY_WITH_TIMEOUT(item.featureRevision() > revision + 3, 1000);
+        QVERIFY(item.featureEnergy() > 0);
+    }
     QTest::qWait(100);
     item.setVisible(false);
     QTest::qWait(100);
@@ -551,6 +560,114 @@ private:
     quint64 beatRevision_ = 0;
     double beatStrength_ = 0.0;
 };
+
+void TerrainReactorGpuSmokeTest::independentCustomColorsChangeGpuPixels()
+{
+    const QStringList keys{"coolColor", "warmColor", "accentColor", "peakColor", "baseColor"};
+    for (const auto& key : keys) {
+        std::array<qint64, 2> greenMinusRed{};
+        for (int pass = 0; pass < 2; ++pass) {
+            PlayerExperienceController style;
+            for (const auto& role : keys)
+                QVERIFY(style.setCustomColor(role, role == "baseColor" ? "#030208" : "#704080"));
+            QVERIFY(style.setCustomColor(key, pass ? "#10F020" : "#F01020"));
+            style.restoreDynamicDefaults();
+            style.setTopographyDensity(20);
+            style.setAutoRotate(0);
+            style.setCinemaShake(0);
+            style.setIdleBreathingEnabled(false);
+            style.setFloatingCubesEnabled(false);
+            style.setMeteorsEnabled(false);
+            StableImpactSource source;
+            QQuickWindow window;
+            window.resize(640, 480);
+            window.setColor(style.themeBackground());
+            TerrainReactorItem item(window.contentItem());
+            item.setSize(QSizeF(640, 480));
+            item.setStyleSource(&style);
+            item.setFeatureSource(&source);
+            item.setQuality(TerrainReactorItem::Quality::High);
+            window.show();
+            QVERIFY(waitForGpuWindow(window));
+            if (window.rendererInterface()->graphicsApi() == QSGRendererInterface::Software)
+                QSKIP("Pixel proof requires an accelerated renderer");
+            item.setActive(true);
+            QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready, 5000);
+            QTest::qWait(400);
+            source.publishBeat(1.0);
+            QTest::qWait(160);
+            const auto image = window.grabWindow();
+            QVERIFY(!image.isNull());
+            for (int y = 0; y < image.height(); ++y)
+                for (int x = 0; x < image.width(); ++x) {
+                    const auto color = image.pixelColor(x, y);
+                    greenMinusRed[pass] += color.green() - color.red();
+                }
+            item.setActive(false);
+        }
+        qInfo() << key << "GPU green-minus-red:" << greenMinusRed[0] << greenMinusRed[1];
+        QVERIFY2(greenMinusRed[1] > greenMinusRed[0] + 1000,
+                 qPrintable(key + " did not produce its chosen hue in GPU pixels"));
+    }
+}
+
+void TerrainReactorGpuSmokeTest::violetHeartKeepsPurpleSurfacesAndLocalizedWarmInterior()
+{
+    PlayerExperienceController style;
+    QVERIFY(style.applyTheme(QStringLiteral("violet-heart")));
+    style.restoreDynamicDefaults();
+    style.setTopographyDensity(46);
+    style.setAutoRotate(0);
+    style.setCinemaShake(0);
+    style.setIdleBreathingEnabled(false);
+    style.setRipplesEnabled(false);
+    style.setFloatingCubesEnabled(false);
+    style.setMeteorsEnabled(false);
+    QQuickWindow window;
+    window.resize(960, 720);
+    window.setColor(style.themeBackground());
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(960, 720));
+    item.setStyleSource(&style);
+    item.setUseSyntheticFeatures(true);
+    window.show();
+    QVERIFY(waitForGpuWindow(window));
+    if (window.rendererInterface()->graphicsApi() == QSGRendererInterface::Software)
+        QSKIP("Color proof requires an accelerated renderer");
+    item.setActive(true);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready, 5000);
+    for (int raised = 0; raised < 2; ++raised) {
+        item.setSyntheticFeatures(raised ? QVariantList{.95,.88,.75,.35,0,0,0,0}
+                                         : QVariantList{0,0,0,0,0,0,0,0},
+                                  raised ? .75 : 0, 0, false, false);
+        QTest::qWait(1000);
+        const auto image = window.grabWindow();
+        QVERIFY(!image.isNull());
+        int purple = 0, warm = 0, warmOutsideCore = 0;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 0; x < image.width(); ++x) {
+                const auto c = image.pixelColor(x, y);
+                if (c.blue() > 30 && c.blue() > c.red() * 1.15
+                    && c.red() > c.green() * 1.4) ++purple;
+                if (c.red() > 50 && c.red() > c.blue() * 1.10
+                    && c.red() > c.green() * 1.25) {
+                    ++warm;
+                    if (x < image.width() / 4 || x > image.width() * 3 / 4)
+                        ++warmOutsideCore;
+                }
+            }
+        qInfo() << "Violet Heart raised/purple/warm/outside:" << raised
+                << purple << warm << warmOutsideCore;
+        QVERIFY(purple > 1000);
+        QVERIFY2(purple > warm * 3, "Pink must not replace the dominant purple body");
+        QCOMPARE(warmOutsideCore, 0);
+        if (raised) QVERIFY2(warm > 50, "Raised central interior must visibly glow pink/warm");
+        else QCOMPARE(warm, 0);
+        QVERIFY(image.save(QCoreApplication::applicationDirPath()
+            + (raised ? "/violet-heart-raised.png" : "/violet-heart-quiet.png")));
+    }
+    item.setActive(false);
+}
 
 void TerrainReactorGpuSmokeTest::cameraPunchDoesNotMoveTheGroundProjection()
 {

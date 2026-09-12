@@ -96,6 +96,9 @@ inline const std::array<BuiltInTheme, 13>& builtInThemes()
         return ThemeColorInput{ThemeColorEncoding::WorkingLinear,
                                color.red, color.green, color.blue};
     };
+    const auto s = [&fromSrgb8, &asWorking](int r, int g, int b) {
+        return asWorking(fromSrgb8(r, g, b));
+    };
     const auto mix = [](const LinearRgb first, const LinearRgb second,
                         const float secondWeight) {
         const float firstWeight = 1.0F - secondWeight;
@@ -134,7 +137,10 @@ inline const std::array<BuiltInTheme, 13>& builtInThemes()
         hexTheme("blue-hour", "Blue Hour", {39,60,85}, {29,49,72}, {139,197,231}, {242,140,114}, {207,231,244}, 1.05F),
         hexTheme("porcelain-teal", "Porcelain Teal", {221,232,228}, {238,244,241}, {36,120,111}, {184,93,77}, {79,112,106}, .78F),
         hexTheme("wine-signal", "Wine Signal", {58,36,48}, {47,32,42}, {131,197,190}, {217,93,115}, {240,203,211}, 1.06F),
-        hexTheme("daybreak-lime", "Daybreak Lime", {217,231,200}, {230,239,217}, {42,124,114}, {198,91,71}, {92,111,66}, .80F),
+        // Calibrated for the reference shader's direct linear output: purple
+        // surfaces, pink interior and a small warm-yellow hot center.
+        {"violet-heart", "Violet Heart", {s(5,2,10),s(107,57,155),s(4,2,8),
+            s(201,122,255),s(165,90,218),s(255,164,218),s(255,246,159),s(201,122,255)}, 1.10F},
     }};
     return themes;
 }

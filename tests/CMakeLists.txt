@@ -1671,6 +1671,18 @@ set_tests_properties(qml_immersive_integration_test PROPERTIES
 
 # Native-only visual probe: the software integration suite above covers the
 # fallback, but cannot verify a QQuickRhiItem texture sampled by ShaderEffect.
+add_test(NAME qml_immersive_custom_colors_test
+    COMMAND qml_mini_player_test
+        -o ${CMAKE_CURRENT_BINARY_DIR}/qml-immersive-custom-colors.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_immersive_custom_colors.qml)
+set_tests_properties(qml_immersive_custom_colors_test PROPERTIES
+    TIMEOUT 60
+    RUN_SERIAL TRUE
+    ENVIRONMENT "QT_QUICK_CONTROLS_STYLE=Basic"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
 add_test(NAME qml_immersive_glow_gpu_test
     COMMAND qml_mini_player_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_immersive_glow.qml)

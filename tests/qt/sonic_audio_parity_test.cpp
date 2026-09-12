@@ -34,7 +34,12 @@ int main() {
     std::cout<<"64 Web Audio FFT windows matched within 1 byte; differing bins="<<differingBins<<'\n';
     const auto palettes = root["palettes"].toObject();
     if (palettes.size() != 13) return 5;
+    int referencePalettes = 0;
     for (const auto& theme : agplayer::immersive::builtInThemes()) {
+        // User-requested AgPlayer preset replaces Daybreak Lime. It is tested
+        // by immersive_theme_catalog_test, not an upstream palette assertion.
+        if (theme.id == "violet-heart") continue;
+        ++referencePalettes;
         const auto expected = palettes[QString::fromUtf8(theme.id.data(), qsizetype(theme.id.size()))].toObject();
         constexpr const char* roles[] = {"uBaseColor1","uBaseColor2","uFogColor","uCoolCore","uCoolEdge","uWarmCore","uWarmEdge","uRippleColor"};
         for (std::size_t i=0;i<theme.colors.size();++i) {
@@ -46,6 +51,7 @@ int main() {
         }
         if(std::abs(theme.glowIntensity-expected["uGlowIntensity"].toDouble())>2e-7) return 7;
     }
+    if (referencePalettes != 12) return 11;
     int checked = 0;
     for (const auto c : root["cases"].toArray()) {
         agplayer::visual::KickResponse kick(agplayer::visual::KickResponse::Mode::Reference);
@@ -94,6 +100,6 @@ int main() {
             ++frame; ++checked;
         }
     }
-    std::cout << checked << " original TypeScript frames and 13 palettes matched\n";
+    std::cout << checked << " original TypeScript frames and 12 retained upstream palettes matched\n";
     return checked == 1680 ? 0 : 4;
 }

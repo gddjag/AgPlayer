@@ -19,6 +19,41 @@ class PlayerExperienceControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void customPalettePreviewIsTransientAndIndependent()
+    {
+        QSettings().clear();
+        PlayerExperienceController style;
+        QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+        const auto fixedCool = style.coolColor();
+        const auto saved = style.customColors();
+        style.applyCustomColors();
+        QVERIFY(style.previewCustomColor(QStringLiteral("coolColor"), QStringLiteral("#10F020")));
+        QCOMPARE(style.coolColor(), QStringLiteral("#10F020"));
+        QCOMPARE(style.customColors(), saved);
+        PlayerExperienceController duringPreview;
+        QCOMPARE(duringPreview.coolColor(), saved.value("coolColor").toString());
+        style.applyCustomColors(); // Cancel.
+        QCOMPARE(style.coolColor(), saved.value("coolColor").toString());
+        QVERIFY(style.setCustomColor(QStringLiteral("coolColor"), QStringLiteral("#10F020")));
+        QVERIFY(style.setCustomColor(QStringLiteral("baseColor"), QStringLiteral("#010203")));
+        QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+        QCOMPARE(style.coolColor(), fixedCool);
+        QCOMPARE(style.customColors().value("coolColor").toString(), QStringLiteral("#10F020"));
+        PlayerExperienceController restored;
+        QCOMPARE(restored.themeId(), QStringLiteral("nocturnal"));
+        restored.applyCustomColors();
+        QCOMPARE(restored.coolColor(), QStringLiteral("#10F020"));
+        QCOMPARE(restored.themeBackground(), QColor("#010203"));
+        const auto custom = restored.customColors();
+        QVERIFY(!restored.setCustomColor(QStringLiteral("other"), QStringLiteral("#FFFFFF")));
+        QVERIFY(!restored.previewCustomColor(QStringLiteral("coolColor"), QStringLiteral("invalid")));
+        QVERIFY(!restored.setCustomColor(QStringLiteral("coolColor"), QStringLiteral("transparent")));
+        QCOMPARE(restored.customColors(), custom);
+        QSettings().setValue(QStringLiteral("immersiveVisual/themeId"), QStringLiteral("daybreak-lime"));
+        PlayerExperienceController migrated;
+        QCOMPARE(migrated.themeId(), QStringLiteral("violet-heart"));
+        QCOMPARE(migrated.customColors(), custom);
+    }
     void referenceDefaultsUpgradeOnceWithoutResettingLaterEdits()
     {
         QSettings().clear();
@@ -853,7 +888,7 @@ void PlayerExperienceControllerTest::builtInThemesApplyWithoutDynamicPresetChang
         QStringLiteral("赛博森林"), QStringLiteral("极简黑白"), QStringLiteral("冰川白昼"),
         QStringLiteral("锦鲤池"), QStringLiteral("珊瑚礁"), QStringLiteral("苔藓玻璃"),
         QStringLiteral("蓝调时刻"), QStringLiteral("青瓷"), QStringLiteral("绯红信号"),
-        QStringLiteral("黎明青柠"),
+        QStringLiteral("紫夜霓心"),
     };
     QCOMPARE(choices.size(), 13);
     for (qsizetype index = 0; index < choices.size(); ++index) {

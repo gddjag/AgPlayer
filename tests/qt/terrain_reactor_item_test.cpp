@@ -190,6 +190,42 @@ private slots:
     void cameraPropertiesSupportTaskFourInput();
     void nonFiniteCameraInvokablesPreserveExposedState();
     void referenceThemesReachRendererWithoutHexQuantization();
+    void independentCustomColorsKeepCanonicalRendering()
+    {
+        PlayerExperienceController style;
+        QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+        style.setTerrainAmplitude(76);
+        style.setTopographyDensity(23);
+        TerrainReactorItem item;
+        item.setStyleSource(&style);
+        const auto original = item.renderStyleSnapshot();
+        for (const auto& key : {"coolColor", "warmColor", "accentColor", "peakColor", "baseColor"}) {
+            bool accepted = false;
+            QVERIFY(QMetaObject::invokeMethod(&style, "setCustomColor", Qt::DirectConnection,
+                Q_RETURN_ARG(bool, accepted), Q_ARG(QString, QString::fromLatin1(key)),
+                Q_ARG(QString, QStringLiteral("#C020F0"))));
+            QVERIFY(accepted);
+            QCOMPARE(style.themeId(), QStringLiteral("custom"));
+            const auto custom = item.renderStyleSnapshot();
+            QCOMPARE(custom.bodyColor.w(), 1.0F);
+            QCOMPARE(custom.rippleColor.w(), 1.0F);
+            QCOMPARE(custom.terrainAmplitude, original.terrainAmplitude);
+            QCOMPARE(custom.topographyDensity, original.topographyDensity);
+            QCOMPARE(style.property("customColors").toMap().value(QString::fromLatin1(key)).toString(),
+                     QStringLiteral("#C020F0"));
+        }
+        const auto custom = item.renderStyleSnapshot();
+        for (const auto color : {custom.colors[1], custom.colors[2], custom.colors[4],
+                                 custom.rippleColor, custom.atmosphereColor}) {
+            QVERIFY(std::abs(color.x() - 192.0F / 255.0F) < .0001F);
+            QVERIFY(std::abs(color.y() - 32.0F / 255.0F) < .0001F);
+            QVERIFY(std::abs(color.z() - 240.0F / 255.0F) < .0001F);
+        }
+        QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+        QCOMPARE(item.renderStyleSnapshot().colors, original.colors);
+        QCOMPARE(style.property("customColors").toMap().value("coolColor").toString(),
+                 QStringLiteral("#C020F0"));
+    }
 };
 
 void TerrainReactorItemTest::referenceFrameRoutesOriginalSnareEvents()
@@ -439,7 +475,9 @@ void TerrainReactorItemTest::referenceThemesReachRendererWithoutHexQuantization(
             QVERIFY(std::abs(separateValues[index].x() - encoded.red) < 0.00001F);
             QVERIFY(std::abs(separateValues[index].y() - encoded.green) < 0.00001F);
             QVERIFY(std::abs(separateValues[index].z() - encoded.blue) < 0.00001F);
-            QCOMPARE(separateValues[index].w(), 1.0F);
+            // Only Violet Heart localizes the warm palette to the raised core.
+            QCOMPARE(separateValues[index].w(),
+                     index == 0 && theme.id == "violet-heart" ? 2.0F : 1.0F);
         }
     }
 }

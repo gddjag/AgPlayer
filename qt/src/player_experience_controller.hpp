@@ -5,6 +5,7 @@
 #include <QPointer>
 #include <QSettings>
 #include <QVariantList>
+#include <QVariantMap>
 
 class SettingsController;
 
@@ -55,6 +56,7 @@ class PlayerExperienceController final : public QObject {
     Q_PROPERTY(QString baseColor READ baseColor WRITE setBaseColor
                    NOTIFY baseColorChanged)
     Q_PROPERTY(QString themeId READ themeId NOTIFY themeChanged)
+    Q_PROPERTY(QVariantMap customColors READ customColors NOTIFY customColorsChanged)
     Q_PROPERTY(QVariantList builtInThemeChoices READ builtInThemeChoices CONSTANT)
     Q_PROPERTY(float themeGlow READ themeGlow NOTIFY themeChanged)
     Q_PROPERTY(QColor themeBackground READ themeBackground NOTIFY themeChanged)
@@ -284,6 +286,10 @@ public:
     void setRhythmSensitivity(int value);
 
     Q_INVOKABLE bool applyTheme(const QString& id);
+    QVariantMap customColors() const { return customColors_; }
+    Q_INVOKABLE void applyCustomColors();
+    Q_INVOKABLE bool setCustomColor(const QString& key, const QString& value);
+    Q_INVOKABLE bool previewCustomColor(const QString& key, const QString& value);
     Q_INVOKABLE void restoreDynamicDefaults();
     Q_INVOKABLE void toggleImmersiveMode();
     Q_INVOKABLE void toggleLyricsVisible();
@@ -292,6 +298,7 @@ public:
     Q_INVOKABLE void cycleExperienceTheme();
 
 signals:
+    void customColorsChanged();
     void immersiveModeChanged();
     void hostModeChanged();
     void lyricsVisibleChanged();
@@ -371,6 +378,7 @@ private:
     static QVariantList normalizedVisualEqGains(const QVariantList& values);
     void setThemeId(const QString& id);
     void clearThemeForManualColor();
+    void applyCustomPalette(const QVariantMap& colors, bool preview);
 
     QSettings settings_;
     QPointer<SettingsController> settingsController_;
@@ -409,6 +417,14 @@ private:
     float themeGlow_ = 1.0F;
     QColor themeBackground_ = QColor(QStringLiteral("#030817"));
     bool applyingTheme_ = false;
+    bool previewingCustomColor_ = false;
+    QVariantMap customColors_{
+        {QStringLiteral("coolColor"), QStringLiteral("#8B4AF0")},
+        {QStringLiteral("warmColor"), QStringLiteral("#FF469E")},
+        {QStringLiteral("accentColor"), QStringLiteral("#BE6AFF")},
+        {QStringLiteral("peakColor"), QStringLiteral("#FF9ACD")},
+        {QStringLiteral("baseColor"), QStringLiteral("#05020A")},
+    };
     int terrainAmplitude_ = 50;
     int motionResponse_ = 50;
     int gradientLayers_ = 74;
