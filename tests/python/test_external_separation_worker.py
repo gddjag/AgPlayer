@@ -1,5 +1,6 @@
 """Protocol boundary tests; heavy inference is validated separately with a real model."""
 import json
+import platform
 from pathlib import Path
 import subprocess
 import sys
@@ -68,7 +69,7 @@ class WorkerProtocolTest(unittest.TestCase):
                 self.assertFalse((root / 'agplayer-tools/ffmpeg.exe').exists())
                 self.assertEqual(WORKER.os.environ['PATH'].split(WORKER.os.pathsep)[0], str(output.parent))
 
-    def test_forced_gpu_reports_cpu_only_before_importing_heavy_dependencies(self):
+    def test_forced_gpu_reports_policy_or_missing_runtime_before_inference(self):
         script = Path(__file__).resolve().parents[2] / 'qt/resources/external_separation_worker.py'
         messages = [dict(protocol=1, type='start', requestId='gpu', payload={'device': 'gpu'}),
                     dict(protocol=1, type='shutdown', requestId='gpu', payload={})]
@@ -79,7 +80,12 @@ class WorkerProtocolTest(unittest.TestCase):
         terminal = [json.loads(line) for line in result.stdout.splitlines()
                     if json.loads(line)['type'] in ('result', 'error')]
         self.assertEqual(terminal[0]['type'], 'error')
-        self.assertIn('CPU', terminal[0]['payload']['message'])
+        if sys.platform == 'darwin' and platform.machine() == 'arm64':
+            # ARM permits MPS; -S deliberately omits the optional runtime.
+            # It must report that missing dependency, not a CPU-only policy.
+            self.assertIn('No module named', terminal[0]['payload']['message'])
+        else:
+            self.assertIn('CPU', terminal[0]['payload']['message'])
 
     def test_handshake_does_not_require_importing_inference_dependencies(self):
         script = Path(__file__).resolve().parents[2] / 'qt/resources/external_separation_worker.py'
