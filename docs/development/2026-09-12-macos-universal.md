@@ -13,8 +13,8 @@
 
 ## 实施与验收
 
-- [ ] 构建：macOS Universal preset、vcpkg 双架构 triplet、部署目标 13.0、生产目标与测试目标分离。
-- [ ] 打包：`.app`、文档类型与图标、Qt/QML/动态依赖、Worker；逐 Mach-O 校验两种架构、最低系统版本、可迁移依赖。
+- [x] 构建：macOS Universal preset、vcpkg 双架构 triplet、部署目标 13.0、生产目标与测试目标分离。
+- [x] 打包：`.app`、文档类型与图标、Qt/QML/动态依赖、Worker；逐 Mach-O 校验两种架构、最低系统版本、可迁移依赖。
 - [ ] 系统适配：全局快捷键/媒体键、登录项、文件关联、Finder 打开、Dock 和窗口行为。
 - [ ] 分离：按平台/架构选择可验证运行时，模型卡片提供一键部署、失败信息和官方链接；CPU/加速执行分别验证。
 - [ ] 测试：本地验证配置与脚本；Mac 原生构建、两种架构运行、macOS 13 最低系统、UI 截图与真实听音。
@@ -37,7 +37,7 @@ GitHub 核对：公开仓库 main 是官网与 Windows 1.0.3 发布内容；现�
 
 云端进展：ARM Mac 上打包策略 22 项全部通过、Python 桥接 6 项及目标约束 5 项通过。原生构建遇到 LAME configure 将双架构编译参数传入预处理器的错误；triplet 仅为该 port 指定单次预处理命令，实际编译和链接仍为双架构。开发构建 run `34706158425`（提交 `103be58aa00e12dabaaff3e9fa3d1c5088b63a4b`）已通过 LAME 编译，进入 FFmpeg 双架构构建，但于 2026-09-13 00:52 左右被取消；同期旧 run `34705817926` 被外部重新运行为 attempt 2。用户随后确认直接打包交付，由用户拷贝到 Mac 测试；本会话已恢复最新源码的构建作业。尚未产出 DMG，未执行线上发布。
 
-后续仍需：实际云端编译与双架构启动、macOS 13.0 最低系统验证、真实模型 CPU/CoreML/MPS 推理、全功能人工测试和听音，以及签名/公证与 Mac 依赖许可清单核对。
+后续仍需：macOS 13.0 实机验证、真实模型 CPU/CoreML/MPS 推理、全功能人工测试和听音，以及正式分发前的 Developer ID 签名/公证与 Mac 依赖许可清单核对。
 
 ## 功能验收范围
 
@@ -69,3 +69,15 @@ Apple HIG is the standing platform rule in `UI_DESIGN_SYSTEM.md`, section 9.
   Mac-rendered dark/light component screenshots were inspected. Physical Mac
   menu/window/model/audio acceptance remains separate from these CI results.
   No online release is authorised in this task.
+
+## 2026-09-13 测试包交付
+
+- 应用源码：`15a3259997bacca5e5a07ca8184390cde443fe26`。
+- 构建/打包及 ARM 启动：GitHub run `34715503391` 的 build job 成功；26 组重点测试通过，播放引擎和队列各额外连续通过 3 次。
+- Intel：首个检查因 `lipo` 参数顺序错误而未启动程序；修正后，run `34716248310` 复用上述同一个 Artifact，双架构、签名和 Intel 离屏启动检查全部通过。未重新编译应用。后续分支提交只涉及 CI 或验收记录。
+- 打包检查：105 个 Mach-O 文件，每个均包含 `arm64` 和 `x86_64`；最低系统声明不高于 13.0，依赖与符号链接均通过包内检查。Qt 运行时插件保留原生平台、图像、网络等组件和 SQLite；不部署项目未使用的外部数据库驱动。移除重定位后指向包外的 Qt SDK 搜索路径。
+- 文件：`C:\Users\Administrator\Desktop\AgPlayer-1.0.3-macOS-universal-development.dmg`，89,598,909 字节。
+- SHA-256：`7bbbb418311adde3426d779d365a41d42f4f374bdec0d9a3f09d93525da0fda2`。下载的 Artifact ZIP、内部 DMG 及桌面副本校验均通过。
+- 桌面同时提供同名 `.sha256` 和 `AgPlayer-macOS-安装测试说明.txt`。完整机器校验报告保留在 `build/macos-delivery/candidate-15a3259/`。
+- 当前为 ad-hoc 签名、未经 Apple 公证的开发测试包；自动启动检查采用 macOS 15 离屏模式，不代表 macOS 13 实机、原生桌面交互、全模型推理或听音验收。Intel 离屏字体别名提示需在实际 Cocoa 窗口中复核，本次不据此改动字体策略。
+- 未执行官网、R2、GitHub Release 或“版本发布”分支上线操作；等待用户人工测试后由其他任务负责发布。
