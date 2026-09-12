@@ -136,10 +136,8 @@ struct AnalysisSupport final {
     static constexpr int pcmToDsd = 58;
     static constexpr int dsdInconclusive = 35;
     static constexpr int knownLossyCodec = 82;
-    static constexpr int lossyUpsample = 78;
     static constexpr int lossyTranscode = 64;
     static constexpr int bitDepthExpansion = 68;
-    static constexpr int credibleLossless = 64;
     static constexpr int cutoffInconclusive = 40;
     static constexpr int defaultInconclusive = 32;
 };
