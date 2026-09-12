@@ -1,13 +1,14 @@
 # Script contract tests run through the native PowerShell on Windows and
-# PowerShell Core on macOS. This is test tooling, not a shipped dependency.
+# PowerShell Core on macOS when those script tests are selected. Native C++/QML
+# tests do not require PowerShell, and it is never a shipped dependency.
 if(WIN32)
     set(AGPLAYER_POWERSHELL_EXECUTABLE powershell)
     set(AGPLAYER_NATIVE_QPA windows)
 elseif(APPLE)
-    find_program(AGPLAYER_POWERSHELL_EXECUTABLE NAMES pwsh REQUIRED)
+    set(AGPLAYER_POWERSHELL_EXECUTABLE pwsh)
     set(AGPLAYER_NATIVE_QPA cocoa)
 else()
-    find_program(AGPLAYER_POWERSHELL_EXECUTABLE NAMES pwsh REQUIRED)
+    set(AGPLAYER_POWERSHELL_EXECUTABLE pwsh)
     set(AGPLAYER_NATIVE_QPA xcb)
 endif()
 

@@ -47,7 +47,6 @@ jobs:
         shell: bash
         run: |
           brew install cmake ninja pkg-config autoconf automake libtool nasm
-          brew install --cask powershell
           python -m pip install aqtinstall==3.3.0
           if [ ! -x "$AGPLAYER_QT_ROOT/bin/qt-cmake" ]; then
             python -m aqt install-qt mac desktop "$QT_VERSION" clang_64 -m qtshadertools -O "$RUNNER_TEMP/Qt"
