@@ -5,6 +5,7 @@ name: macOS Universal development build
 on:
   push:
     branches: [codex/macos-universal]
+    paths-ignore: ['.github/workflows/macos-intel-check.yml']
   workflow_dispatch:
 
 permissions:
@@ -173,7 +174,7 @@ jobs:
           test "$(uname -m)" = x86_64
           ditto -x -k package/AgPlayer-universal-test.zip "$RUNNER_TEMP/agplayer-test"
           app_path="$RUNNER_TEMP/agplayer-test/AgPlayer.app"
-          lipo -verify_arch x86_64 arm64 "$app_path/Contents/MacOS/AgPlayer"
+          lipo "$app_path/Contents/MacOS/AgPlayer" -verify_arch x86_64 arm64
           codesign --verify --deep --strict "$app_path"
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
             "$app_path/Contents/MacOS/AgPlayer" --qa-test-mode \
