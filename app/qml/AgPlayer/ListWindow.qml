@@ -462,6 +462,12 @@ Window {
                     anchors.leftMargin: 14
                     anchors.rightMargin: 10
                     spacing: 8
+                    ThemedMacWindowControls {
+                        id: macListControls
+                        targetWindow: listWindow
+                        allowFullScreen: false
+                        onCloseRequested: windows.hideListWindow()
+                    }
                     Label {
                         objectName: "resourceDropStatusLabel"
                         visible: listWindow.resourceDropStatus !== "idle"
@@ -478,6 +484,7 @@ Window {
                     Item { Layout.fillWidth: true }
                     ToolButton {
                         objectName: "listWindowMinimizeButton"
+                        visible: Qt.platform.os !== "osx"
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.secondaryText
                         icon.width: 16
@@ -487,6 +494,7 @@ Window {
                     }
                     ToolButton {
                         objectName: "listWindowCloseButton"
+                        visible: Qt.platform.os !== "osx"
                         icon.source: Theme.icon("close-fill")
                         icon.color: Theme.secondaryText
                         icon.width: 16
@@ -505,7 +513,8 @@ Window {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.right: parent.right
-                    anchors.rightMargin: 84
+                    anchors.leftMargin: Qt.platform.os === "osx" ? 14 + macListControls.width : 0
+                    anchors.rightMargin: Qt.platform.os === "osx" ? 0 : 84
                     acceptedButtons: Qt.LeftButton
                     onPressed: listWindow.startSystemMove()
                 }

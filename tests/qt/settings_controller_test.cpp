@@ -11,6 +11,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileDevice>
+#include <QKeySequence>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QScopeGuard>
@@ -90,6 +91,7 @@ class SettingsControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void nativeShortcutDisplayPreservesPortableSettings();
     void aboutUpdateServiceIsExplicitlyUnconfigured();
     void initTestCase();
     void defaultCacheDirectoryUsesStandardPaths();
@@ -1001,6 +1003,27 @@ void SettingsControllerTest::aboutUpdateServiceIsExplicitlyUnconfigured()
     settings.setLanguage(settings.language() == QStringLiteral("en")
                              ? QStringLiteral("zh") : QStringLiteral("en"));
     QTRY_VERIFY(translatedStatus.count() > 0);
+}
+
+void SettingsControllerTest::nativeShortcutDisplayPreservesPortableSettings()
+{
+    SettingsController settings;
+    const QString original = settings.hkPlayPause();
+    const auto restore = qScopeGuard([&] { settings.setHkPlayPause(original); });
+    const QString portable = QStringLiteral("Ctrl+Shift+P / Space");
+    settings.setHkPlayPause(portable);
+    const QString before = settings.hkPlayPause();
+#ifdef Q_OS_MACOS
+    QCOMPARE(settings.shortcutDisplayText(QStringLiteral("Ctrl + Shift + P / Space")),
+             QKeySequence(QStringLiteral("Ctrl+Shift+P")).toString(QKeySequence::NativeText)
+                 + QStringLiteral(" / ")
+                 + QKeySequence(QStringLiteral("Space")).toString(QKeySequence::NativeText));
+    QCOMPARE(settings.shortcutDisplayText(QStringLiteral("Ctrl+/")),
+             QKeySequence(QStringLiteral("Ctrl+/")).toString(QKeySequence::NativeText));
+#else
+    QCOMPARE(settings.shortcutDisplayText(portable), portable);
+#endif
+    QCOMPARE(settings.hkPlayPause(), before);
 }
 
 void SettingsControllerTest::frequencyColorMixPreservesPastelAndChroma()

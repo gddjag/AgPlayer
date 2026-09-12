@@ -201,6 +201,7 @@ Window {
                 }
 
                 Row {
+                    visible: Qt.platform.os !== "osx"
                     anchors.right: parent.right
                     anchors.rightMargin: 15
                     anchors.verticalCenter: parent.verticalCenter
@@ -249,6 +250,14 @@ Window {
                             color: parent.hovered ? Theme.surfaceHover : "transparent"
                         }
                     }
+                }
+
+                ThemedMacWindowControls {
+                    targetWindow: window
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.spacingMd
+                    anchors.verticalCenter: parent.verticalCenter
+                    onCloseRequested: window.hide()
                 }
 
                 Rectangle {

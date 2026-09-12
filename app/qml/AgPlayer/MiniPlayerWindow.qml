@@ -68,6 +68,12 @@ Window {
                     anchors.rightMargin: 5
                     spacing: 1
 
+                    ThemedMacWindowControls {
+                        targetWindow: miniWindow
+                        allowFullScreen: false
+                        onCloseRequested: windows.requestClose()
+                    }
+
                     Image {
                         source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
                         sourceSize.width: 18
@@ -121,6 +127,7 @@ Window {
                     ThemedIconButton {
                         id: minimizeButton
                         objectName: "miniMinimizeButton"
+                        visible: Qt.platform.os !== "osx"
                         Layout.preferredWidth: Theme.controlHeight
                         Layout.preferredHeight: Theme.controlHeight
                         iconSource: Theme.icon("subtract-line")
@@ -137,6 +144,7 @@ Window {
                     ThemedIconButton {
                         id: closeButton
                         objectName: "miniCloseButton"
+                        visible: Qt.platform.os !== "osx"
                         Layout.preferredWidth: Theme.controlHeight
                         Layout.preferredHeight: Theme.controlHeight
                         iconSource: Theme.icon("close-line")

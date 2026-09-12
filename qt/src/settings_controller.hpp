@@ -388,6 +388,7 @@ public:
     Q_INVOKABLE bool setRollingKeyboardShortcut(const QString& action,
                                                 const QString& sequence);
     Q_INVOKABLE void resetRollingKeyboardShortcuts();
+    Q_INVOKABLE QString shortcutDisplayText(const QString& portable) const;
     Q_INVOKABLE void rebindFileAssociations();
     Q_INVOKABLE bool openDefaultAppsSettings();
     Q_INVOKABLE void clearWaveformCache();

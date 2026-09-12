@@ -154,6 +154,12 @@ Window {
                     anchors.rightMargin: Theme.spacingSm
                     spacing: Theme.spacingMd
 
+                    ThemedMacWindowControls {
+                        id: macWindowControls
+                        targetWindow: window
+                        onCloseRequested: window.requestHide()
+                    }
+
                     Item {
                         objectName: "audioToolsLogo"
                         Layout.preferredWidth: Theme.controlHeightCompact
@@ -179,6 +185,7 @@ Window {
 
                     ThemedIconButton {
                         objectName: "audioToolsMinimizeButton"
+                        visible: Qt.platform.os !== "osx"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: Theme.navigationActionExtent
@@ -190,6 +197,7 @@ Window {
                     }
                     ThemedIconButton {
                         objectName: "audioToolsMaximizeButton"
+                        visible: Qt.platform.os !== "osx"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: Theme.navigationActionExtent
@@ -205,6 +213,7 @@ Window {
                     }
                     ThemedIconButton {
                         objectName: "audioToolsCloseButton"
+                        visible: Qt.platform.os !== "osx"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: Theme.navigationActionExtent
@@ -226,8 +235,10 @@ Window {
                     // Leave the complete three-button hit region to the
                     // controls: 3 button extents, 2 RowLayout gaps, and the
                     // title row's trailing margin.
-                    anchors.rightMargin: 3 * Theme.navigationActionExtent
-                        + 2 * Theme.spacingMd + Theme.spacingSm
+                    anchors.leftMargin: Qt.platform.os === "osx"
+                        ? Theme.spacingXl + macWindowControls.width : 0
+                    anchors.rightMargin: Qt.platform.os === "osx" ? 0
+                        : 3 * Theme.navigationActionExtent + 2 * Theme.spacingMd + Theme.spacingSm
                     z: 2
                     acceptedButtons: Qt.LeftButton
                     onPressed: function(mouse) {

@@ -34,6 +34,24 @@
 #include <cmath>
 #include <optional>
 
+QString SettingsController::shortcutDisplayText(const QString& portable) const
+{
+#ifdef Q_OS_MACOS
+    QStringList labels;
+    for (const QString& member : portable.split(QStringLiteral(" / "))) {
+        QString parseable = member.trimmed();
+        parseable.replace(QRegularExpression(QStringLiteral("\\s*\\+\\s*")),
+                          QStringLiteral("+"));
+        const QKeySequence key = QKeySequence::fromString(parseable, QKeySequence::PortableText);
+        const QString label = key.toString(QKeySequence::NativeText);
+        labels.append(label.isEmpty() ? member : label);
+    }
+    return labels.join(QStringLiteral(" / "));
+#else
+    return portable;
+#endif
+}
+
 namespace {
 
 QVariantMap defaultRollingKeyboardShortcuts()

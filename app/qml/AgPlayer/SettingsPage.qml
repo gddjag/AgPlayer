@@ -223,8 +223,9 @@ Item {
     MouseArea {
         objectName: "settingsHeaderDragArea"
         anchors.left: root.left
+        anchors.leftMargin: Qt.platform.os === "osx" ? Theme.spacingLg + macSettingsControls.width : 0
         anchors.top: root.top
-        width: Math.max(0, root.width - 390)
+        width: Math.max(0, root.width - 390 - anchors.leftMargin)
         height: 56
         acceptedButtons: Qt.LeftButton
         z: 2
@@ -244,6 +245,13 @@ Item {
             Layout.leftMargin: Theme.spacingLg
             Layout.rightMargin: Theme.spacingLg
             spacing: Theme.spacingMd
+
+            ThemedMacWindowControls {
+                id: macSettingsControls
+                targetWindow: root.hostWindow || null
+                allowFullScreen: false
+                onCloseRequested: root.cancelAndClose()
+            }
 
             Image {
                 source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
@@ -295,6 +303,7 @@ Item {
 
             ThemedIconButton {
                 objectName: "settingsCloseButton"
+                visible: Qt.platform.os !== "osx"
                 iconSource: Theme.icon("close-fill")
                 iconSize: 20
                 dangerOnHover: true
@@ -2251,6 +2260,8 @@ Item {
         property bool globalShortcut: false
         property string settingsAction: ""
         property bool invalidShortcut: false
+        readonly property string displayValue: Qt.platform.os === "osx"
+            ? SettingsController.shortcutDisplayText(value) : value
         signal committed(string text)
 
         Layout.fillWidth: true
@@ -2279,7 +2290,11 @@ Item {
                 anchors.fill: parent
                 anchors.leftMargin: Theme.spacingMd
                 anchors.rightMargin: Theme.spacingMd
-                text: hotkeyRow.value
+                text: hotkeyRow.displayValue
+                // Capture physical keys; never write native glyphs back to settings.
+                readOnly: Qt.platform.os === "osx"
+                Accessible.name: labelText.text
+                Accessible.description: qsTr("聚焦后按下要设置的快捷键")
                 color: Theme.primaryText
                 font.family: Theme.fontPrimary
                 font.pixelSize: Theme.fontSizeBody
@@ -2298,7 +2313,7 @@ Item {
                                 !SettingsController.setRollingKeyboardShortcut(
                                     settingsAction, candidate)
                         text = Qt.binding(function() {
-                            return hotkeyRow.value
+                            return hotkeyRow.displayValue
                         })
                         return
                     }
@@ -2310,18 +2325,19 @@ Item {
                         text = candidate
                         committed(candidate)
                         text = Qt.binding(function() {
-                            return hotkeyRow.value
+                            return hotkeyRow.displayValue
                         })
                     }
                 }
                 onEditingFinished: {
+                    if (Qt.platform.os === "osx") return
                     const candidate = text.trim()
                     if (settingsAction) {
                         invalidShortcut =
                                 !SettingsController.setRollingKeyboardShortcut(
                                     settingsAction, candidate)
                         text = Qt.binding(function() {
-                            return hotkeyRow.value
+                            return hotkeyRow.displayValue
                         })
                         return
                     }
@@ -2332,7 +2348,7 @@ Item {
                     if (!invalidShortcut && candidate)
                         committed(candidate)
                     text = Qt.binding(function() {
-                        return hotkeyRow.value
+                        return hotkeyRow.displayValue
                     })
                 }
             }

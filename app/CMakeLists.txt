@@ -176,6 +176,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/ThemedMenuItem.qml
         qml/AgPlayer/components/ThemedButton.qml
         qml/AgPlayer/components/ThemedIconButton.qml
+        qml/AgPlayer/components/ThemedMacWindowControls.qml
         qml/AgPlayer/components/ThemedTextField.qml
         qml/AgPlayer/components/ThemedSlider.qml
         qml/AgPlayer/components/ThemedListRow.qml

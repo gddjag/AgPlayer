@@ -9,7 +9,7 @@
 - 分离功能保留模型、操作和输出；用户接受按硬件加速，Intel 提供 CPU，Apple Silicon 的 CoreML/MPS 逐模型验证。
 - 环境/模型状态、进度、失败原因和一键部署留在模型卡片内。已确认不兼容的模型显示原因和官方支持链接；未验证不能标成不兼容。
 - 大模型及推理运行时仍按需外置，不随基础应用打包。
-- 不修改已发布的 Windows 版本号、下载配置或线上文件。用户指定沿用 `gddjag/AgPlayer`；开发构建使用 `codex/macos-universal`，仅生成测试 Artifact。用户人工测试通过并再次通知后，才通过“版本发布”分支正式上线。
+- 不修改已发布的 Windows 版本号、下载配置或线上文件。用户指定沿用 `gddjag/AgPlayer`；开发构建使用 `codex/macos-universal`，仅生成测试 Artifact。本会话负责将验证后的测试 DMG 放到 `C:\Users\Administrator\Desktop`，不执行线上发布。用户人工测试通过后，由其他会话通过“版本发布”分支正式上线。
 
 ## 实施与验收
 
@@ -20,7 +20,7 @@
 - [ ] 测试：本地验证配置与脚本；Mac 原生构建、两种架构运行、macOS 13 最低系统、UI 截图与真实听音。
 
 初始构建使用现有 vcpkg baseline；其 FFmpeg 构建脚本已实现多架构编译和 lipo 合并，复用该能力，不另写依赖合并系统。
-当前没有可用 Mac 执行环境，仓库未配置 GitHub remote。只在真实执行后记录 Mac 编译、启动和功能通过。
+本地为 Windows、未配置 Git remote；现已使用 GitHub Actions Mac runner 执行开发构建。只在真实执行后记录 Mac 编译、启动和功能通过。
 
 ## 2026-09-13 本地实施结果
 
@@ -33,7 +33,9 @@
 
 本地证据：Windows Release 主程序与受影响目标增量编译通过；配置/Finder 事件两个 CTest 通过；系统设置、文件关联、分离安装/运行时/进程取消/控制器/卡片等重点回归通过；主窗口 QML 150 passed、0 failed、1 skipped（离屏环境不支持 WM_DROPFILES）。修复了原主窗口导入测试未清空前一拖放用例数据的隔离问题。Python 桥接 6 项通过；打包策略 22 项中 20 passed、2 skipped（Windows 无符号链接权限）。这些都不是 Mac 原生验证。
 
-GitHub 已只读核对：公开仓库 main 是官网与 Windows 1.0.3 发布内容；现有 R2 workflow 仅由发布事件或手工启动触发。Mac 构建源码将放在独立开发分支并保留全部现有网站文件，不合并 main，不运行 R2 发布任务。
+GitHub 核对：公开仓库 main 是官网与 Windows 1.0.3 发布内容；现有 R2 workflow 仅由发布事件或手工启动触发。Mac 构建源码已放在独立开发分支 `codex/macos-universal` 并保留全部现有网站文件，未合并 main、未运行 R2 发布任务。
+
+云端进展：ARM Mac 上打包策略 22 项全部通过、Python 桥接 6 项及目标约束 5 项通过。原生构建遇到 LAME configure 将双架构编译参数传入预处理器的错误；triplet 仅为该 port 指定单次预处理命令，实际编译和链接仍为双架构。开发构建 run `34706158425`（提交 `103be58aa00e12dabaaff3e9fa3d1c5088b63a4b`）已通过 LAME 编译，进入 FFmpeg 双架构构建，但于 2026-09-13 00:52 左右被取消；同期旧 run `34705817926` 被外部重新运行为 attempt 2。用户随后确认直接打包交付，由用户拷贝到 Mac 测试；本会话已恢复最新源码的构建作业。尚未产出 DMG，未执行线上发布。
 
 后续仍需：实际云端编译与双架构启动、macOS 13.0 最低系统验证、真实模型 CPU/CoreML/MPS 推理、全功能人工测试和听音，以及签名/公证与 Mac 依赖许可清单核对。
 
@@ -41,3 +43,20 @@ GitHub 已只读核对：公开仓库 main 是官网与 Windows 1.0.3 发布内�
 
 播放/播放模式与队列、音乐库/列表/标签、搜索/导入/拖放、波形/视频/歌词、EQ/变速变调、主窗口/迷你/滚动/沉浸模式、音频编辑/转码/文件名/元数据/无损识别、人声分离、设置/主题/语言、快捷键/文件关联/登录项、更新与反馈。
 每项需在后续 Mac 验收记录中给出证据；构建或局部测试通过不代表本清单全部完成。
+# macOS UI pass — 2026-09-13
+
+User requested `ui-ux-pro-max` optimisation while preserving the existing layout.
+Apple HIG is the standing platform rule in `UI_DESIGN_SYSTEM.md`, section 9.
+
+- Shared QML traffic-light controls in the existing main, audio-tools, settings,
+  equalizer, list and mini-player headers. Custom frameless controls, not AppKit
+  standard buttons; existing close/unsaved-work callbacks retained.
+- Native macOS application/window menu with Settings, Quit, Close and Minimise;
+  Command shortcuts and native shortcut labels, portable persisted values.
+- Reused system fonts, theme tokens, keyboard focus and accessible button labels.
+- Windows Release application build passed. Existing QML main suite: 150 passed,
+  0 failed, 1 native-drop skip. New component suite: 5 passed; settings controller
+  tests and design-system contract passed. Component qmllint passed. Dark/light
+  header previews rendered using Windows native QPA; these are not Mac acceptance.
+- macOS compilation and physical Mac menu/window/model/audio acceptance still
+  need separate evidence. No online release is authorised in this task.

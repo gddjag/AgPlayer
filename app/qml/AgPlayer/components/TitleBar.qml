@@ -25,6 +25,11 @@ Rectangle {
         anchors.rightMargin: Theme.spacingMd
         spacing: Theme.spacingXs
 
+        ThemedMacWindowControls {
+            targetWindow: titleBar.window
+            onCloseRequested: WindowController.requestClose()
+        }
+
         RowLayout {
             objectName: "titleBrand"
             visible: titleBar.showBrand
@@ -82,6 +87,7 @@ Rectangle {
 
         ToolButton {
             objectName: "minimizeButton"
+            visible: Qt.platform.os !== "osx"
             text: qsTr("最小化")
             display: AbstractButton.IconOnly
             Layout.preferredWidth: Theme.controlHeightCompact
@@ -110,6 +116,7 @@ Rectangle {
 
         ToolButton {
             objectName: "maximizeButton"
+            visible: Qt.platform.os !== "osx"
             text: window.visibility === Window.Maximized ? qsTr("还原") : qsTr("最大化")
             display: AbstractButton.IconOnly
             Layout.preferredWidth: Theme.controlHeightCompact
@@ -145,6 +152,7 @@ Rectangle {
 
         ToolButton {
             objectName: "closeButton"
+            visible: Qt.platform.os !== "osx"
             text: qsTr("关闭")
             display: AbstractButton.IconOnly
             Layout.preferredWidth: Theme.controlHeightCompact

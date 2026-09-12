@@ -15,6 +15,10 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QMenu>
+#ifdef Q_OS_MACOS
+#include <QMenuBar>
+#include <QKeySequence>
+#endif
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQuickStyle>
@@ -1219,7 +1223,7 @@ int main(int argc, char* argv[])
         }
 
         QObject::connect(&importer, &ImportController::finished, &app,
-                         [&library, &playback, &importer, &pendingPlayFilePath,
+                         [&library, &playback, &pendingPlayFilePath,
                           &pendingPlayFinishes]() {
             if (pendingPlayFilePath.isEmpty()) {
                 return;
@@ -1336,6 +1340,44 @@ int main(int argc, char* argv[])
             result = 3;
             return result;
         }
+
+#ifdef Q_OS_MACOS
+        // A parentless QMenuBar supplies the macOS global menu without adding
+        // a row to the existing QML layout. Roles place Settings/Quit in the app menu.
+        QMenuBar macMenuBar;
+        QMenu* appMenu = macMenuBar.addMenu(QStringLiteral("AgPlayer"));
+        QAction* macSettings = appMenu->addAction(QString());
+        macSettings->setMenuRole(QAction::PreferencesRole);
+        macSettings->setShortcut(QKeySequence::Preferences);
+        QObject::connect(macSettings, &QAction::triggered, &engine, [&windows, &engine] {
+            windows.showMain();
+            QMetaObject::invokeMethod(engine.rootObjects().first(), "openSettingsPage");
+        });
+        QAction* macQuit = appMenu->addAction(QString());
+        macQuit->setMenuRole(QAction::QuitRole);
+        macQuit->setShortcut(QKeySequence::Quit);
+        QObject::connect(macQuit, &QAction::triggered, &windows, &WindowController::requestExit);
+        QMenu* macWindowMenu = macMenuBar.addMenu(QString());
+        QAction* macMinimize = macWindowMenu->addAction(QString());
+        macMinimize->setShortcut(QKeySequence(QStringLiteral("Ctrl+M")));
+        QObject::connect(macMinimize, &QAction::triggered, &app, [] {
+            if (QWindow* focused = QGuiApplication::focusWindow()) focused->showMinimized();
+        });
+        QAction* macClose = macWindowMenu->addAction(QString());
+        macClose->setShortcut(QKeySequence::Close);
+        QObject::connect(macClose, &QAction::triggered, &app, [] {
+            if (QWindow* focused = QGuiApplication::focusWindow()) focused->close();
+        });
+        const auto updateMacMenuText = [macSettings, macQuit, macWindowMenu, macMinimize, macClose] {
+            macSettings->setText(QCoreApplication::translate("Main", "设置…"));
+            macQuit->setText(QCoreApplication::translate("Main", "退出 AgPlayer"));
+            macWindowMenu->setTitle(QCoreApplication::translate("Main", "窗口"));
+            macMinimize->setText(QCoreApplication::translate("Main", "最小化"));
+            macClose->setText(QCoreApplication::translate("Main", "关闭窗口"));
+        };
+        updateMacMenuText();
+        QObject::connect(&translations, &TranslationManager::languageChanged, &macMenuBar, updateMacMenuText);
+#endif
 
         if (!qaPlayPath.isEmpty()) {
             initialFilePath = qaPlayPath;

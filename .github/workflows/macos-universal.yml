@@ -89,7 +89,7 @@ jobs:
         run: >-
           ctest --test-dir build/macos-universal --output-on-failure
           --output-junit macos-native-tests.xml
-          -R '^(dependency_smoke_test|c_api_lifecycle_test|decoder_test|audio_engine_test|queue_gapless_test|metadata_writer_test|transcoder_test|pitch_shifter_test|waveform_cache_test|project_document_test|rename_transaction_test|lyrics_provider_chain_test|equalizer_controller_test|separation_output_transaction_test|lossless_analysis_controller_test|qml_main_window_test|application_file_open_test|global_hotkey_manager_test|settings_controller_test|file_association_controller_test|separation_runtime_test|separation_native_backend_test|separation_process_client_test|vocal_separation_controller_test|vocal_separation_install_test)$'
+          -R '^(dependency_smoke_test|c_api_lifecycle_test|decoder_test|audio_engine_test|queue_gapless_test|metadata_writer_test|transcoder_test|pitch_shifter_test|waveform_cache_test|project_document_test|rename_transaction_test|lyrics_provider_chain_test|equalizer_controller_test|separation_output_transaction_test|lossless_analysis_controller_test|qml_main_window_test|qml_macos_window_controls_test|application_file_open_test|global_hotkey_manager_test|settings_controller_test|file_association_controller_test|separation_runtime_test|separation_native_backend_test|separation_process_client_test|vocal_separation_controller_test|vocal_separation_install_test)$'
       - name: Deploy and audit a single Universal development package
         run: >-
           python scripts/package-macos.py
@@ -122,6 +122,7 @@ jobs:
           path: |
             build/macos-universal/macos-native-tests.xml
             build/macos-universal/Testing/Temporary/LastTest.log
+            build/macos-ui-titlebar-*.png
             build/macos-universal/CMakeFiles/CMakeConfigureLog.yaml
             ${{ runner.temp }}/agplayer-arm.log
           retention-days: 7
