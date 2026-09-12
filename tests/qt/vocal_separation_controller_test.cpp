@@ -2570,7 +2570,12 @@ void VocalSeparationControllerTest::knownVrModelOffersExternalConfigurationWithP
     VocalSeparationControllerTestDriver::publishGpuCandidate(controller);
     QCOMPARE(controller.deviceMode(), VocalSeparationController::DeviceMode::GPU);
     QVERIFY(!controller.start()); // Still no environment; device display must already reflect the CPU adapter.
+#ifdef Q_OS_MACOS
+    // Mac validates CoreML/MPS per model after the optional runtime is ready.
+    QCOMPARE(controller.deviceMode(), VocalSeparationController::DeviceMode::GPU);
+#else
     QCOMPARE(controller.deviceMode(), VocalSeparationController::DeviceMode::Auto);
+#endif
     QVERIFY(controller.configureRuntime(QStringLiteral("python-vr-5hp")));
     QVERIFY(controller.downloadBusy());
     QVERIFY(controller.downloadModel(QStringLiteral("python-vr-5hp")));
@@ -2601,7 +2606,9 @@ void VocalSeparationControllerTest::automaticDemucsShowsCpuCompatibilityAndPrese
     VocalSeparationControllerTestDriver::publishGpuCandidate(controller);
     QCOMPARE(controller.deviceMode(), VocalSeparationController::DeviceMode::GPU);
     QVERIFY(controller.start());
+#ifndef Q_OS_MACOS
     QCOMPARE(controller.deviceMode(), VocalSeparationController::DeviceMode::Auto);
+#endif
     QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(), VocalSeparationController::JobState::Completed, 5000);
     QVERIFY(controller.availableDevices().at(2).toMap().value("available").toBool());
     QCOMPARE(controller.history().first().toMap().value("provider").toString(), QStringLiteral("cpu"));

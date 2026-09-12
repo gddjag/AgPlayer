@@ -244,6 +244,11 @@ public:
         return true;
     }
 
+    Q_INVOKABLE QString localFilePath(const QUrl& url) const
+    {
+        return QDir::fromNativeSeparators(url.toLocalFile());
+    }
+
     Q_INVOKABLE bool registerListDropWindow(QObject* target)
     {
         auto* window = qobject_cast<QWindow*>(target);

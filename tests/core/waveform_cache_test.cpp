@@ -253,6 +253,9 @@ int main(const int argc, char** argv)
     assert(legacy_v2_key != first_key);
     const std::filesystem::path equivalent_path =
         case_dir / "nested" / ".." / source_path.filename();
+    // POSIX resolves each path component; nested/.. is only a valid alias
+    // when nested exists (Windows normalises it before opening the file).
+    assert(std::filesystem::create_directory(case_dir / "nested"));
     assert(agplayer::WaveformCache::key_for(equivalent_path) == first_key);
 
     const auto original_mtime = std::filesystem::last_write_time(source_path);

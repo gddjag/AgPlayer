@@ -631,8 +631,7 @@ TestCase {
 
     function createIsolatedTrackModel(prefix, count) {
         var model = isolatedTrackModelComponent.createObject(testCase)
-        var path = decodeURIComponent(testAudioUrl.toString()
-                                      .replace(/^file:\/\/\//, ""))
+        var path = nativeDropHelper.localFilePath(testAudioUrl)
         for (var row = 0; row < count; ++row) {
             model.append({
                 "trackId": prefix + row,
@@ -1039,8 +1038,7 @@ TestCase {
         const previousShell = SettingsController.playerShellMode
         const folder = nativeDropHelper.createDropDirectory()
         verify(folder)
-        let folderPath = decodeURIComponent(folder.toString()
-                                             .replace(/^file:\/\/\//, ""))
+        let folderPath = nativeDropHelper.localFilePath(folder)
         folderPath = folderPath.replace(/\\/g, "/")
         const initialCount = ResourceFolderController.monitoredFolders.length
         SettingsController.playerShellMode = data.shellMode
@@ -1387,8 +1385,7 @@ TestCase {
     function test_track_context_play_action_uses_real_mouse_click() {
         mainWindow.importFiles([testAudioUrl])
         tryVerify(function() { return !ImportController.busy }, 5000)
-        var playablePath = decodeURIComponent(testAudioUrl.toString()
-                                              .replace(/^file:\/\/\//, ""))
+        var playablePath = nativeDropHelper.localFilePath(testAudioUrl)
         var playableIndex = -1
         for (var row = 0; row < LibraryModel.count; ++row) {
             var path = String(LibraryModel.data(LibraryModel.index(row, 0),
@@ -1430,8 +1427,7 @@ TestCase {
         compare(AudioToolsController.currentTool, 0)
         mainWindow.importFiles([testAudioUrl])
         tryVerify(function() { return !ImportController.busy }, 5000)
-        var playablePath = decodeURIComponent(testAudioUrl.toString()
-                                              .replace(/^file:\/\/\//, ""))
+        var playablePath = nativeDropHelper.localFilePath(testAudioUrl)
         var playableIndex = -1
         for (var row = 0; row < LibraryModel.count; ++row) {
             var path = String(LibraryModel.data(LibraryModel.index(row, 0),
@@ -1655,8 +1651,7 @@ TestCase {
         mouseClick(secondArea, secondArea.width / 2, secondArea.height / 2,
                    Qt.LeftButton, Qt.ControlModifier)
         compare(list.selectedTrackIds.length, 2)
-        var playablePath = decodeURIComponent(testAudioUrl.toString()
-                                              .replace(/^file:\/\/\//, ""))
+        var playablePath = nativeDropHelper.localFilePath(testAudioUrl)
         var playableIndex = -1
         for (var rowIndex = 0; rowIndex < LibraryModel.count; ++rowIndex) {
             var rowPath = String(LibraryModel.data(
@@ -2249,8 +2244,7 @@ TestCase {
         var laterImportedIds = ImportController.importedTrackIds.slice(0)
         compare(laterImportedIds.length, 2)
 
-        var folderPath = decodeURIComponent(busyFolder.toString()
-                                           .replace(/^file:\/\/\//, ""))
+        var folderPath = nativeDropHelper.localFilePath(busyFolder)
         folderPath = folderPath.replace(/\\/g, "/")
         verify(ResourceFolderController.removeMonitoredFolder(folderPath))
         LibraryModel.removeTrack(firstImportedId)
@@ -2695,8 +2689,7 @@ TestCase {
         verify(waveform, "main waveform should exist after importing audio")
         verify(seekSurface, "visible waveform surface should own seeking")
 
-        var playablePath = decodeURIComponent(testAudioUrl.toString()
-                                              .replace(/^file:\/\/\//, ""))
+        var playablePath = nativeDropHelper.localFilePath(testAudioUrl)
         var playableIndex = -1
         for (var row = 0; row < LibraryModel.count; ++row) {
             var path = String(LibraryModel.data(LibraryModel.index(row, 0),
@@ -2938,8 +2931,7 @@ TestCase {
     function test_play_button_tracks_real_playback_state() {
         mainWindow.importFiles([testAudioUrl])
         tryVerify(function() { return !ImportController.busy }, 5000)
-        var playablePath = decodeURIComponent(testAudioUrl.toString()
-                                              .replace(/^file:\/\/\//, ""))
+        var playablePath = nativeDropHelper.localFilePath(testAudioUrl)
         var playableIndex = -1
         for (var row = 0; row < LibraryModel.count; ++row) {
             var path = String(LibraryModel.data(LibraryModel.index(row, 0),
@@ -3579,7 +3571,7 @@ TestCase {
             var trailingWidth = -1
             for (var widthIndex = 0; widthIndex < widths.length; ++widthIndex) {
                 list.width = widths[widthIndex]
-                wait(0)
+                verify(waitForRendering(list))
                 var duration = findChild(list, "trackHeaderDuration")
                 var rating = findChild(list, "trackHeaderRating")
                 var favorite = findChild(list, "trackHeaderFavorite")
@@ -4975,8 +4967,7 @@ TestCase {
         for (importedId of ImportController.importedTrackIds)
             LibraryModel.removeTrack(importedId)
         tryCompare(LibraryModel, "count", initialLibraryCount, 1000)
-        var folderPath = decodeURIComponent(folderUrl.toString()
-                                           .replace(/^file:\/\/\//, ""))
+        var folderPath = nativeDropHelper.localFilePath(folderUrl)
         folderPath = folderPath.replace(/\\/g, "/")
         var rootNode = null
         for (var row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
@@ -5019,8 +5010,7 @@ TestCase {
             return ResourceFolderController.monitoredFolders.length
                     === initialFolderCount + 2
         }, 1000)
-        var secondFolderPath = decodeURIComponent(secondFolderUrl.toString()
-                .replace(/^file:\/\/\//, "")).replace(/\\/g, "/")
+        var secondFolderPath = nativeDropHelper.localFilePath(secondFolderUrl).replace(/\\/g, "/")
         rootNode = null
         var secondRootNode = null
         for (row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
@@ -5926,7 +5916,11 @@ TestCase {
         verify(contentColumn, "settings must expose the single content column")
         var headerDragArea = findChild(page, "settingsHeaderDragArea")
         verify(headerDragArea, "settings header must expose a full-width native drag surface")
-        verify(headerDragArea.width > settingsWindow.width * 0.50)
+        const macButtons = Qt.platform.os === "osx"
+                ? findChild(page, "macCloseButton").parent : null
+        const leadingControlsWidth = macButtons ? macButtons.width + Theme.spacingLg : 0
+        verify(headerDragArea.x >= leadingControlsWidth)
+        verify(headerDragArea.width + leadingControlsWidth > settingsWindow.width * 0.50)
         compare(sidebar.width, 184)
         verify(contentColumn.width <= 760,
                "settings content must remain a readable single column")
