@@ -1,0 +1,52 @@
+name: Retire archived installers before 1.0.2
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: r2-release-latest
+  cancel-in-progress: false
+jobs:
+  retire:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Verify current release, then remove only archived 1.0.0 and 1.0.1 objects
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+          AWS_EC2_METADATA_DISABLED: 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          endpoint='https://50fb972f4425789ab744ba4c6614221e.r2.cloudflarestorage.com'
+          bucket='agplayer-releases'
+          expected='af6839cfac746e66dff61091fb53c73b5f730e1fb04564a34a5855c902e676cb'
+          curl --fail --silent --show-error https://download.agplayer.com/updates/latest.json -o latest.json
+          jq -e --arg sha "$expected" '.version == "1.0.2" and .tag == "v1.0.2" and any(.files[]; .name == "AgPlayer-Setup-1.0.2-x64.exe" and .size == 36202989 and .sha256 == $sha)' latest.json
+          curl --fail --silent --show-error --location --retry 2 https://github.com/gddjag/AgPlayer/releases/download/v1.0.2/AgPlayer-Setup-1.0.2-x64.exe -o current.exe
+          echo "$expected  current.exe" | sha256sum --check
+          aws --endpoint-url "$endpoint" s3api head-object --bucket "$bucket" --key releases/v1.0.2/AgPlayer-Setup-1.0.2-x64.exe | jq -e '.ContentLength == 36202989'
+          curl --fail --silent --show-error 'https://www.agplayer.com/assets/js/downloads.js?v=20260912-release-102' -o downloads.js
+          grep -F "version: '1.0.2'" downloads.js
+          # Both complete old installers were archived locally and hash-verified before dispatch.
+          aws --endpoint-url "$endpoint" s3api head-object --bucket "$bucket" --key releases/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe | jq -e '.ContentLength == 36209296'
+          aws --endpoint-url "$endpoint" s3api head-object --bucket "$bucket" --key releases/v1.0.1/AgPlayer-Setup-1.0.1-x64.exe | jq -e '.ContentLength == 36185733'
+          keys=(
+            'releases/v1.0.0/AgPlayer-Setup-1.0.0-x64.exe'
+            'releases/v1.0.0/SHA256SUMS'
+            'releases/v1.0.1/AgPlayer-Setup-1.0.1-x64.exe'
+            'releases/v1.0.1/SHA256SUMS'
+          )
+          for key in "${keys[@]}"; do
+            aws --endpoint-url "$endpoint" s3api head-object --bucket "$bucket" --key "$key" >/dev/null
+          done
+          for key in "${keys[@]}"; do
+            aws --endpoint-url "$endpoint" s3api delete-object --bucket "$bucket" --key "$key"
+            aws --endpoint-url "$endpoint" s3api list-objects-v2 --bucket "$bucket" --prefix "$key" | jq -e --arg key "$key" 'all(.Contents[]?; .Key != $key)'
+            echo "Retired $key"
+          done
+          aws --endpoint-url "$endpoint" s3api head-object --bucket "$bucket" --key releases/v1.0.2/AgPlayer-Setup-1.0.2-x64.exe | jq -e '.ContentLength == 36202989'
