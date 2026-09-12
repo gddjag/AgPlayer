@@ -9,3 +9,11 @@ set(VCPKG_OSX_ARCHITECTURES "x86_64;arm64")
 set(VCPKG_OSX_DEPLOYMENT_TARGET "13.0")
 # Only Release dependencies are needed by the distribution preset.
 set(VCPKG_BUILD_TYPE release)
+
+# Clang can compile/link a Universal object, but preprocessing (-E) supports
+# only one architecture. LAME's configure checks otherwise inherit both -arch
+# flags from CC and reject every preprocessor. Both targets use the same LP64
+# little-endian configuration; keep the actual CC/CXX builds Universal.
+if(PORT STREQUAL "mp3lame")
+    set(VCPKG_MAKE_CONFIGURE_OPTIONS "CPP=/usr/bin/clang -E")
+endif()
