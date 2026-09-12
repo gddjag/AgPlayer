@@ -1526,7 +1526,7 @@ void SettingsControllerTest::defaultPlayerToggleRegistersAndClearsHiddenVideoCap
     }
 
 #else
-    QSKIP("Windows Default Apps capabilities are Windows-only");
+    QSKIP("Windows Default Apps capabilities are Windows-only", "");
 #endif
 }
 

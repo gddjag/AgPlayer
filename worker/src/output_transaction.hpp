@@ -18,16 +18,16 @@ struct OutputPlan {
     QString baseName;
     QString extension;
     QStringList stems;
-    QString modelName;
-    QStringList stemLabels;
-    QString directoryName;
+    QString modelName{};
+    QStringList stemLabels{};
+    QString directoryName{};
 };
 
 struct TransactionResult {
     bool ok = false;
     QString code;
     QString message;
-    QStringList outputs;
+    QStringList outputs{};
     QString causeCode{};
     QString causeMessage{};
 };

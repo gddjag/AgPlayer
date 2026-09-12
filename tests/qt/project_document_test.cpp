@@ -194,7 +194,7 @@ private slots:
         QVERIFY(json.contains(QStringLiteral("媒体/共享源/鼓点 音频.wav").toUtf8()));
         QVERIFY(!json.contains('\\'));
         const QByteArray lower = json.toLower();
-        for (const QByteArray forbidden : {
+        for (const QByteArray& forbidden : {
                  QByteArray("pcm"), QByteArray("peak"), QByteArray("decoded"),
                  QByteArray("render"), QByteArray("preview"), QByteArray("cache"),
                  QByteArray("handoff"), QByteArray("clipboard")}) {
@@ -473,7 +473,7 @@ private slots:
             }
         }
 #endif
-        if (linkError) QSKIP("directory symlink creation is unavailable");
+        if (linkError) QSKIP("directory symlink creation is unavailable", "");
 
         QJsonObject root = readObject(project.projectPath);
         QJsonArray sources = root.value(QStringLiteral("sources")).toArray();
@@ -1200,6 +1200,13 @@ private slots:
 
 };
 
-QTEST_APPLESS_MAIN(ProjectDocumentTest)
+// QTEST_APPLESS_MAIN in Qt 6.7/6.8 expands an omitted variadic argument,
+// rejected by recent Clang in strict C++17. Keep the same app-less test runner.
+int main(int argc, char* argv[])
+{
+    ProjectDocumentTest test;
+    QTEST_SET_MAIN_SOURCE_PATH
+    return QTest::qExec(&test, argc, argv);
+}
 
 #include "project_document_test.moc"

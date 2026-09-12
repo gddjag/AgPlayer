@@ -438,7 +438,7 @@ int main(const int argc, char** argv)
         AG_CHECK(fade_engine.play() == AG_OK);
         const std::vector<float> faded =
             capture_realtime(fade_engine, sample_rate * 2U);
-        const auto peak_at = [&faded, boundary](const std::size_t offset) {
+        const auto peak_at = [&faded](const std::size_t offset) {
             float peak = 0.0F;
             for (std::size_t frame = 0U; frame < 256U; ++frame) {
                 peak = std::max(

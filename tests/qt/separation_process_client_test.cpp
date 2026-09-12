@@ -350,7 +350,7 @@ void SeparationProcessClientTest::protocolFailureKeepsTheEventLoopResponsive()
 void SeparationProcessClientTest::processFailureTerminatesDescendants()
 {
 #ifndef Q_OS_WIN
-    QSKIP("Windows Job Object behavior is Windows-specific");
+    QSKIP("Windows Job Object behavior is Windows-specific", "");
 #else
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
@@ -397,7 +397,7 @@ void SeparationProcessClientTest::processFailureTerminatesDescendants()
 void SeparationProcessClientTest::unixCancellationTerminatesDescendants()
 {
 #ifndef Q_OS_UNIX
-    QSKIP("Unix process-group cancellation is Unix-specific");
+    QSKIP("Unix process-group cancellation is Unix-specific", "");
 #else
     QTemporaryDir temporary;
     const QString marker = temporary.filePath(QStringLiteral("descendant.marker"));

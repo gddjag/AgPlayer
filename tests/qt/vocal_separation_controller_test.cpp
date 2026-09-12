@@ -2157,7 +2157,7 @@ void VocalSeparationControllerTest::externalRuntimePersistsStageFailure()
 void VocalSeparationControllerTest::macosPythonInterpreterLinksMustStayInThePrivateRuntime()
 {
 #ifndef Q_OS_MACOS
-    QSKIP("macOS uv venv interpreters use confined symlinks");
+    QSKIP("macOS uv venv interpreters use confined symlinks", "");
 #else
     QTemporaryDir root;
     QTemporaryDir outside;
@@ -2241,16 +2241,16 @@ void VocalSeparationControllerTest::externalRuntimeQuarantinesIncompletePythonWi
 #else
     QCOMPARE(recovery.size(), 2);
 #endif
-    bool evidencePreserved = false;
-    for (const auto& path : recovery) {
-        QFile build(fixture.filePath(path + "/BUILD"));
-        if (build.open(QIODevice::ReadOnly)) evidencePreserved |= build.readAll() == "partial-install-evidence";
-    }
 #ifdef Q_OS_MACOS
     QFile preserved(QDir(managed).filePath("BUILD"));
     QVERIFY(preserved.open(QIODevice::ReadOnly));
     QCOMPARE(preserved.readAll(), QByteArray("partial-install-evidence"));
 #else
+    bool evidencePreserved = false;
+    for (const auto& path : recovery) {
+        QFile build(fixture.filePath(path + "/BUILD"));
+        if (build.open(QIODevice::ReadOnly)) evidencePreserved |= build.readAll() == "partial-install-evidence";
+    }
     QVERIFY(evidencePreserved);
 #endif
     QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
@@ -2260,7 +2260,7 @@ void VocalSeparationControllerTest::externalRuntimeQuarantinesIncompletePythonWi
 void VocalSeparationControllerTest::explicitDemucsGpuRequiresCudaBeforeStartingWorker()
 {
 #ifdef Q_OS_MACOS
-    QSKIP("CUDA is Windows-specific; Mac CoreML/CPU policy has dedicated coverage");
+    QSKIP("CUDA is Windows-specific; Mac CoreML/CPU policy has dedicated coverage", "");
 #endif
     QTemporaryDir temporary;
     const QByteArray bytes("trusted-test-model");
@@ -2411,7 +2411,7 @@ void VocalSeparationControllerTest::externalRuntimeRepairReinstallsDependencies(
 void VocalSeparationControllerTest::gpuCardDistinguishesDetectedDriverFromMissingCuda()
 {
 #ifdef Q_OS_MACOS
-    QSKIP("CUDA is Windows-specific; Mac CoreML/CPU policy has dedicated coverage");
+    QSKIP("CUDA is Windows-specific; Mac CoreML/CPU policy has dedicated coverage", "");
 #endif
     // Read-only hardware integration: no model session, download or driver installation.
     QTemporaryDir root;
@@ -2425,7 +2425,7 @@ void VocalSeparationControllerTest::gpuCardDistinguishesDetectedDriverFromMissin
         }
         return !card.value("gpuReason").toString().contains(QStringLiteral("正在"));
     })(), 10000);
-    if (!card.value("gpuRuntimeConfigurable").toBool()) QSKIP("No NVIDIA driver on this test host");
+    if (!card.value("gpuRuntimeConfigurable").toBool()) QSKIP("No NVIDIA driver on this test host", "");
     QVERIFY(!card.value("gpuRuntimeReady").toBool());
     QVERIFY(!card.value("gpuHardwareName").toString().isEmpty());
     QVERIFY(!card.value("gpuDriverVersion").toString().isEmpty());
@@ -2437,7 +2437,7 @@ void VocalSeparationControllerTest::gpuCardDistinguishesDetectedDriverFromMissin
 void VocalSeparationControllerTest::cudaRuntimeRealCachedInstall()
 {
     const QString root = qEnvironmentVariable("AGPLAYER_CUDA_RUNTIME_TEST_ROOT");
-    if (root.isEmpty()) QSKIP("Opt-in: verifies and installs isolated pinned CUDA runtime");
+    if (root.isEmpty()) QSKIP("Opt-in: verifies and installs isolated pinned CUDA runtime", "");
     QNetworkAccessManager network;
     CudaSeparationRuntime runtime(root, &network);
     QSignalSpy changed(&runtime, &CudaSeparationRuntime::changed);
@@ -2455,7 +2455,7 @@ void VocalSeparationControllerTest::cudaRuntimeRealCachedInstall()
 void VocalSeparationControllerTest::externalRuntimeRealInstallAndCachedRepair()
 {
     const QString root = qEnvironmentVariable("AGPLAYER_EXTERNAL_RUNTIME_SMOKE_ROOT");
-    if (root.isEmpty()) QSKIP("Opt-in: installs an isolated optional Python environment");
+    if (root.isEmpty()) QSKIP("Opt-in: installs an isolated optional Python environment", "");
     QNetworkAccessManager network;
     ExternalSeparationRuntime runtime(root, &network);
     connect(&runtime, &ExternalSeparationRuntime::progress, &runtime,
@@ -2513,7 +2513,7 @@ void VocalSeparationControllerTest::existingPythonEnvironmentUpgradesTheBundledW
 void VocalSeparationControllerTest::pythonWorkerUpgradeRejectsARedirectedRuntimeRoot()
 {
 #ifndef Q_OS_WIN
-    QSKIP("NTFS junction coverage is Windows-only");
+    QSKIP("NTFS junction coverage is Windows-only", "");
 #else
     QTemporaryDir temporary;
     QTemporaryDir outside;
@@ -2723,7 +2723,7 @@ void VocalSeparationControllerTest::
 publishedStemReplacementWithJunctionIsRejectedByEveryAction()
 {
 #ifndef Q_OS_WIN
-    QSKIP("NTFS junction coverage is Windows-only");
+    QSKIP("NTFS junction coverage is Windows-only", "");
 #else
     QTemporaryDir temporary;
     QTemporaryDir external;
@@ -2761,7 +2761,7 @@ publishedStemReplacementWithJunctionIsRejectedByEveryAction()
         QVERIFY(QFile::copy(audioFixture(), external.filePath(name)));
     }
     if (!createJunction(jobDirectory, external.path())) {
-        QSKIP("This environment cannot create an NTFS directory junction");
+        QSKIP("This environment cannot create an NTFS directory junction", "");
     }
     JunctionGuard guard(jobDirectory);
     const QString playlistId = playlists.createPlaylist(QStringLiteral("安全检查"));
@@ -2783,7 +2783,7 @@ publishedStemReplacementWithJunctionIsRejectedByEveryAction()
 void VocalSeparationControllerTest::modelDeletionRefusesAReparseDirectory()
 {
 #ifndef Q_OS_WIN
-    QSKIP("NTFS junction coverage is Windows-only");
+    QSKIP("NTFS junction coverage is Windows-only", "");
 #else
     QTemporaryDir temporary;
     QTemporaryDir external;
@@ -2799,7 +2799,7 @@ void VocalSeparationControllerTest::modelDeletionRefusesAReparseDirectory()
     QVERIFY(QDir().mkpath(modelsRoot));
     const QString junction = QDir(modelsRoot).filePath(QStringLiteral("two-stem"));
     if (!createJunction(junction, external.path())) {
-        QSKIP("This environment cannot create an NTFS directory junction");
+        QSKIP("This environment cannot create an NTFS directory junction", "");
     }
     JunctionGuard guard(junction);
     AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
@@ -3413,7 +3413,7 @@ destructionBeforeImportCompletionLeavesPlaylistUnchanged()
 void VocalSeparationControllerTest::unicodeLongPathsWorkThroughHistoryAndExport()
 {
 #ifndef Q_OS_WIN
-    QSKIP("Windows long-path coverage");
+    QSKIP("Windows long-path coverage", "");
 #else
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
@@ -3422,7 +3422,7 @@ void VocalSeparationControllerTest::unicodeLongPathsWorkThroughHistoryAndExport(
         longPart += QStringLiteral("超长目录段0123456789/");
     const QString longRoot = QDir(temporary.path()).filePath(longPart);
     if (!QDir().mkpath(longRoot))
-        QSKIP("The active Windows filesystem/runtime cannot create a >260 Unicode path");
+        QSKIP("The active Windows filesystem/runtime cannot create a >260 Unicode path", "");
     QVERIFY(QFileInfo(longRoot).absoluteFilePath().size() > 260);
     const QByteArray modelBytes("trusted-test-model");
     auto options = optionsFor(temporary, QStringLiteral("success"), modelBytes);

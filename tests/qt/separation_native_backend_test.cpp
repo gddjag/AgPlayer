@@ -90,7 +90,7 @@ private slots:
 void SeparationNativeBackendTest::demucsGpuUsesAnIsolatedCudaRuntime()
 {
 #ifdef Q_OS_MACOS
-    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately");
+    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately", "");
 #endif
     QTemporaryDir runtime;
     QFile provider(runtime.filePath("onnxruntime_providers_cuda.dll"));
@@ -414,7 +414,7 @@ void SeparationNativeBackendTest::readsTheActualDefaultOnnxOpset()
 void SeparationNativeBackendTest::gpuSelectionTriesEveryAdapterUntilOnePasses()
 {
 #ifdef Q_OS_MACOS
-    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately");
+    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately", "");
 #endif
     SequencedNativeProviderProbe probe;
     probe.successfulGpuAdapter = 22;
@@ -435,7 +435,7 @@ void SeparationNativeBackendTest::gpuSelectionTriesEveryAdapterUntilOnePasses()
 void SeparationNativeBackendTest::gpuSelectionReportsEveryAdapterFailure()
 {
 #ifdef Q_OS_MACOS
-    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately");
+    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately", "");
 #endif
     SequencedNativeProviderProbe probe;
     NativeStartRequest request;
@@ -459,7 +459,7 @@ void SeparationNativeBackendTest::gpuSelectionReportsEveryAdapterFailure()
 void SeparationNativeBackendTest::demucsAutoAvoidsUnboundedDirectMlCompilation()
 {
 #ifdef Q_OS_MACOS
-    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately");
+    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately", "");
 #endif
     SequencedNativeProviderProbe probe;
     probe.successfulGpuAdapter = 11;
@@ -482,7 +482,7 @@ void SeparationNativeBackendTest::demucsAutoAvoidsUnboundedDirectMlCompilation()
 void SeparationNativeBackendTest::autoSelectionTriesEveryGpuBeforeCpuFallback()
 {
 #ifdef Q_OS_MACOS
-    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately");
+    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately", "");
 #endif
     SequencedNativeProviderProbe probe;
     NativeStartRequest request;
@@ -508,7 +508,7 @@ probeReportsHardwareGpuCandidateWithoutClaimingInferenceValidation()
     const QString runtimePath = QDir(QCoreApplication::applicationDirPath())
                                     .filePath(QStringLiteral("onnxruntime_test.dll"));
     if (!QFileInfo::exists(runtimePath))
-        QSKIP("The native-backend test runtime is not available");
+        QSKIP("The native-backend test runtime is not available", "");
 
     NativeWorkerBackend backend;
     const BackendResult result = backend.probe(
@@ -534,7 +534,7 @@ probeReportsHardwareGpuCandidateWithoutClaimingInferenceValidation()
 void SeparationNativeBackendTest::macosProvidersRequireInferenceAndPreserveCpuFallback()
 {
 #ifndef Q_OS_MACOS
-    QSKIP("macOS hardware policy; Windows adapters are tested separately");
+    QSKIP("macOS hardware policy; Windows adapters are tested separately", "");
 #else
     SequencedNativeProviderProbe probe;
     NativeStartRequest request;

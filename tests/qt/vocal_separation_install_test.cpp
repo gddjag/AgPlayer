@@ -562,7 +562,7 @@ void VocalSeparationInstallTest::runtimeVerificationRejectsChangedNativeFile()
     const QString packagePath = QDir(QStandardPaths::writableLocation(
         QStandardPaths::TempLocation)).filePath(QStringLiteral("agplayer-ort-1.24.4.nupkg"));
     if (!QFileInfo(packagePath).isFile()) {
-        QSKIP("Pinned DirectML archive fixture is unavailable");
+        QSKIP("Pinned DirectML archive fixture is unavailable", "");
     }
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
@@ -590,7 +590,7 @@ void VocalSeparationInstallTest::cancelledRuntimeExtractionStopsAndCleansKnownSt
     const QString packagePath = QDir(QStandardPaths::writableLocation(
         QStandardPaths::TempLocation)).filePath(QStringLiteral("agplayer-ort-1.24.4.nupkg"));
     if (!QFileInfo(packagePath).isFile()) {
-        QSKIP("Pinned DirectML archive fixture is unavailable");
+        QSKIP("Pinned DirectML archive fixture is unavailable", "");
     }
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
@@ -626,7 +626,7 @@ void VocalSeparationInstallTest::runtimeExtractionRefusesUnsafePreexistingStagin
     const QString packagePath = QDir(QStandardPaths::writableLocation(
         QStandardPaths::TempLocation)).filePath(QStringLiteral("agplayer-ort-1.24.4.nupkg"));
     if (!QFileInfo(packagePath).isFile()) {
-        QSKIP("Pinned DirectML archive fixture is unavailable");
+        QSKIP("Pinned DirectML archive fixture is unavailable", "");
     }
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
@@ -657,7 +657,7 @@ void VocalSeparationInstallTest::downloaderRefusesUnsafePartialFile()
     const QString destination = holder.filePath(QStringLiteral("model.onnx"));
     const QString partial = VocalSeparationInstaller::partPath(destination);
     if (!createDirectoryLink(partial, external.path())) {
-        QSKIP("directory symlink or junction creation is unavailable");
+        QSKIP("directory symlink or junction creation is unavailable", "");
     }
     DirectoryLinkGuard linkGuard(partial);
 
