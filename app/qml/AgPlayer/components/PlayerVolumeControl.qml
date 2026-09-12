@@ -113,6 +113,7 @@ Item {
     Label {
         id: volumePercent
         objectName: "volumePercentLabel"
+        clip: true
         anchors.left: volumeSlider.right; anchors.leftMargin: width > 0 ? 4 : 0; anchors.verticalCenter: parent.verticalCenter
         property real animatedWidth: root.showExpandedPercent ? 38 : 0
         width: Math.max(0, Math.min(animatedWidth,

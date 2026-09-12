@@ -810,9 +810,19 @@ int main(const int argc, char** argv)
     assert(snapshot.duration_ms > 0);
     const long long video_seek_target = snapshot.duration_ms / 2;
     assert(video_seek_target > 0);
+    const auto video_play_started = std::chrono::steady_clock::now();
     assert(ag_player_play(player) == AG_OK);
     assert(ag_player_seek(player, video_seek_target) == AG_OK);
     assert(ag_player_snapshot(player, &snapshot) == AG_OK);
+    if (snapshot.state != AG_PLAYING) {
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - video_play_started).count();
+        std::fprintf(stderr,
+            "video seek state=%d position=%lld duration=%lld target=%lld elapsed=%lld ms\n",
+            static_cast<int>(snapshot.state), static_cast<long long>(snapshot.position_ms),
+            static_cast<long long>(snapshot.duration_ms), video_seek_target,
+            static_cast<long long>(elapsed));
+    }
     assert(snapshot.state == AG_PLAYING);
     assert(snapshot.position_ms >= video_seek_target);
     assert(snapshot.position_ms <= snapshot.duration_ms);

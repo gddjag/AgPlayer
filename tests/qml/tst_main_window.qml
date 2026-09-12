@@ -5118,7 +5118,9 @@ TestCase {
         var previousEnabled = SettingsController.listWaveformThumbnailEnabled
         var previousMode = SettingsController.listWaveformThumbnailMode
         SettingsController.listWaveformThumbnailEnabled = false
-        var list = trackListComponent.createObject(mainWindow.contentItem)
+        // QtTest destroys this overlay even when a check fails, so later
+        // pointer tests cannot be intercepted by a leaked list.
+        var list = createTemporaryObject(trackListComponent, mainWindow.contentItem)
         verify(list)
         tryVerify(function() { return list.count > 0 })
         compare(list.rowHeight, Theme.listRowHeight)
@@ -5137,7 +5139,10 @@ TestCase {
             return TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
                     > readsBefore
         }, 3000)
-        wait(100)
+        verify(waitForRendering(list))
+        tryVerify(function() {
+            return TrackWaveformThumbnailProvider.diagnostics().inFlightTracks === 0
+        }, 5000)
         var settledReads = TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
         SettingsController.listWaveformThumbnailMode = "Mono"
         wait(100)

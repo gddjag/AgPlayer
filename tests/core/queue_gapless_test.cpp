@@ -4,6 +4,7 @@
 #undef NDEBUG
 
 #include "audio_engine.hpp"
+#include "decoder.hpp"
 
 #include <agplayer/c_api.h>
 
@@ -173,11 +174,17 @@ int main(const int argc, char** argv)
         stage("duration fixture and EOF begin");
         const std::filesystem::path vbr_fixture =
             write_vbr_fixture_with_incorrect_duration(argv[3]);
+        // Verify the inflated header before the engine's background decoder
+        // can reach EOF and correct the published duration.
+        {
+            agplayer::Decoder probe;
+            AG_CHECK(probe.open(vbr_fixture.string()) == AG_OK);
+            AG_CHECK(probe.metadata().duration_ms > 10'000);
+        }
         {
             agplayer::AudioEngine duration_engine(
                 agplayer::AudioBackend::Manual, 65'536U);
             AG_CHECK(duration_engine.set_queue({vbr_fixture.string()}, 0U) == AG_OK);
-            AG_CHECK(duration_engine.snapshot().duration_ms > 10'000);
             AG_CHECK(duration_engine.play() == AG_OK);
             std::array<float, 512U * channels> final_block{};
             const auto deadline = std::chrono::steady_clock::now()

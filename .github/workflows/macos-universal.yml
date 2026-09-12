@@ -113,6 +113,12 @@ jobs:
           if [ -f "$RUNNER_TEMP/queue-gapless-sample.txt" ]; then
             head -n 210 "$RUNNER_TEMP/queue-gapless-sample.txt"
           fi
+          if [ "$test_status" -eq 0 ]; then
+            # These two tests previously failed intermittently on the Mac host.
+            ctest --test-dir build/macos-universal --output-on-failure \
+              -R '^(audio_engine_test|queue_gapless_test)$' --repeat until-fail:3
+            test_status=$?
+          fi
           exit "$test_status"
       - name: Deploy and audit a single Universal development package
         run: >-
