@@ -5378,6 +5378,7 @@ Clear: Remove all known aliases for this field.</translation>
     </context>
 <context>
         <name>SettingsPage</name>
+        <message><source>聚焦后按下要设置的快捷键</source><translation>Focus this field and press the shortcut you want to use</translation></message>
         <message>
             <source>下载由浏览器完成。若下载卡顿、超时或失败，请返回官网切换 GitHub / R2 线路。</source>
             <translation>Your browser handles downloads. If a download stalls, times out or fails, return to the official website and switch between GitHub and R2.</translation>
@@ -8613,6 +8614,11 @@ A pinned NVIDIA CUDA version is installed separately without changing the existi
 </context>
 <context>
         <name>Main</name>
+        <message><source>设置…</source><translation>Settings…</translation></message>
+        <message><source>退出 AgPlayer</source><translation>Quit AgPlayer</translation></message>
+        <message><source>窗口</source><translation>Window</translation></message>
+        <message><source>最小化</source><translation>Minimise</translation></message>
+        <message><source>关闭窗口</source><translation>Close Window</translation></message>
         <message>
             <source>AgPlayer 桌面沉浸</source>
             <translation>AgPlayer Desktop Immersion</translation>
@@ -8916,5 +8922,12 @@ A pinned NVIDIA CUDA version is installed separately without changing the existi
         <message><source>是</source><translation>Yes</translation></message>
         <message><source>否</source><translation>No</translation></message>
         <message><source>关闭</source><translation>Close</translation></message>
+    </context>
+    <context>
+        <name>ThemedMacWindowControls</name>
+        <message><source>关闭窗口</source><translation>Close Window</translation></message>
+        <message><source>最小化</source><translation>Minimise</translation></message>
+        <message><source>退出全屏</source><translation>Exit Full Screen</translation></message>
+        <message><source>进入全屏</source><translation>Enter Full Screen</translation></message>
     </context>
 </TS>
