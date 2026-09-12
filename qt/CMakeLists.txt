@@ -214,6 +214,8 @@ qt_add_shaders(agplayer_qt agplayer_terrain_reactor_shaders
         shaders/terrain_reactor.vert
         shaders/terrain_reactor.frag
         shaders/terrain_shadow.frag
+        shaders/terrain_lyrics.vert
+        shaders/terrain_lyrics.frag
         shaders/terrain_glow_extract.frag
         shaders/terrain_glow_blur.frag
 )

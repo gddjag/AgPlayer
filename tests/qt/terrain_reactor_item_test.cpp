@@ -293,7 +293,9 @@ void TerrainReactorItemTest::firstTerrainFrameUsesActualDelta()
         eq, {true,true,true,true,true,true,true,true}, .008, 50);
     QCOMPARE(resumed.terrain.bands[0], expected.bands[0]);
     agplayer::visual::KickResponse kick;
-    const auto expectedKick = kick.process(resumed.audio.spectrum, 1.0 / 60.0, 100);
+    agplayer::VisualSpectrumAnalyzer spectrum;
+    spectrum.process(snapshot.pcm.pcm);
+    const auto expectedKick = kick.process(spectrum.onsetSpectrum(), 1.0 / 60.0, 100);
     QCOMPARE(resumed.audio.kick.envelope, expectedKick.envelope);
     QCOMPARE(resumed.audio.kick.level, expectedKick.level);
 }

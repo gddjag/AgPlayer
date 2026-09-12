@@ -570,6 +570,7 @@ ApplicationWindow {
     Component {
         id: fullscreenWindowComponent
         ImmersiveWindow {
+            dropUrlsSubmitter: mainWindow.handleShellDropUrls
             waveformSession: sharedWaveformSession
             renderingEnabled: mainWindow.immersiveRenderingEnabled
             qaSyntheticFeatures: mainWindow.qaImmersiveSynthetic

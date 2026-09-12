@@ -2,6 +2,7 @@
 #include "terrain_reactor_gpu_data.hpp"
 #include "terrain_column_mesh.hpp"
 #include "terrain_shadow_map.hpp"
+#include "terrain_spatial_lyrics.hpp"
 
 #include "audio_visual_feature_controller.hpp"
 #include "player_experience_controller.hpp"
@@ -201,7 +202,7 @@ protected:
             floatingParameters_ = {};
             meteorParticles_.reset();
             snareTrigger_.reset();
-            renderBeatCount_ = 0;
+            consumedRippleRevision_ = next.rippleRevision;
             TerrainReactorItem::restoreRenderAudioEvents(renderBeat_, renderImpact_, next, *resourceState_);
         }
         if (visualReset) {
@@ -350,12 +351,10 @@ protected:
             if (frame.valid && processed.beatCount > 0) {
                 renderBeat_.strength = float(processed.beatStrength);
                 renderBeat_.revision += quint64(processed.beatCount);
-                const quint64 previousGroup = renderBeatCount_ / 8;
-                renderBeatCount_ += quint64(processed.beatCount);
-                if (renderBeatCount_ / 8 > previousGroup) {
-                    renderImpact_.strength = renderBeat_.strength;
-                    ++renderImpact_.revision;
-                }
+            }
+            if (frame.valid && processed.meteor.triggered) {
+                renderImpact_.strength = float(processed.meteor.strength);
+                ++renderImpact_.revision;
             }
             // Render owns the analysis; GUI properties receive a value copy.
             // Reset/activity versions reject queued reports from an old source,
@@ -395,9 +394,9 @@ protected:
         const float waveStrength = newImpact ? frameImpact.strength : frameBeat.strength;
         if (!snapshot_.style.meteorsEnabled) meteorFlight_.cancel();
         if (newImpact && snapshot_.style.meteorsEnabled && !meteorOrigins_.isEmpty()
-            && waveStrength > 0.0F && waveGate_.consume(renderTimeSeconds, waveStrength)) {
-            // A launch reserves this event's gate until touchdown; ordinary
-            // beats remain eligible after the shared spacing gate reopens.
+            && waveStrength > 0.0F && (snapshot_.referenceAudio
+                || waveGate_.consume(renderTimeSeconds, waveStrength))) {
+            // Reference meteors use their own high-frequency trigger/cooldown.
             meteorFlight_.launch(renderTimeSeconds, int(meteorOrigins_.size()), waveStrength);
         }
         const bool meteorLanded = meteorFlight_.landed(renderTimeSeconds);
@@ -405,19 +404,19 @@ protected:
         else meteorParticles_.frame(float(wallElapsedSeconds), meteorFlight_.trajectory(),
             meteorFlight_.age(renderTimeSeconds), meteorFlight_.group() >= 0
                 && meteorFlight_.age(renderTimeSeconds) < meteorFlight_.duration(), meteorLanded);
-        // The product's shared 3--6s wave interval starts at actual display,
-        // not the earlier meteor launch. A touchdown wins over a same-frame Snare.
+        // Legacy material spacing starts at touchdown. Reference colored and
+        // Snare waves are independent of this gate.
         if (meteorLanded && snapshot_.style.ripplesEnabled)
             waveGate_.anchor(renderTimeSeconds, meteorFlight_.strength());
-        const auto snareWave = consumeSnareWave(waveGate_, renderTimeSeconds,
+        TravelingWaveGate unsharedSnareGate;
+        const auto snareWave = consumeSnareWave(unsharedSnareGate, renderTimeSeconds,
             snareStrength, snapshot_.seed ^ ((waveSequence_ + 1U) * 0x9e3779b9U),
             snapshot_.referenceAudio && snapshot_.style.ripplesEnabled, meteorLanded);
         if (!snapshot_.style.ripplesEnabled) {
             travelingWaves_.fill(QVector4D());
         } else {
-            // The reference scene's colored waves use its independent Pulse
-            // detector and ten-slot ring buffer. Do not apply the native
-            // 3--6 second presentation gate or substitute Kick confidence.
+            // Confirmed PCM kicks feed the reference ten-slot wave pool;
+            // no additional presentation gate may suppress repeated drums.
             for (int wave = 0; wave < pulseWaveCount; ++wave) {
                 const int slot = nextWave_ % int(travelingWaves_.size());
                 nextWave_ = (slot + 1) % int(travelingWaves_.size());
@@ -449,20 +448,69 @@ protected:
             renderTimeSeconds);
         const ImpactPulseSnapshot impact = impactEvents_.snapshot(
             renderTimeSeconds);
+        if (snapshot_.rippleRevision != consumedRippleRevision_) {
+            consumedRippleRevision_ = snapshot_.rippleRevision;
+            if (snapshot_.style.ripplesEnabled) {
+                const auto camera = camera_.snapshot();
+                const float radius = camera.distance;
+                const QVector3D eye(radius * std::cos(camera.pitch) * std::sin(camera.yaw),
+                    radius * std::sin(camera.pitch),
+                    radius * std::cos(camera.pitch) * std::cos(camera.yaw));
+                QMatrix4x4 projection, view;
+                const QSize size = renderTarget()->pixelSize();
+                projection.perspective(45.0F, float(size.width()) / std::max(1, size.height()), .1F, 1000.0F);
+                view.lookAt(eye, QVector3D(), QVector3D(0, 1, 0));
+                const auto inverse = (projection * view).inverted();
+                const float x = float(snapshot_.ripplePosition.x() * 2 - 1);
+                const float y = float(1 - snapshot_.ripplePosition.y() * 2);
+                const QVector3D nearPoint = (inverse * QVector4D(x, y, -1, 1)).toVector3DAffine();
+                const QVector3D farPoint = (inverse * QVector4D(x, y, 1, 1)).toVector3DAffine();
+                const QVector3D ray = farPoint - nearPoint;
+                if (std::abs(ray.y()) > 1e-6F) {
+                    const float distance = -nearPoint.y() / ray.y();
+                    QVector3D hit = nearPoint + ray * distance;
+                    if (snapshot_.style.rippleColor.w() > .5F) {
+                        // The pointer ray is in world space; wave origins are
+                        // local to the rotating reference platter.
+                        const float c = std::cos(platterAngle_), s = std::sin(platterAngle_);
+                        hit = QVector3D(c * hit.x() - s * hit.z(), 0,
+                                        s * hit.x() + c * hit.z());
+                    }
+                    if (distance >= 0 && std::abs(hit.x()) <= 84 && std::abs(hit.z()) <= 84) {
+                        const auto slot = std::size_t(nextWave_++ % int(travelingWaves_.size()));
+                        travelingWaves_[slot] = QVector4D(hit.x(), hit.z(), renderTimeSeconds, 1.0F);
+                    }
+                }
+            }
+        }
         visual.beatStrength = beat.strength * snapshot_.style.rhythmSensitivity
             * snapshot_.style.rhythmStrength;
         visual.beatAge = beat.age;
         visual.impactStrength = impact.strength;
         visual.impactAge = impact.age;
         const RenderDynamics dynamics = mapRenderDynamics(snapshot_.style);
+        const bool referenceTheme = snapshot_.style.rippleColor.w() > .5F;
         camera_.advance(renderTimeSeconds, float(animationElapsedSeconds),
-                        dynamics.autoRotateSpeed);
+                        referenceTheme ? 0.0F : dynamics.autoRotateSpeed);
+        if (referenceTheme && snapshot_.style.autoRotate > 0)
+            platterAngle_ = std::fmod(platterAngle_ + float(animationElapsedSeconds)
+                * snapshot_.style.autoRotateSpeed, 6.28318530718F);
         UniformBlock uniforms = buildUniforms(visual, camera_.snapshot());
         shadow_.configure(rhi(), uniforms,
             snapshot_.quality != TerrainReactorItem::Quality::Eco
             && quality_.stage() < DegradationStage::ReducedGrid
             && snapshot_.style.materialMode != 2);
         QRhiResourceUpdateBatch* updates = rhi()->nextResourceUpdateBatch();
+        if (!spatialLyrics_.prepare(rhi(), renderTarget(), updates, uniforms.mvp,
+                snapshot_.spatialLyrics, !snapshot_.spatialLyrics.isEmpty(),
+                float(wallElapsedSeconds), snapshot_.lyricOpacity,
+                snapshot_.lyricOrbit, snapshot_.lyricElevation,
+                snapshot_.lyricScale, snapshot_.lyricDepth, snapshot_.lyricColor)) {
+            updates->release();
+            fail(TerrainReactorItem::RenderStatus::ResourceError,
+                 QStringLiteral("Unable to create spatial lyrics resources"));
+            return;
+        }
         updates->updateDynamicBuffer(uniformBuffer_.get(), 0,
                                      sizeof(UniformBlock), &uniforms);
         if (instancesDirtyUpload_) {
@@ -523,6 +571,7 @@ protected:
                                       QRhiCommandBuffer::IndexUInt16);
         commandBuffer->drawIndexed(cubeIndexCount,
             quint32(instances_.size() - currentTerrainCount_));
+        spatialLyrics_.draw(commandBuffer);
         commandBuffer->endPass();
         telemetry_->terrainCount.store(currentTerrainCount_, std::memory_order_release);
 
@@ -840,7 +889,8 @@ private:
         result.stylePresentation[0] = dynamics.rhythmStrength;
         result.stylePresentation[1] = dynamics.depthOfField;
         result.stylePresentation[2] = dynamics.subjectClarity;
-        result.stylePresentation[3] = dynamics.autoRotateSpeed;
+        result.stylePresentation[3] = snapshot_.style.rippleColor.w() > .5F
+            ? platterAngle_ : dynamics.autoRotateSpeed;
         result.impact[0] = visual.impactStrength;
         result.impact[1] = visual.impactAge;
         result.impact[2] = float(meteorFlight_.group() + 1);
@@ -910,6 +960,7 @@ private:
 
     void releaseResources()
     {
+        spatialLyrics_.reset();
         telemetry_->stableRenderedFrames.store(0, std::memory_order_release);
         telemetry_->terrainCount.store(0, std::memory_order_release);
         telemetry_->renderedFeatureRevision.store(0, std::memory_order_release);
@@ -1002,7 +1053,6 @@ private:
     agplayer::VisualSnareTrigger snareTrigger_;
     BeatEvent renderBeat_;
     ImpactEvent renderImpact_;
-    quint64 renderBeatCount_ = 0;
     std::uint64_t lastPcmFrameSequence_ = 0;
     quint64 analysisFrames_ = 0;
     agplayer::VisualSpectrumFeatures::Features referenceDescriptors_;
@@ -1024,6 +1074,9 @@ private:
     QVector<QVector3D> meteorOrigins_;
     TravelingWaveGate waveGate_;
     int nextWave_ = 0;
+    TerrainSpatialLyrics spatialLyrics_;
+    quint64 consumedRippleRevision_ = 0;
+    float platterAngle_ = 0;
     int currentSampleCount_ = 4;
     bool waveSourcesInitialized_ = false;
     TrackPalette currentPalette_{};
@@ -1538,6 +1591,24 @@ void TerrainReactorItem::triggerCameraPunch(qreal strength)
     scheduleIfRunnable();
 }
 
+void TerrainReactorItem::triggerRipple(qreal x, qreal y)
+{
+    if (!active_ || !hostExposed_ || width() <= 0 || height() <= 0
+        || !std::isfinite(x) || !std::isfinite(y)) return;
+    ripplePosition_ = QPointF(std::clamp(x / width(), 0.0, 1.0),
+                             std::clamp(y / height(), 0.0, 1.0));
+    ++rippleRevision_;
+    scheduleIfRunnable();
+}
+
+void TerrainReactorItem::setSpatialLyrics(const QStringList& lines)
+{
+    if (spatialLyrics_ == lines) return;
+    spatialLyrics_ = lines;
+    emit spatialLyricsChanged();
+    scheduleIfRunnable();
+}
+
 QQuickRhiItemRenderer* TerrainReactorItem::createRenderer()
 {
     const bool softwareBackend = window() != nullptr
@@ -1570,6 +1641,19 @@ TerrainReactorItem::RenderSnapshot TerrainReactorItem::snapshotForRenderer() con
     result.visualResetRevision = visualResetRevision_;
     result.style = renderStyle_;
     result.camera = camera_.snapshot();
+    result.ripplePosition = ripplePosition_;
+    result.rippleRevision = rippleRevision_;
+    result.spatialLyrics = spatialLyrics_;
+    if (styleSource_) {
+        result.lyricOpacity = float(styleSource_->lyricOpacity()) / 100.0F;
+        result.lyricOrbit = -.663225116F + float(styleSource_->lyricPositionX() - 50) * .06283185F
+            + float(styleSource_->lyricPosition() - 1) * .5F;
+        result.lyricElevation = float(42 - styleSource_->lyricPositionY());
+        result.lyricScale = float(styleSource_->lyricSize()) / 100.0F;
+        result.lyricDepth = 1.0F + float(styleSource_->lyricDepth() - 62) / 100.0F;
+        const QColor background(styleSource_->themeBackground());
+        result.lyricColor = background.lightnessF() > .65 ? QColor(30,35,44) : QColor(Qt::white);
+    }
     result.punchEvent = pendingPunch_;
     result.beatEvent = pendingBeat_;
     result.impactEvent = pendingImpact_;
@@ -1755,7 +1839,7 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
     return {audio, terrain, snareOutput, audio.kick.onset > 0 ? 1 : 0,
             audio.kick.onset > 0 ? audio.kick.confidence : 0.0,
             audio.pulse.triggered ? 1 : 0,
-            audio.pulse.triggered ? audio.pulse.strength : 0.0};
+            audio.pulse.triggered ? audio.pulse.strength : 0.0, audio.meteor};
 }
 
 TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudioFrames(
@@ -1768,6 +1852,7 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
     int pulseCount = 0;
     double pulseStrength = 0.0;
     agplayer::VisualSnareTrigger::Output strongestSnare;
+    agplayer::VisualSnareTrigger::Output strongestMeteor;
     const agplayer::VisualAudioFrameAnalyzer::Frame* finalAudio = nullptr;
     const agplayer::VisualSpectrumFeatures::Features* finalTerrain = nullptr;
     const auto analyzePcm = [&](const agplayer::VisualAudioFrameAnalyzer::Snapshot& pcm,
@@ -1785,7 +1870,7 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
             audio.kick.onset > 0 ? 1 : 0,
             audio.kick.onset > 0 ? audio.kick.confidence : 0.0,
             audio.pulse.triggered ? 1 : 0,
-            audio.pulse.triggered ? audio.pulse.strength : 0.0};
+            audio.pulse.triggered ? audio.pulse.strength : 0.0, audio.meteor};
     };
 
     for (std::size_t index = 0; index < snapshot.pcmBatch.count; ++index) {
@@ -1807,6 +1892,7 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
         beatStrength = std::max(beatStrength, analyzed.beatStrength);
         pulseCount += analyzed.pulseCount;
         pulseStrength = std::max(pulseStrength, analyzed.pulseStrength);
+        if (analyzed.meteor.triggered) strongestMeteor = analyzed.meteor;
         if (analyzed.snare.triggered
             && analyzed.snare.strength >= strongestSnare.strength) {
             strongestSnare = analyzed.snare;
@@ -1828,6 +1914,7 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
             strongestSnare = frame.snare;
             pulseCount = frame.pulseCount;
             pulseStrength = frame.pulseStrength;
+            strongestMeteor = frame.meteor;
             if (snapshot.pcm.sequence > consumedSequence)
                 consumedSequence = snapshot.pcm.sequence;
         } else {
@@ -1839,7 +1926,7 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
         }
     }
     return {*finalAudio, *finalTerrain, strongestSnare, beatCount, beatStrength,
-            pulseCount, pulseStrength};
+            pulseCount, pulseStrength, strongestMeteor};
 }
 
 void TerrainReactorItem::restoreRenderAudioEvents(BeatEvent& beat, ImpactEvent& impact,

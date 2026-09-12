@@ -83,6 +83,7 @@ class TerrainReactorItem : public QQuickRhiItem {
     Q_PROPERTY(RenderStatus renderStatus READ renderStatus
                    NOTIFY renderStatusChanged)
     Q_PROPERTY(QString diagnostic READ diagnostic NOTIFY renderStatusChanged)
+    Q_PROPERTY(QStringList spatialLyrics READ spatialLyrics WRITE setSpatialLyrics NOTIFY spatialLyricsChanged)
 
 public:
     enum class Quality {
@@ -161,8 +162,12 @@ public:
                              qreal nowSeconds);
     Q_INVOKABLE void zoomBy(qreal wheelDelta, qreal nowSeconds);
     Q_INVOKABLE void triggerCameraPunch(qreal strength);
+    Q_INVOKABLE void triggerRipple(qreal x, qreal y);
+    QStringList spatialLyrics() const { return spatialLyrics_; }
+    void setSpatialLyrics(const QStringList& lines);
 
 signals:
+    void spatialLyricsChanged();
     void activeChanged();
     void hostExposedChanged();
     void renderingRequestedChanged();
@@ -216,6 +221,15 @@ private:
         agplayer::terrain::ImpactEvent impactEvent;
         double cameraManualUntilSeconds = 0.0;
         quint64 cameraRevision = 0;
+        QPointF ripplePosition;
+        quint64 rippleRevision = 0;
+        QStringList spatialLyrics;
+        float lyricOpacity = .94F;
+        float lyricOrbit = 0;
+        float lyricElevation = 0;
+        float lyricScale = 1;
+        float lyricDepth = 1;
+        QColor lyricColor = Qt::white;
         quint32 seed = 0x5eedU;
         agplayer::terrain::TrackPalette trackPalette;
         quint64 paletteRevision = 0;
@@ -237,6 +251,7 @@ private:
         double beatStrength = 0.0;
         int pulseCount = 0;
         double pulseStrength = 0.0;
+        agplayer::VisualSnareTrigger::Output meteor;
     };
     static ReferenceAudioFrame advanceReferenceAudioFrame(
         agplayer::VisualAudioFrameAnalyzer& analyzer,
@@ -297,6 +312,9 @@ private:
     quint64 featureRevision_ = 0;
     quint64 styleRevision_ = 0;
     quint64 cameraRevision_ = 0;
+    QPointF ripplePosition_;
+    quint64 rippleRevision_ = 0;
+    QStringList spatialLyrics_;
     agplayer::terrain::PunchEvent pendingPunch_;
     agplayer::terrain::BeatEvent pendingBeat_;
     agplayer::terrain::ImpactEvent pendingImpact_;

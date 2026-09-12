@@ -386,7 +386,7 @@ private:
     int jellyElasticity_ = 35;
     int inkDensity_ = 60;
     int rippleStrength_ = 100;
-    int rippleWidth_ = 120;
+    int rippleWidth_ = 100;
     int rippleDecay_ = 100;
     int floatingBlockMinSize_ = 9;
     int floatingBlockMaxSize_ = 26;
@@ -396,7 +396,7 @@ private:
     int columnDensity_ = 130;
     int topographyDensity_ = 46;
     int columnOpacity_ = 100;
-    int reactorBrightness_ = 68;
+    int reactorBrightness_ = 100;
     int columnInnerLight_ = 100;
     int columnLightSpill_ = 20;
     int columnLightRadius_ = 100;
@@ -409,7 +409,7 @@ private:
     float themeGlow_ = 1.0F;
     QColor themeBackground_ = QColor(QStringLiteral("#030817"));
     bool applyingTheme_ = false;
-    int terrainAmplitude_ = 38;
+    int terrainAmplitude_ = 50;
     int motionResponse_ = 50;
     int gradientLayers_ = 74;
     int glowIntensity_ = 38;
@@ -421,7 +421,7 @@ private:
     bool floatingCubesEnabled_ = true;
     bool meteorsEnabled_ = true;
     bool idleBreathingEnabled_ = true;
-    bool themeCycleEnabled_ = true;
+    bool themeCycleEnabled_ = false;
     bool themeSongCycleEnabled_ = false;
     int themeCycleIntervalSeconds_ = 10;
     bool streamHighlightEnabled_ = true;
@@ -442,6 +442,6 @@ private:
     int rhythmStrength_ = 30;
     int depthOfField_ = 86;
     int subjectClarity_ = 112;
-    int autoRotateSpeed_ = 42;
-    int rhythmSensitivity_ = 80;
+    int autoRotateSpeed_ = 15;
+    int rhythmSensitivity_ = 100;
 };

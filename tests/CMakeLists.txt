@@ -1,4 +1,8 @@
 add_executable(visual_kick_response_test qt/visual_kick_response_test.cpp)
+add_executable(visual_music_probe EXCLUDE_FROM_ALL qt/visual_music_probe.cpp)
+target_include_directories(visual_music_probe PRIVATE "${CMAKE_SOURCE_DIR}/qt/src" "${CMAKE_SOURCE_DIR}/core/src")
+target_link_libraries(visual_music_probe PRIVATE agplayer_core Qt6::Core)
+agplayer_enable_warnings(visual_music_probe)
 add_executable(visual_terrain_response_test qt/visual_terrain_response_test.cpp)
 target_include_directories(visual_terrain_response_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src")
 agplayer_enable_warnings(visual_terrain_response_test)

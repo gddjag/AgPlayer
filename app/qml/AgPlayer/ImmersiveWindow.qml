@@ -10,6 +10,7 @@ Window {
     transientParent: null
 
     property var waveformSession: null
+    property var dropUrlsSubmitter: null
     property bool renderingEnabled: true
     property bool qaSyntheticFeatures: false
     property int qaViewportWidth: 0
@@ -248,6 +249,14 @@ Window {
                     root.startSystemMove()
             }
         }
+    }
+
+    FileDropArea {
+        objectName: "immersiveFileDropArea"
+        anchors.fill: parent
+        z: 40
+        enabled: root.visible
+        urlsSubmitter: root.dropUrlsSubmitter
     }
 
     Component.onCompleted: synchronizeHost()

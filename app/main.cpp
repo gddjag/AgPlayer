@@ -1474,6 +1474,21 @@ int main(int argc, char* argv[])
             }
             nativeDrops.registerWindow(nativeMainWindow,
                                        NativeDropRouter::Target::Main);
+            QPointer<QWindow> immersiveDropWindow;
+            const auto immersiveDropConnection = QObject::connect(&windows, &WindowController::immersivePresentationActiveChanged,
+                             &nativeDrops, [&windows, &nativeDrops, mainWindow, &immersiveDropWindow]() {
+                if (!windows.immersivePresentationActive()) return;
+                auto* window = mainWindow->findChild<QWindow*>(QStringLiteral("immersiveVisualWindow"));
+                if (window == nullptr) return;
+                if (immersiveDropWindow != window) {
+                    immersiveDropWindow = window;
+                    QObject::connect(window, &QWindow::visibleChanged, &nativeDrops,
+                                     [&nativeDrops, window](bool visible) {
+                        if (visible) nativeDrops.registerWindow(window, NativeDropRouter::Target::Main);
+                    });
+                }
+                nativeDrops.registerWindow(window, NativeDropRouter::Target::Main);
+            });
             const QPointer<QObject> mainDropTarget = mainWindow;
             nativeDrops.registerHitTarget(
                 nativeMainWindow, NativeDropRouter::Target::ResourceFolder,
@@ -2339,6 +2354,7 @@ int main(int argc, char* argv[])
             }
 
             QObject::disconnect(audioToolsVisibleConnection);
+            QObject::disconnect(immersiveDropConnection);
             app.removeNativeEventFilter(&hotkeys);
             hotkeys.unregisterAll();
             windows.setShutdownActions({});

@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cmath>
 namespace agplayer::visual {
-// Standalone numerical study component; not connected to production playback.
+// Production onset/envelope detector shared by the PCM renderer and studies.
 // Fixed storage keeps processing allocation-free and independent of Qt.
 class KickResponse {
 public:
@@ -23,13 +23,18 @@ public:
         };
         const double gain = parameter(2.6, 1.8, 1.1);
         const double minimum = parameter(.07, .045, .025);
-        double mean = 0;
-        for (double value : history_) mean += value;
-        mean /= history_.size();
-        double variance = 0;
-        for (double value : history_) variance += (value - mean) * (value - mean);
+        // A loud introduction must not raise the gate above identical later
+        // kicks after a bass layer enters. Estimate the noise floor with
+        // median/MAD, so preceding drum peaks do not become the noise gate.
+        // The absolute flux minimum still rejects silence and low-level jitter.
+        auto sorted = history_;
+        std::sort(sorted.begin(), sorted.end());
+        const double median = (sorted[44] + sorted[45]) * .5;
+        for (double& value : sorted) value = std::abs(value - median);
+        std::sort(sorted.begin(), sorted.end());
+        const double deviation = (sorted[44] + sorted[45]) * .5 * 1.4826;
         const double threshold = (std::max)(parameter(.05, .028, .016),
-            mean + gain * std::sqrt(variance / history_.size()));
+            median + gain * deviation);
 
         std::array<double, 4> levels{}, changes{};
         constexpr std::array<std::size_t, 4> starts{0, 1, 2, 0}, ends{2, 4, 6, 7};
@@ -50,11 +55,18 @@ public:
             if (scores_[w] > scores_[window_] * 1.03) window_ = w;
         const double nextFlux = flux_ + (changes[window_] - flux_) * .35;
         refractory_ = (std::max)(0.0, refractory_ - dt);
-        const bool triggered = refractory_ <= 0 && flux_ > threshold && flux_ >= nextFlux && flux_ >= minimum;
+        // A decaying tail is not a second attack when the refractory timer
+        // expires. Require a new rise-to-fall transition for each onset.
+        const bool triggered = refractory_ <= 0 && rising_ && flux_ > threshold
+            && flux_ >= nextFlux && flux_ >= minimum;
         const double displayFlux = triggered ? flux_ : nextFlux;
         if (triggered) refractory_ = .12;
-        history_[cursor_] = nextFlux;
+        // Track attack increments, not their smoothed decay. At fast tempos
+        // decays occupy most frames and would otherwise be learned as noise,
+        // raising the threshold above the next quieter but identical kick.
+        history_[cursor_] = changes[window_];
         cursor_ = (cursor_ + 1) % history_.size();
+        rising_ = nextFlux > flux_;
         flux_ = nextFlux;
         previous_ = levels;
 
@@ -76,5 +88,6 @@ private:
     std::array<double, 90> history_{};
     std::size_t window_{1}, cursor_{};
     double flux_{}, refractory_{}, floor_{}, envelope_{};
+    bool rising_ = false;
 };
 }

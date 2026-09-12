@@ -339,7 +339,9 @@ void AudioVisualFeatureControllerTest::renderFrameAnalysisOwnsCadenceAndResets()
     QVERIFY(first.valid);
     QVERIFY(first.descriptors.energy > 0);
     agplayer::visual::KickResponse kick;
-    const auto expected = kick.process(first.spectrum, 1.0 / 60.0);
+    agplayer::VisualSpectrumAnalyzer spectrum;
+    spectrum.process(pcm.pcm);
+    const auto expected = kick.process(spectrum.onsetSpectrum(), 1.0 / 60.0);
     QCOMPARE(first.kick.envelope, expected.envelope);
     // No new audio callback is needed for the next actual display frame.
     const auto second = analyzer.process(pcm, 1.0 / 60.0);

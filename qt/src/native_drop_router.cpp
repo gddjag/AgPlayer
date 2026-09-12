@@ -37,6 +37,7 @@ void NativeDropRouter::registerWindow(QWindow* window, Target target)
         return;
     }
     const quintptr handle = static_cast<quintptr>(window->winId());
+    if (targets_.contains(handle) && targets_.value(handle) == target) return;
     targets_.insert(handle, target);
     window->installEventFilter(this);
 #ifdef Q_OS_WIN

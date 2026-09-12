@@ -36,7 +36,21 @@ Rectangle {
         "accentColor": "#FFD7DF", "peakColor": "#FFF7FB", // theme-color-allow: default immersive media palette, not UI chrome
         "baseColor": "#050206" // theme-color-allow: default immersive media palette, not UI chrome
     })
-    readonly property var dynamicsGroups: [
+    readonly property var dynamicsGroups: authoredDynamicsGroups.map(function(group) {
+        if (!PlayerExperienceController.themeId.length) return group
+        // Only expose controls consumed by the canonical material/EQ path.
+        var supported = ["rippleStrength", "rippleWidth", "rippleDecay",
+            "topographyDensity", "terrainAmplitude", "motionResponse",
+            "reactorBrightness", "glowIntensity", "autoRotateSpeed",
+            "rhythmSensitivity", "floatingBlockMinSize", "floatingBlockMaxSize",
+            "floatingBlockSpeed", "floatingBlockIntensity"]
+        return {key: group.key, title: group.title,
+            sliders: group.sliders.filter(function(item) { return supported.indexOf(item.key) >= 0 }),
+            effects: group.effects.filter(function(item) {
+                return ["songAdaptiveColorEnabled", "streamHighlightEnabled"].indexOf(item.key) < 0
+            })}
+    })
+    readonly property var authoredDynamicsGroups: [
         {
             "key": "Ripple", "title": qsTr("波纹"),
             "sliders": [
@@ -53,6 +67,7 @@ Rectangle {
                   ? { "label": qsTr("地形密度"), "key": "topographyDensity", "from": 0, "to": 100, "step": 1 }
                   : { "label": qsTr("柱体数量"), "key": "columnDensity", "from": 50, "to": 200, "step": 5, "suffix": "%" },
                 { "label": qsTr("柱体高度"), "key": "terrainAmplitude", "from": 0, "to": 100 },
+                { "label": qsTr("起伏速度"), "key": "motionResponse", "from": 0, "to": 100 },
                 { "label": qsTr("柱体清晰度"), "key": "subjectClarity", "from": 20, "to": 140 },
                 { "label": qsTr("弱音细节"), "key": "inputCompression", "from": 20, "to": 150 },
                 { "label": qsTr("音频响应"), "key": "audioResponse", "from": 20, "to": 200, "scale": 100, "decimals": 2 },
@@ -108,7 +123,7 @@ Rectangle {
             "effects": [
                 { "label": qsTr("彩色冲击波"), "key": "ripplesEnabled" },
                 { "label": qsTr("星尘喷发"), "key": "burstEnabled" },
-                { "label": qsTr("8拍流星"), "key": "meteorsEnabled" }
+                { "label": qsTr("高频流星"), "key": "meteorsEnabled" }
             ]
         }
     ]
@@ -443,6 +458,7 @@ Rectangle {
                 RowLayout {
                     Layout.fillWidth: true
                     Text { Layout.fillWidth: true; text: qsTr("歌曲自适应配色"); color: Theme.textSecondary; font.family: Theme.fontPrimary; font.pixelSize: Theme.fontSizeCaption }
+                    visible: !PlayerExperienceController.themeId.length
                     ThemedCheckBox {
                         objectName: "songColorToggle"
                         text: qsTr("自动")
@@ -578,7 +594,6 @@ Rectangle {
                         { "label": qsTr("水平位置"), "key": "lyricPositionX", "from": 0, "to": 100 },
                         { "label": qsTr("垂直位置"), "key": "lyricPositionY", "from": 0, "to": 100 },
                         { "label": qsTr("歌词大小"), "key": "lyricSize", "from": 60, "to": 140 },
-                        { "label": qsTr("文字清晰"), "key": "lyricClarity", "from": 0, "to": 100 },
                         { "label": qsTr("空间纵深"), "key": "lyricDepth", "from": 0, "to": 100 },
                         { "label": qsTr("歌词透明"), "key": "lyricOpacity", "from": 10, "to": 100 }
                     ]

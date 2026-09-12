@@ -32,7 +32,9 @@ public:
     }
 
     // Reset on seek, track/sample-rate change, discontinuity or visual restart.
-    void reset() noexcept { smoothed_.fill(0.0); }
+    void reset() noexcept { smoothed_.fill(0.0); onsetSpectrum_.fill(0); }
+
+    const Spectrum& onsetSpectrum() const noexcept { return onsetSpectrum_; }
 
     Spectrum process(const Window& mono) noexcept
     {
@@ -62,12 +64,25 @@ public:
         Spectrum result{};
         for (std::size_t i = 0; i < binCount; ++i) {
             const double magnitude = std::abs(scratch_[i]) / static_cast<double>(windowSize);
+            // Detection needs the transient before display smoothing and the
+            // -30 dB display ceiling. Reuse this FFT, with full headroom.
+            // KickResponse reads only bins 0..7. DC is excluded below; no
+            // other detector consumes this unsmoothed spectrum. Avoid 505
+            // redundant logarithms without changing the full display FFT.
+            onsetSpectrum_[i] = i > 0 && i < 8 && magnitude > 0.0
+                ? static_cast<std::uint8_t>(std::clamp(
+                    255.0 * (20.0 * std::log10(magnitude) + 75.0) / 75.0, 0.0, 255.0))
+                : 0;
             smoothed_[i] = 0.8 * smoothed_[i] + 0.2 * magnitude;
             if (smoothed_[i] > 0.0) {
                 const double scaled = 255.0 * (20.0 * std::log10(smoothed_[i]) + 75.0) / 45.0;
                 result[i] = static_cast<std::uint8_t>(std::clamp(scaled, 0.0, 255.0));
             }
         }
+        // DC leakage changes with the phase of a sustained low tone in a
+        // finite FFT window. It is not an acoustic attack. Keep the original
+        // display spectrum, but exclude this bin from onset detection.
+        onsetSpectrum_[0] = 0;
         return result;
     }
 
@@ -77,5 +92,6 @@ private:
     std::array<std::complex<double>, binCount> roots_{};
     std::array<std::complex<double>, windowSize> scratch_{};
     std::array<double, binCount> smoothed_{};
+    Spectrum onsetSpectrum_{};
 };
 }

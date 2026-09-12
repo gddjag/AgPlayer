@@ -174,10 +174,9 @@ void main()
         vec2 p = position.xz;
         float terrainRandom = fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453123);
         columnRandom = terrainRandom;
-        // Preserve literal reference-oracle replay while keeping the actual
-        // AgPlayer platform spatial and fixed. In production only real band
-        // energy and explicit beat/impact events can move column height.
-        float idleClock = ubuf.timbre.w < 0.5 ? t : 0.0;
+        // Preserve the reference's moving frequency fields while suppressing
+        // unexcited relief in runtime silence below.
+        float idleClock = t;
         float broadNoise = terrainNoise(p * 0.05
                                       + vec2(idleClock * 0.1, idleClock * 0.05));
         float diagonal = sin(dot(p, vec2(0.15, 0.1)) - idleClock * 0.6);
@@ -185,15 +184,13 @@ void main()
                          0.2 + smoothness * 0.5) * 0.8 * reliefDisk
                      * ubuf.styleToggles.w;
         float subRegion = 1.0 - smoothstep(0.0, 25.0, distanceFromCore);
-        // Direct reference replay keeps its captured scene clock. Runtime
-        // terrain has no autonomous wave clock: only changing audio and
-        // explicit beat/ripple events are allowed to change column height.
+        // Runtime silence should settle instead of looking like a false beat.
         bool runtimeTheme = ubuf.timbre.w >= 0.5;
         if (runtimeTheme) {
             float audibleIdle = smoothstep(0.006, 0.075, ubuf.parameters.x);
             idle *= audibleIdle;
         }
-        float fieldClock = runtimeTheme ? 0.0 : t;
+        float fieldClock = t;
         float bassOffset = terrainNoise(p * 0.1 - vec2(0.0, fieldClock * 0.2));
         float bassRegion = 1.0 - smoothstep(5.0, 35.0, distanceFromCore + bassOffset * 5.0);
         float lowMidShape = 0.5 + 0.5 * terrainNoise(p * 0.05 + vec2(fieldClock * 0.1, 0.0));
@@ -246,15 +243,9 @@ void main()
                 float strength = abs(source.w) * strengthControl;
                 if (strength == 0.0) continue;
                 float speed = white ? 20.0 : 15.0;
-                // The product defaults (120% width, 81% decay) are the
-                // reference shader's neutral 1.0 values; controls remain
-                // linear around that exact baseline.
-                float widthControl = runtimeTheme
-                    ? max(0.2, ubuf.waveParameters.y / 1.2)
-                    : max(0.2, ubuf.waveParameters.y);
-                float decayControl = runtimeTheme
-                    ? max(0.2, ubuf.waveParameters.z / 0.81)
-                    : max(0.2, ubuf.waveParameters.z);
+                // 100% is the original shader's neutral 1.0 value.
+                float widthControl = max(0.2, ubuf.waveParameters.y);
+                float decayControl = max(0.2, ubuf.waveParameters.z);
                 float width = (white ? 1.0 : 3.0) * widthControl;
                 float fadeDistance = (white ? 8.0 : 15.0) / decayControl;
                 float elevationScale = white ? 1.0 : 4.0;
@@ -516,6 +507,12 @@ void main()
         localVertex=rotation*localVertex;normal=rotation*normal;
     }
     worldPosition = position + localVertex;
+    if (ubuf.timbre.w > 0.5 && ubuf.rippleColor.w > 0.5) {
+        float angle = ubuf.stylePresentation.w;
+        mat3 platter = mat3(cos(angle),0,-sin(angle),0,1,0,sin(angle),0,cos(angle));
+        worldPosition = platter * worldPosition;
+        normal = platter * normal;
+    }
     gl_Position = ubuf.mvp * vec4(worldPosition, 1.0);
     worldNormal = normalize(normal);
     // Interpolate the actual eye vector, not six normalized vertex rays.

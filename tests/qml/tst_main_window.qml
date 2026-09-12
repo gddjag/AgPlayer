@@ -971,6 +971,35 @@ TestCase {
         compare(Math.round(centerPoint.y), Math.round(miniPoint.y))
     }
 
+    function test_immersive_window_file_drop_imports_and_starts_playback() {
+        var rendering = mainWindow.immersiveRenderingEnabled
+        var hostMode = PlayerExperienceController.hostMode
+        mainWindow.immersiveRenderingEnabled = false
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
+        try {
+            var coordinator = findChild(mainWindow, "immersiveCoordinator")
+            tryVerify(function() { return coordinator.fullscreenWindow && coordinator.fullscreenWindow.visible }, 3000)
+            tryCompare(coordinator, "attachedHostMode", PlayerExperienceController.Windowed, 3000)
+            wait(100) // allow the newly exposed window to polish its DropArea
+            var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+            verify(copiedAudio)
+            verify(nativeDropHelper.sendUrls(coordinator.fullscreenWindow, [copiedAudio]),
+                   "The immersive canvas must accept a real Qt file drop")
+            tryVerify(function() { return !ImportController.busy }, 5000)
+            compare(ImportController.errors.length, 0)
+            tryVerify(function() {
+                return ImportController.importedTrackIds.length > 0
+                    && PlaybackController.currentTrackId === ImportController.importedTrackIds[0]
+            }, 3000)
+        } finally {
+            PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
+            PlayerExperienceController.hostMode = hostMode
+            mainWindow.immersiveRenderingEnabled = rendering
+            mainWindow.visible = true
+        }
+    }
+
     function test_native_qt_drop_reaches_the_real_import_controller() {
         var previousCount = LibraryModel.count
         var copiedAudio = nativeDropHelper.copyForNativeDrop(testAudioUrl)

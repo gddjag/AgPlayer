@@ -2300,6 +2300,25 @@ TestCase {
         }
     }
 
+    function test_reference_theme_exposes_only_live_dynamics_and_drop_entry() {
+        verify(PlayerExperienceController.applyTheme("nocturnal"))
+        var panel = windowedPresetPanel()
+        panel.currentTab = 2
+        wait(0)
+        for (var key of ["terrainAmplitude", "motionResponse", "glowIntensity",
+                         "reactorBrightness", "rhythmSensitivity", "topographyDensity"])
+            verify(findChild(panel, "dynamicSlider_" + key), key)
+        for (var deadKey of ["columnInnerLight", "columnLightSpill", "columnLightRadius",
+                             "centerHighlight", "depthOfField", "inputCompression", "rhythmStrength"])
+            compare(findChild(panel, "dynamicSlider_" + deadKey), null, deadKey)
+        var host = findChild(mainWindow, "immersiveCoordinator").fullscreenWindow
+        var drop = findChild(host, "immersiveFileDropArea")
+        verify(drop && drop.enabled)
+        verify(typeof drop.urlsSubmitter === "function")
+        compare(drop.submitUrls([]), false)
+        PlayerExperienceController.colorMode = PlayerExperienceController.Custom
+    }
+
     function test_visual_eq_sliders_change_only_the_selected_frequency_band() {
         var saved = PlayerExperienceController.visualEqGains.slice()
         var panel = createTemporaryObject(immersiveControlPanelComponent,
@@ -2546,11 +2565,11 @@ TestCase {
         restoreDefaults.clicked()
         compare(PlayerExperienceController.inputCompression, 99)
         compare(PlayerExperienceController.rippleStrength, 100)
-        compare(PlayerExperienceController.rippleWidth, 120)
-        compare(PlayerExperienceController.reactorBrightness, 68)
-        compare(PlayerExperienceController.terrainAmplitude, 38)
+        compare(PlayerExperienceController.rippleWidth, 100)
+        compare(PlayerExperienceController.reactorBrightness, 100)
+        compare(PlayerExperienceController.terrainAmplitude, 50)
         compare(PlayerExperienceController.centerHighlight, 40)
-        compare(PlayerExperienceController.autoRotateSpeed, 78)
+        compare(PlayerExperienceController.autoRotateSpeed, 15)
         compare(PlayerExperienceController.rhythmStrength, 30)
         compare(PlayerExperienceController.streamHighlightEnabled, true)
         compare(PlayerExperienceController.idleBreathingEnabled, true)

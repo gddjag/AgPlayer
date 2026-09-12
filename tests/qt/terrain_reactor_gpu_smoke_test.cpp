@@ -40,6 +40,7 @@ class TerrainReactorGpuSmokeTest final : public QObject {
 
 private slots:
     void cleanup();
+    void spatialLyricsAndPointerRippleRender();
     void referencePcmAnalysisFollowsActualFramesAndStopsWhenHidden();
     void densityAndQualityChangesKeepDrawingCompleteFrames();
     void cameraPunchDoesNotMoveTheGroundProjection();
@@ -71,6 +72,55 @@ private slots:
     void nonFiniteFeatureInputsAreSanitizedBeforeExposure();
     void nonFiniteCameraControlsRemainRenderable();
 };
+
+void TerrainReactorGpuSmokeTest::spatialLyricsAndPointerRippleRender()
+{
+    PlayerExperienceController style;
+    QVERIFY(style.applyTheme(QStringLiteral("nocturnal")));
+    style.restoreDynamicDefaults();
+    style.setAutoRotate(0);
+    style.setIdleBreathingEnabled(false);
+    style.setFloatingCubesEnabled(false);
+    style.setMeteorsEnabled(false);
+    style.setTopographyDensity(20);
+    QQuickWindow window;
+    window.resize(960, 640);
+    window.setColor(style.themeBackground());
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(960, 640));
+    item.setStyleSource(&style);
+    item.setUseSyntheticFeatures(true);
+    item.setSyntheticFeatures({0.,0.,0.,0.,0.,0.,0.,0.}, 0, 0, false, false);
+    window.show();
+    QVERIFY(waitForGpuWindow(window));
+    item.setActive(true);
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() >= 4, 5000);
+    QCOMPARE(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready);
+    const QImage baseline = window.grabWindow();
+    item.setSpatialLyrics({QStringLiteral("上一句"), QStringLiteral("让音乐在空间中流动"), QStringLiteral("下一句")});
+    QTest::qWait(450);
+    const QImage lyrics = window.grabWindow();
+    QVERIFY(!lyrics.isNull());
+    int changed = 0;
+    for (int y = 0; y < lyrics.height(); ++y)
+        for (int x = 0; x < lyrics.width(); ++x)
+            if (lyrics.pixelColor(x,y).lightness() > baseline.pixelColor(x,y).lightness() + 30) ++changed;
+    QVERIFY2(changed > 300, "World-space lyric glyphs must actually reach the framebuffer");
+    QVERIFY(lyrics.save(QCoreApplication::applicationDirPath() + QStringLiteral("/immersive-native-lyrics.png")));
+    item.setSpatialLyrics({});
+    QTest::qWait(100);
+    item.triggerRipple(480, 350);
+    QTest::qWait(180);
+    const QImage ripple = window.grabWindow();
+    QVERIFY(ripple != baseline);
+    QCOMPARE(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready);
+    item.setSpatialLyrics({QString{}, QStringLiteral("切换与隐藏后重新进入"), QString{}});
+    item.setActive(false);
+    QTest::qWait(80);
+    item.setActive(true);
+    QTest::qWait(150);
+    QCOMPARE(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready);
+}
 
 void TerrainReactorGpuSmokeTest::cleanup()
 {
@@ -562,6 +612,8 @@ void TerrainReactorGpuSmokeTest::materialControlsChangeRenderedSurface()
     const auto restoreDensity = qScopeGuard([&] { style.setProperty("columnDensity", previousDensity); });
     style.applyTheme(QStringLiteral("nocturnal"));
     if (control != "reactorBrightness") style.setReactorBrightness(100);
+    if (control != "reactorBrightness" && control != "glowIntensity")
+        style.setColorMode(PlayerExperienceController::Custom);
     QVERIFY2(style.setProperty("materialMode", mode), "Native material control is missing");
     QVERIFY(style.setProperty(control.constData(), low));
     style.setAutoRotate(0);
@@ -721,6 +773,8 @@ void TerrainReactorGpuSmokeTest::regularBeatBrieflyBrightensThenReturns()
     window.setColor(QColor(4, 6, 11));
     PlayerExperienceController style;
     style.applyTheme(QStringLiteral("nocturnal"));
+    // Extra center lamps are a legacy custom-material feature only.
+    style.setColorMode(PlayerExperienceController::Custom);
     style.setAutoRotate(0);
     style.setAutoRotateSpeed(0);
     style.setMotionResponse(0);
@@ -911,10 +965,9 @@ void TerrainReactorGpuSmokeTest::subjectClarityPreservesBrightThemeExposure()
         ? double(clearLight) / double(neutralLight) : 1.0;
     qInfo() << "Bright-theme clarity changed pixels/exposure ratio:"
             << changed << exposureRatio << "samples" << samples;
-    QVERIFY2(changed > 250,
-             "Clarity must visibly separate bright-theme column faces and edges");
-    QVERIFY2(exposureRatio < 1.12,
-             "Clarity must not behave as a whole-reactor exposure multiplier");
+    QCOMPARE(changed, 0);
+    QVERIFY2(std::abs(exposureRatio - 1.0) < .001,
+             "Hidden legacy clarity must not alter the authored reference palette");
     item.setActive(false);
 }
 
@@ -1258,6 +1311,7 @@ void TerrainReactorGpuSmokeTest::explicitImpactBrightensAStableTerrainFrame()
     // columns otherwise occlude white gaps and invert the brightness metric.
     window.setColor(QColor(4, 6, 11));
     PlayerExperienceController style;
+    style.setColorMode(PlayerExperienceController::Custom);
     style.setAutoRotate(0);
     style.setAutoRotateSpeed(0);
     style.setMotionResponse(0);

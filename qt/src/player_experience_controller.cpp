@@ -860,17 +860,17 @@ bool PlayerExperienceController::applyTheme(const QString& id)
 void PlayerExperienceController::restoreDynamicDefaults()
 {
     setRippleStrength(100);
-    setRippleWidth(120);
-    setRippleDecay(81);
+    setRippleWidth(100);
+    setRippleDecay(100);
     setColumnSize(100);
     setColumnDensity(50);
     setTopographyDensity(46);
     setColumnOpacity(100);
-    setReactorBrightness(68);
+    setReactorBrightness(100);
     setColumnInnerLight(155);
     setColumnLightSpill(176);
     setColumnLightRadius(86);
-    setTerrainAmplitude(38);
+    setTerrainAmplitude(50);
     setMotionResponse(50);
     setGradientLayers(74);
     setGlowIntensity(100);
@@ -884,8 +884,8 @@ void PlayerExperienceController::restoreDynamicDefaults()
     setRhythmStrength(30);
     setDepthOfField(83);
     setSubjectClarity(114);
-    setAutoRotateSpeed(78);
-    setRhythmSensitivity(80);
+    setAutoRotateSpeed(15);
+    setRhythmSensitivity(100);
     setRipplesEnabled(true);
     setBurstEnabled(true);
     setFloatingCubesEnabled(true);
@@ -947,10 +947,24 @@ void PlayerExperienceController::load()
     const QVariant persistedTheme = settings_.value(QStringLiteral("themeId"));
     const QString storedThemeId = persistedTheme.metaType().id() == QMetaType::QString
         ? persistedTheme.toString() : QString{};
-    const auto integer = [this](const QString& key, const int fallback) {
+    const bool resetReferenceDefaults = !storedThemeId.isEmpty()
+        && settings_.value(QStringLiteral("referenceDefaultsRevision"), 0).toInt() < 1;
+    const auto integer = [this, resetReferenceDefaults](const QString& key, const int fallback) {
+        // One-time upgrade of the original-theme dynamics; keep the library,
+        // playback preferences, selected palette and unrelated settings intact.
+        static const QStringList referenceKeys{
+            QStringLiteral("terrainAmplitude"), QStringLiteral("motionResponse"),
+            QStringLiteral("rippleStrength"), QStringLiteral("rippleWidth"),
+            QStringLiteral("rippleDecay"), QStringLiteral("reactorBrightness"),
+            QStringLiteral("rhythmSensitivity"), QStringLiteral("glowIntensity"),
+            QStringLiteral("floatingBlockMinSize"), QStringLiteral("floatingBlockMaxSize"),
+            QStringLiteral("floatingBlockSpeed"), QStringLiteral("floatingBlockIntensity"),
+            QStringLiteral("autoRotateSpeed"), QStringLiteral("topographyDensity")};
+        if (resetReferenceDefaults && referenceKeys.contains(key)) return fallback;
         return storedInteger(settings_.value(key)).value_or(fallback);
     };
-    const auto boolean = [this](const QString& key, const bool fallback) {
+    const auto boolean = [this, resetReferenceDefaults](const QString& key, const bool fallback) {
+        if (resetReferenceDefaults && key == QStringLiteral("themeCycleEnabled")) return false;
         return storedBoolean(settings_.value(key)).value_or(fallback);
     };
     const auto decimal = [this](const QString& key, const double fallback) {
@@ -988,19 +1002,19 @@ void PlayerExperienceController::load()
                                              QStringLiteral("#040A1C")),
                                  QStringLiteral("#040A1C"));
     themeBackground_ = QColor(baseColor_);
-    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 38));
+    terrainAmplitude_ = clampPercent(integer(QStringLiteral("terrainAmplitude"), 50));
     materialMode_ = enumOrDefault(integer(QStringLiteral("materialMode"), 0), 0, 2, 0);
     materialSoftness_ = clampRange(integer(QStringLiteral("materialSoftness"), 45), 0, 100);
     jellyElasticity_ = clampRange(integer(QStringLiteral("jellyElasticity"), 35), 0, 100);
     inkDensity_ = clampRange(integer(QStringLiteral("inkDensity"), 60), 0, 100);
     rippleStrength_ = clampRange(integer(QStringLiteral("rippleStrength"), 100), 0, 200);
-    rippleWidth_ = clampRange(integer(QStringLiteral("rippleWidth"), 120), 20, 200);
-    rippleDecay_ = clampRange(integer(QStringLiteral("rippleDecay"), 81), 20, 200);
+    rippleWidth_ = clampRange(integer(QStringLiteral("rippleWidth"), 100), 20, 200);
+    rippleDecay_ = clampRange(integer(QStringLiteral("rippleDecay"), 100), 20, 200);
     columnSize_ = clampRange(integer(QStringLiteral("columnSize"), 100), 50, 200);
     columnDensity_ = clampRange(integer(QStringLiteral("columnDensity"), 50), 50, 200);
     topographyDensity_ = clampPercent(integer(QStringLiteral("topographyDensity"), 46));
     columnOpacity_ = clampRange(integer(QStringLiteral("columnOpacity"), 100), 0, 100);
-    reactorBrightness_ = clampRange(integer(QStringLiteral("reactorBrightness"), 68), 0, 200);
+    reactorBrightness_ = clampRange(integer(QStringLiteral("reactorBrightness"), 100), 0, 200);
     columnInnerLight_ = clampRange(integer(QStringLiteral("columnInnerLight"), 155), 0, 200);
     columnLightSpill_ = clampRange(integer(QStringLiteral("columnLightSpill"), 176), 0, 200);
     columnLightRadius_ = clampRange(integer(QStringLiteral("columnLightRadius"), 86), 20, 200);
@@ -1024,7 +1038,7 @@ void PlayerExperienceController::load()
     const bool hasThemeRotationSettings =
         settings_.value(QStringLiteral("themeRotationSettingsVersion"), 0).toInt() >= 1;
     themeCycleEnabled_ = hasThemeRotationSettings
-        ? boolean(QStringLiteral("themeCycleEnabled"), true) : true;
+        ? boolean(QStringLiteral("themeCycleEnabled"), false) : false;
     themeSongCycleEnabled_ = boolean(QStringLiteral("themeSongCycleEnabled"), false);
     themeCycleIntervalSeconds_ = clampRange(
         integer(QStringLiteral("themeCycleIntervalSeconds"), 10), 3, 120);
@@ -1046,6 +1060,10 @@ void PlayerExperienceController::load()
     visualEqGains_ = (persistedGainsType == QMetaType::QVariantList
                        || persistedGainsType == QMetaType::QStringList)
         ? normalizedVisualEqGains(persistedGains.toList()) : defaultVisualEqGains();
+    if (resetReferenceDefaults) {
+        visualEqGains_ = defaultVisualEqGains();
+        visualEqEnabled_ = {true,true,true,true,true,true,true,true};
+    }
     lyricClarity_ = clampPercent(integer(QStringLiteral("lyricClarity"), 78));
     lyricDepth_ = clampPercent(integer(QStringLiteral("lyricDepth"), 62));
     lyricSize_ = clampRange(integer(QStringLiteral("lyricSize"), 100), 60, 140);
@@ -1061,8 +1079,8 @@ void PlayerExperienceController::load()
     rhythmStrength_ = clampRange(integer(QStringLiteral("rhythmStrength"), 30), 0, 140);
     depthOfField_ = clampRange(integer(QStringLiteral("depthOfField"), 83), 0, 150);
     subjectClarity_ = clampRange(integer(QStringLiteral("subjectClarity"), 114), 20, 140);
-    autoRotateSpeed_ = clampPercent(integer(QStringLiteral("autoRotateSpeed"), 78));
-    rhythmSensitivity_ = clampPercent(integer(QStringLiteral("rhythmSensitivity"), 80));
+    autoRotateSpeed_ = clampPercent(integer(QStringLiteral("autoRotateSpeed"), 15));
+    rhythmSensitivity_ = clampPercent(integer(QStringLiteral("rhythmSensitivity"), 100));
 
     settings_.remove(QStringLiteral("mode"));
     settings_.setValue(QStringLiteral("hostMode"), hostMode_);
@@ -1133,6 +1151,7 @@ void PlayerExperienceController::load()
     settings_.setValue(QStringLiteral("subjectClarity"), subjectClarity_);
     settings_.setValue(QStringLiteral("autoRotateSpeed"), autoRotateSpeed_);
     settings_.setValue(QStringLiteral("rhythmSensitivity"), rhythmSensitivity_);
+    settings_.setValue(QStringLiteral("referenceDefaultsRevision"), 1);
     settings_.endGroup();
 
     if (agplayer::immersive::findBuiltInTheme(storedThemeId.toStdString()) != nullptr) {

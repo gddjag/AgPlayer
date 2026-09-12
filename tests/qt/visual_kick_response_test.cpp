@@ -1,15 +1,99 @@
 #include "visual_kick_response.hpp"
 #include "visual_pulse_trigger.hpp"
+#include "visual_audio_frame_analyzer.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <vector>
+#include <chrono>
+#include <string>
 using agplayer::visual::KickResponse;
 void require(bool value, const char* description) {
     if (!value) { std::cerr << description << '\n'; std::exit(1); }
 }
 bool near(double a, double b) { return std::abs(a-b) < 1e-12; }
-int main() {
+int main(int argc, char** argv) {
+    if (argc > 1 && std::string(argv[1]) == "--benchmark") {
+        std::array<agplayer::VisualSpectrumAnalyzer::Window, 64> windows{};
+        for (std::size_t frame = 0; frame < windows.size(); ++frame)
+            for (std::size_t i = 0; i < windows[frame].size(); ++i) {
+                const double t = double(frame * 800 + i) / 48000.0;
+                windows[frame][i] = float(.5 * std::sin(6.283185307179586 * 70 * t)
+                    * std::exp(-std::fmod(t, .25) * 35) + .1 * std::sin(6.283185307179586 * 110 * t));
+            }
+        std::array<double, 5> samples{};
+        std::uint64_t checksum = 0;
+        for (std::size_t run = 0; run < samples.size(); ++run) {
+            agplayer::VisualSpectrumAnalyzer analyzer;
+            const auto start = std::chrono::steady_clock::now();
+            for (int frame = 0; frame < 20000; ++frame) {
+                const auto spectrum = analyzer.process(windows[std::size_t(frame) % windows.size()]);
+                for (int bin = 0; bin < 8; ++bin)
+                    checksum += analyzer.onsetSpectrum()[bin] + spectrum[bin];
+            }
+            samples[run] = std::chrono::duration<double, std::micro>(
+                std::chrono::steady_clock::now() - start).count() / 20000;
+        }
+        std::sort(samples.begin(), samples.end());
+        std::cout << "FFT analysis median_us=" << samples[2] << " checksum=" << checksum << '\n';
+        return 0;
+    }
+    // Exercise actual PCM -> windowed/smoothed FFT -> onset, rather than
+    // injecting ideal 0/255 spectra that cannot reveal analyzer saturation.
+    struct PcmCase { double gain; int seconds; int sampleRate; int beatFrames = 15; };
+    for (const auto test : {PcmCase{0.15, 300, 48000}, PcmCase{0.5, 3600, 48000},
+                           PcmCase{0.9, 16, 48000}, PcmCase{0.5, 16, 44100},
+                           PcmCase{0.5, 16, 96000}, PcmCase{0.5, 20, 48000, 10},
+                           PcmCase{0.5, 20, 48000, 30}}) {
+        const double gain = test.gain;
+        agplayer::VisualAudioFrameAnalyzer analyzer;
+        agplayer::VisualAudioFrameAnalyzer::Snapshot pcm;
+        pcm.valid = true;
+        pcm.sampleRate = test.sampleRate;
+        pcm.epoch = 1;
+        int onsets = 0;
+        std::vector<int> beatCounts(std::size_t(test.seconds * 60 / test.beatFrames));
+        for (int frame = 0; frame < 60 * test.seconds; ++frame) {
+            pcm.sequence = std::uint64_t(frame + 1);
+            pcm.firstSampleIndex = std::uint64_t(frame) * test.sampleRate / 60;
+            for (std::size_t i = 0; i < pcm.pcm.size(); ++i) {
+                const double t = double(pcm.firstSampleIndex + i) / test.sampleRate;
+                const double age = std::fmod(t, test.beatFrames / 60.0);
+                const double kick = std::exp(-age * 35.0)
+                    * std::sin(6.283185307179586 * 70.0 * t);
+                const double bass = frame >= 120
+                    ? .22 * std::sin(6.283185307179586 * 110.0 * t) : 0;
+                pcm.pcm[i] = float(gain * (kick + bass));
+            }
+            const auto& result = analyzer.process(pcm, 1.0 / 60.0);
+            require(result.pulse.triggered == (result.kick.onset > 0),
+                    "a confirmed PCM kick must also produce its colored wave");
+            onsets += result.kick.onset > 0 ? 1 : 0;
+            if (result.kick.onset > 0) ++beatCounts[std::size_t(frame / test.beatFrames)];
+        }
+        std::cout << "PCM gain=" << gain << " seconds=" << test.seconds
+                  << " sampleRate=" << test.sampleRate << " onsets=" << onsets
+                  << "/" << beatCounts.size() << std::endl;
+        if (onsets != int(beatCounts.size())) for (std::size_t beat = 0; beat < beatCounts.size(); ++beat)
+            if (beatCounts[beat] != 1) std::cout << " beat=" << beat << " count=" << beatCounts[beat] << '\n';
+        require(onsets == int(beatCounts.size()), "repeated PCM kicks must survive FFT smoothing and sustained bass");
+        for (const int count : beatCounts)
+            require(count == 1, "each beat interval must contain exactly one PCM onset, including the tail");
+    }
+    {
+        agplayer::VisualAudioFrameAnalyzer analyzer;
+        agplayer::VisualAudioFrameAnalyzer::Snapshot pcm;
+        pcm.valid = true; pcm.sampleRate = 48000; pcm.epoch = 1;
+        for (int frame = 0; frame < 600; ++frame) {
+            pcm.sequence = frame + 1;
+            for (std::size_t i = 0; i < pcm.pcm.size(); ++i)
+                pcm.pcm[i] = float(.5 * std::sin(6.283185307179586 * 110.0 * (frame * 800 + i) / 48000.0));
+            const auto& output = analyzer.process(pcm, 1.0 / 60.0);
+            if (frame > 60) require(output.kick.onset == 0,
+                "sustained bass must not manufacture periodic beats");
+        }
+    }
     {
         agplayer::VisualPulseTrigger pulse;
         agplayer::VisualSpectrumAnalyzer::Spectrum silence{}, low{};

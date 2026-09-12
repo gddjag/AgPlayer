@@ -32,7 +32,7 @@ Item {
     }
     readonly property var terrainItem: terrainLoader.item
     readonly property bool localGlowLifecycleEligible:
-        renderingEnabled && active && hostExposed && !inkMode
+        renderingEnabled && active && hostExposed && !inkMode && !referenceThemeActive
         && PlayerExperienceController.glowIntensity > 0
         && PlayerExperienceController.columnLightSpill > 0
     readonly property bool localGlowRequested:
@@ -177,6 +177,9 @@ Item {
         id: nativeTerrainComponent
         TerrainReactorItem {
             objectName: "terrainReactor"
+            spatialLyrics: PlayerExperienceController.lyricsVisible && LyricsService.enabled
+                           && LyricsService.currentLine.length > 0
+                           ? [LyricsService.previousLine, LyricsService.currentLine, LyricsService.nextLine] : []
             active: root.active && root.hostExposed
             hostExposed: root.hostExposed
             featureSource: AudioVisualFeatureController
@@ -269,11 +272,16 @@ Item {
         acceptedButtons: Qt.LeftButton
         property real lastX: 0
         property real lastY: 0
+        property real pressX: 0
+        property real pressY: 0
+        property bool orbitDragged: false
         onEntered: root.notePointerActivity()
         onPositionChanged: function(mouse) {
             root.notePointerActivity()
             if (!pressed || !root.terrainItem)
                 return
+            orbitDragged = orbitDragged || Math.hypot(mouse.x - pressX, mouse.y - pressY) > 6
+            if (!orbitDragged) return
             root.terrainItem.orbitBy(-(mouse.x - lastX) * 0.004,
                                      (mouse.y - lastY) * 0.003,
                                      Date.now() / 1000.0)
@@ -284,9 +292,16 @@ Item {
         onPressed: function(mouse) {
             lastX = mouse.x
             lastY = mouse.y
+            pressX = mouse.x
+            pressY = mouse.y
+            orbitDragged = false
             root.noteManualCameraActivity()
         }
         onReleased: root.notePointerActivity()
+        onClicked: function(mouse) {
+            if (!orbitDragged && root.terrainItem && root.terrainItem.triggerRipple)
+                root.terrainItem.triggerRipple(mouse.x, mouse.y)
+        }
         onWheel: function(wheel) {
             if (!root.terrainItem)
                 return
@@ -461,6 +476,11 @@ Item {
         id: lyricsPanel
         objectName: "immersiveLyricsPanel"
         spatialMode: true
+        // The native scene owns synchronized 3D text. Retain the existing
+        // import/status/untimed presentation when no native lyric is available.
+        visible: LyricsService.enabled && (!root.renderingEnabled
+                 || !root.terrainItem || root.terrainItem.renderStatus !== TerrainReactorItem.Ready
+                 || !LyricsService.currentLine.length)
         lightBackground: root.lightEnvironment
         fullscreen: root.hostMode === PlayerExperienceController.Fullscreen
         placement: PlayerExperienceController.lyricPosition

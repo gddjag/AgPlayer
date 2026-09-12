@@ -335,56 +335,6 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
                           * normalizedElevation;
             result += currentGlow * rimGlow;
         }
-        if (ubuf.timbre.w > 0.5) {
-            // Optional player controls augment the original material, without
-            // recoloring the unexcited reference base or moving the platform.
-            float eventLight = clamp(musicLight * 0.32 + impactLight * 0.72, 0.0, 1.0)
-                             * max(0.0, ubuf.sceneLighting.x);
-            result += boundedSource(targetGlow * eventLight
-                * mix(0.35, 1.0, relativeY) * distanceFade, 0.22);
-            // Canonical themes also run through this reference material path.
-            // Keep every user-facing lighting control live in the real player
-            // while leaving captured reference replay (timbre.w == 0) exact.
-            result += boundedSource(receivedColumnLight(normal), 0.18);
-            float centerControl = clamp(ubuf.styleAudio.w, 0.0, 1.5);
-            float centerField = 1.0 - smoothstep(5.0, 38.0, centerDistance);
-            float centerPulse = 0.10 + clamp(ubuf.audioEnvelope.z, 0.0, 1.0) * 0.90;
-            result += boundedSource(targetGlow * centerField
-                * normalizedElevation * centerControl * centerPulse, 0.16);
-            result *= clamp(focus, 0.72, 1.0);
-            float clarityDelta = ubuf.stylePresentation.z > 0.0
-                ? clamp(ubuf.stylePresentation.z, 0.2, 1.4) - 1.14 : 0.0;
-            // Clarity separates the cap border and upper wall shoulder.  It
-            // must not multiply the complete bright-theme field like an
-            // exposure control.  Neutral 1.14 remains bit-exact with the
-            // original palette; higher values exchange broad face energy for
-            // local edge contrast, preserving the reactor's overall light.
-            vec2 clarityUv = surfacePosition.xz + vec2(0.5);
-            float clarityEdgeX = smoothstep(0.12, 0.02, clarityUv.x)
-                               + smoothstep(0.88, 0.98, clarityUv.x);
-            float clarityEdgeY = smoothstep(0.12, 0.02, clarityUv.y)
-                               + smoothstep(0.88, 0.98, clarityUv.y);
-            float clarityEdge = min(clarityEdgeX + clarityEdgeY, 1.0);
-            float clarityStructure = isTop
-                ? clarityEdge : smoothstep(0.70, 1.0, relativeY);
-            float clarityScale = 1.0 + clarityDelta * 1.1
-                * mix(-0.18, 0.82, clarityStructure);
-            result *= max(0.65, clarityScale);
-            // Canonical runtime themes still use the reference palette branch,
-            // so apply gel softness here instead of relying on the optional
-            // material path below. Broader softness rolls the luminous cap edge
-            // farther inward; captured reference replay (timbre.w == 0) remains
-            // bit-exact and crystal/ink materials are unchanged.
-            float runtimeGel = step(0.5, material.x)
-                             * (1.0 - step(1.5, material.x));
-            vec2 gelEdgeDistance = vec2(0.5) - abs(surfacePosition.xz);
-            float gelEdge = 1.0 - smoothstep(0.012,
-                mix(0.035, 0.145, clamp(material.y, 0.0, 1.0)),
-                min(gelEdgeDistance.x, gelEdgeDistance.y));
-            if (isTop)
-                result *= 1.0 + gelEdge * runtimeGel
-                        * clamp(material.y, 0.0, 1.0) * 0.65;
-        }
         result += srgbToLinear(ubuf.rippleColor.rgb)
                 * referenceRippleAnim.x * 0.6;
         result += referenceWhite * referenceRippleAnim.y * 1.2;

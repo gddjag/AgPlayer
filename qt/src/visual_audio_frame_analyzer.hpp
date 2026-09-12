@@ -4,6 +4,7 @@
 #include "visual_spectrum_features.hpp"
 #include "visual_kick_response.hpp"
 #include "visual_pulse_trigger.hpp"
+#include "visual_snare_trigger.hpp"
 
 namespace agplayer {
 
@@ -37,6 +38,7 @@ public:
         VisualSpectrumFeatures::Features descriptors{};
         visual::KickResponse::Output kick{};
         VisualPulseTrigger::Output pulse{};
+        VisualSnareTrigger::Output meteor{};
         bool valid = false;
     };
 
@@ -44,7 +46,7 @@ public:
         spectrum_.reset();
         features_.reset();
         kick_.reset();
-        pulse_.reset();
+        meteor_.reset();
         frame_ = {};
         initialized_ = false;
     }
@@ -59,7 +61,8 @@ public:
                                                   snapshot.releasing);
             frame_.kick = kick_.process(frame_.spectrum, dt, sensitivity);
             frame_.kick.onset = 0.0;
-            frame_.pulse = pulse_.suspend();
+            frame_.pulse = {};
+            frame_.meteor = {};
             frame_.valid = true;
             return frame_;
         }
@@ -78,8 +81,12 @@ public:
         }
         frame_.spectrum = spectrum_.process(snapshot.pcm);
         frame_.descriptors = features_.update(frame_.spectrum, true, false);
-        frame_.kick = kick_.process(frame_.spectrum, dt, sensitivity);
-        frame_.pulse = pulse_.process(frame_.spectrum, dt, true);
+        frame_.kick = kick_.process(spectrum_.onsetSpectrum(), dt, sensitivity);
+        // One confirmed onset drives both the lift and its colored wave.
+        // Independent adaptive gates previously made the same drum visible
+        // in only one of those effects. Keep the reference strength scaling.
+        frame_.pulse = {frame_.kick.onset > 0.0, frame_.kick.flux * 6.0, 1, 2};
+        frame_.meteor = meteor_.process(frame_.spectrum);
         frame_.valid = true;
         return frame_;
     }
@@ -90,7 +97,7 @@ private:
     VisualSpectrumAnalyzer spectrum_;
     VisualSpectrumFeatures features_;
     visual::KickResponse kick_;
-    VisualPulseTrigger pulse_;
+    VisualSnareTrigger meteor_{159, 174, .45, 241, .5};
     Frame frame_{};
     std::uint64_t epoch_ = 0;
     int sampleRate_ = 0;
