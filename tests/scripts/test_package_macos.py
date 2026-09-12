@@ -136,6 +136,21 @@ class BundlePolicyTests(BundleFixture):
         with self.assertRaisesRegex(packaging.PackageError, "rpath"):
             packaging.validate_bundle(self.app)
 
+    def test_qt_sdk_relative_rpaths_removed_but_bundle_paths_retained(self):
+        stale = "@loader_path/../../../../../lib"
+        portable = "@loader_path/../../Frameworks"
+        plugin = universal(self.app / "Contents/PlugIns/quick/libqmlfolderlistmodelplugin.dylib",
+                           filetype=6, rpaths=[stale, portable, "/opt/Qt/lib"])
+        with self.assertRaisesRegex(packaging.PackageError, "rpath"):
+            packaging.validate_bundle(self.app)
+        with mock.patch.object(packaging, "run") as command:
+            packaging.clean_development_rpaths(self.app)
+        deleted = [call.args[0] for call in command.call_args_list]
+        self.assertEqual(deleted, [
+            ["install_name_tool", "-delete_rpath", "/opt/Qt/lib", plugin],
+            ["install_name_tool", "-delete_rpath", stale, plugin],
+        ])
+
     def test_dependency_cannot_escape_via_loader_path(self):
         universal(self.worker, deps=["@loader_path/../../../dev/libaudio.dylib"])
         with self.assertRaisesRegex(packaging.PackageError, "escap"):

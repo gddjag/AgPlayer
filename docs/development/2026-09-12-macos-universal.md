@@ -59,9 +59,12 @@ Apple HIG is the standing platform rule in `UI_DESIGN_SYSTEM.md`, section 9.
   tests and design-system contract passed. Component qmllint passed. Dark/light
   header previews rendered using Windows native QPA; these are not Mac acceptance.
 - Universal application and selected test binaries compiled successfully on the
-  ARM Mac runner (Qt 6.8.3). Run 34712564601 passed 24/26 CTest groups, including
-  the new window-controls suite. The cache rejection fixture and two QML checks
-  were corrected afterward; related Windows tests passed 3/3 in 40.47 seconds.
+  ARM Mac runner (Qt 6.8.3). Run 34713973310, commit 6ef0e52, passed 26/26 CTest
+  groups in 137.59 seconds. Audio-engine and queue tests each passed three more
+  consecutive runs (42.99 seconds total). These are automated checks on macOS 15;
+  they do not establish macOS 13 hardware acceptance or resolve every timing risk.
+- Related Windows tests passed 3/3 in 69.81 seconds; the null-backend audio-engine
+  suite also passed five consecutive local runs. Playback core was not changed.
 - The animated volume flyout now respects reduced room immediately during resize.
   Mac-rendered dark/light component screenshots were inspected. Physical Mac
   menu/window/model/audio acceptance remains separate from these CI results.

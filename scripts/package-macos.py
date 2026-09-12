@@ -382,10 +382,14 @@ def clean_development_rpaths(app):
     FFmpeg. Missing dependencies remain a hard validation failure; do not
     silently search Homebrew or infer an unrelated library by its filename.
     """
+    app = app.resolve()
+    main = app / "Contents/MacOS/AgPlayer"
     for path in bundle_files(app):
         slices = read_macho(path)
+        executable = path if any(item.filetype == 2 for item in slices.values()) else main
         rpaths = {rpath for item in slices.values() for rpath in item.rpaths
-                  if not rpath.startswith(("@loader_path", "@executable_path"))}
+                  if not rpath.startswith(("@loader_path", "@executable_path"))
+                  or not is_inside(expanded_path(rpath, path, executable), app)}
         for rpath in sorted(rpaths):
             run(["install_name_tool", "-delete_rpath", rpath, path])
 
