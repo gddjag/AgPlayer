@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage and validate an AgPlayer macOS 13 Universal development DMG.
+"""Stage and validate an AgPlayer macOS 13 Universal test or Developer ID DMG.
 
 This is a packaging gate, not macOS feature-parity, launch or audio acceptance.
 Only --notary-profile opts into uploading an artifact to Apple's notary service.
@@ -557,7 +557,7 @@ def main(argv=None):
     parser.add_argument("--app", type=Path, required=True, help="Universal AgPlayer.app to copy into staging")
     parser.add_argument("--qt-root", type=Path, required=True, help="Qt macOS root containing bin/macdeployqt")
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--sign-identity", help="Full Developer ID Application certificate name; default: ad-hoc development")
+    parser.add_argument("--sign-identity", help="Full Developer ID Application certificate name; default: internal ad-hoc test package")
     parser.add_argument("--notary-profile", help="Explicit opt-in to upload DMG using a stored notarytool keychain profile")
     args = parser.parse_args(argv)
     try:

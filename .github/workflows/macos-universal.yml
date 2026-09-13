@@ -121,7 +121,7 @@ jobs:
             test_status=$?
           fi
           exit "$test_status"
-      - name: Deploy and audit a single Universal development package
+      - name: Deploy and audit a single Universal internal test package
         run: >-
           python scripts/package-macos.py
           --app build/macos-universal/app/AgPlayer.app
@@ -138,7 +138,7 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "$app_path" build/macos-package/AgPlayer-universal-test.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-universal-development
+          name: macos-universal-internal-adhoc-test
           path: |
             build/macos-package/*.dmg
             build/macos-package/*.json
@@ -170,7 +170,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: macos-universal-development
+          name: macos-universal-internal-adhoc-test
           path: package
       - name: Audit the mounted DMG and launch the installed app
         shell: bash
