@@ -8,6 +8,19 @@ import { createHash } from 'node:crypto';
 import { validateTag, selectAssets, githubRequest, upload } from './sync-release-r2.mjs';
 import * as releaseSync from './sync-release-r2.mjs';
 
+test('shared releases require matching Windows and Universal macOS packages', () => {
+  const tag = 'v1.0.3';
+  const release = { tag_name: tag, published_at: 'now' };
+  const windows = { name: 'AgPlayer-Setup-1.0.3-x64.exe', id: 1, state: 'uploaded', size: 42 };
+  const macos = { name: 'AgPlayer-1.0.3-macOS-universal.dmg', id: 2, state: 'uploaded', size: 84 };
+  assert.throws(() => selectAssets(release, [windows], tag), /Synchronized/);
+  assert.throws(() => selectAssets(release, [macos], tag), /Synchronized/);
+  assert.throws(() => selectAssets(release, [windows, {...macos, name: 'AgPlayer-1.0.2-macOS-universal.dmg'}], tag), /Synchronized/);
+  assert.equal(selectAssets(release, [windows, macos, {name:'notes.txt'}], tag).length, 2);
+  const latest = releaseSync.buildLatest({ tag, publishedAt:'2026-09-13T00:00:00Z', releaseNotesUrl:'https://github.com/gddjag/AgPlayer/releases/tag/v1.0.3', files:[windows,macos].map(x=>({...x,sha256:'a'.repeat(64)})) });
+  assert.equal(latest.files[1].r2Url, 'https://download.agplayer.com/releases/v1.0.3/AgPlayer-1.0.3-macOS-universal.dmg');
+});
+
 test('accept only stable, canonical version tags', () => {
   assert.equal(validateTag('v1.0.0'), 'v1.0.0');
   for (const tag of ['1.0.0', 'v1.0.0-beta', 'v01.0.0', '../v1.0.0', undefined]) assert.throws(() => validateTag(tag));
@@ -17,7 +30,7 @@ test('require a complete official release and safe EXE names', () => {
   const release = { tag_name: 'v1.0.0', published_at: 'now' };
   const asset = { name: 'AgPlayer-Setup-1.0.0-x64.exe', id: 1, state: 'uploaded', size: 42 };
   assert.equal(selectAssets(release, [asset, { name: 'notes.txt' }], 'v1.0.0').length, 1);
-  assert.throws(() => selectAssets(release, [], 'v1.0.0'), /No EXE/);
+  assert.throws(() => selectAssets(release, [], 'v1.0.0'), /No installer/);
   for (const change of [{ prerelease: true }, { draft: true }, { tag_name: 'v2.0.0' }]) assert.throws(() => selectAssets({ ...release, ...change }, [asset], 'v1.0.0'));
   for (const change of [{ name: '../bad.exe' }, { size: 0 }, { state: 'starter' }]) assert.throws(() => selectAssets(release, [{ ...asset, ...change }], 'v1.0.0'));
   assert.throws(() => selectAssets(release, [asset, asset], 'v1.0.0'));
@@ -114,7 +127,7 @@ test('upload checks all files before publishing checksum and latest metadata', a
     await assert.rejects(upload('v1.0.0', directory, (_, args) => { failedCalls.push(args); throw new Error('upload failed'); }), /upload failed/);
     assert.equal(failedCalls.length, 1);
     await writeFile(join(directory, file.name), 'corrupt');
-    await assert.rejects(upload('v1.0.0', directory, () => assert.fail('Must not upload changed files')), /Local EXE changed/);
+    await assert.rejects(upload('v1.0.0', directory, () => assert.fail('Must not upload changed files')), /Local installer changed/);
   } finally {
     delete process.env.AWS_ACCESS_KEY_ID;
     delete process.env.AWS_SECRET_ACCESS_KEY;

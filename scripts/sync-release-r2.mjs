@@ -45,7 +45,7 @@ export function buildLatest(manifest) {
     publishedAt: manifest.publishedAt,
     releaseNotesUrl: manifest.releaseNotesUrl,
     files: manifest.files.map(file => {
-      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.exe$/i.test(file.name) || !Number.isSafeInteger(file.size) || file.size <= 0 || !/^[a-f0-9]{64}$/.test(file.sha256)) {
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:exe|dmg)$/i.test(file.name) || !Number.isSafeInteger(file.size) || file.size <= 0 || !/^[a-f0-9]{64}$/.test(file.sha256)) {
         throw new Error('Invalid latest release file');
       }
       const name = encodeURIComponent(file.name);
@@ -64,17 +64,23 @@ export function selectAssets(release, assets, tag) {
   if (release.tag_name !== tag || release.draft || release.prerelease || !release.published_at) {
     throw new Error('Release must be published, non-draft, and non-prerelease');
   }
-  const selected = assets.filter(asset => /\.exe$/i.test(asset.name));
-  if (!selected.length) throw new Error('No EXE assets: upload the installers, then rerun with the release tag');
+  const selected = assets.filter(asset => /\.(?:exe|dmg)$/i.test(asset.name));
+  if (!selected.length) throw new Error('No installer assets: upload the installers, then rerun with the release tag');
   const names = new Set();
   for (const asset of selected) {
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.exe$/i.test(asset.name) || names.has(asset.name.toLowerCase())) {
-      throw new Error('EXE names must be unique portable filenames using letters, digits, dots, underscores, or hyphens');
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:exe|dmg)$/i.test(asset.name) || names.has(asset.name.toLowerCase())) {
+      throw new Error('installer names must be unique portable filenames using letters, digits, dots, underscores, or hyphens');
     }
     if (!Number.isSafeInteger(asset.id) || asset.id <= 0 || asset.state !== 'uploaded' || !Number.isSafeInteger(asset.size) || asset.size <= 0) {
-      throw new Error(`EXE is not fully uploaded: ${asset.name}`);
+      throw new Error(`installer is not fully uploaded: ${asset.name}`);
     }
     names.add(asset.name.toLowerCase());
+  }
+  // Starting with the shared release, both tested platform packages must exist.
+  if (compareVersions(tag.slice(1), '1.0.3') >= 0) {
+    for (const expected of [`AgPlayer-Setup-${tag.slice(1)}-x64.exe`, `AgPlayer-${tag.slice(1)}-macOS-universal.dmg`]) {
+      if (!names.has(expected.toLowerCase())) throw new Error(`Synchronized Windows/macOS release requires ${expected}`);
+    }
   }
   return selected.sort((a, b) => a.name.localeCompare(b.name, 'en'));
 }
@@ -144,7 +150,7 @@ export async function download(tag, directory) {
   if (JSON.stringify(release) !== JSON.stringify(await snapshot(tag))) throw new Error('Release assets changed during download; rerun after all uploads finish');
   await writeFile(join(directory, 'manifest.json'), JSON.stringify({ tag, publishedAt: release.publishedAt, releaseNotesUrl: release.releaseNotesUrl, files }));
   await writeFile(join(directory, 'SHA256SUMS'), files.map(file => `${file.sha256}  ${file.name}\n`).join(''));
-  console.log(`Verified ${files.length} EXE asset(s) for ${tag}`);
+  console.log(`Verified ${files.length} installer asset(s) for ${tag}`);
 }
 
 export async function upload(tag, directory, run = execFileSync) {
@@ -155,7 +161,7 @@ export async function upload(tag, directory, run = execFileSync) {
   // Validate everything before any remote write, including the final checksum file.
   selectAssets({ tag_name: tag, published_at: true }, manifest.files.map((file, i) => ({ ...file, id: i + 1, state: 'uploaded' })), tag);
   for (const file of manifest.files) {
-    if ((await stat(join(directory, file.name))).size !== file.size || await sha256(join(directory, file.name)) !== file.sha256) throw new Error('Local EXE changed after verification');
+    if ((await stat(join(directory, file.name))).size !== file.size || await sha256(join(directory, file.name)) !== file.sha256) throw new Error('Local installer changed after verification');
   }
   const sums = manifest.files.map(file => `${file.sha256}  ${file.name}\n`).join('');
   if (await readFile(join(directory, 'SHA256SUMS'), 'utf8') !== sums) throw new Error('Checksum file changed after verification');
@@ -166,7 +172,7 @@ export async function upload(tag, directory, run = execFileSync) {
     const head = JSON.parse(aws(['s3api', 'head-object', '--bucket', bucket, '--key', key]));
     if (head.ContentLength !== file.size || head.Metadata?.sha256 !== file.sha256) throw new Error(`R2 object verification failed: ${file.name}`);
   }
-  // Publish checksums only after every EXE has been uploaded and verified.
+  // Publish checksums only after every installer has been uploaded and verified.
   aws(['s3', 'cp', join(directory, 'SHA256SUMS'), `s3://${bucket}/releases/${tag}/SHA256SUMS`, '--only-show-errors', '--content-type', 'text/plain; charset=utf-8', '--cache-control', 'no-cache']);
   const currentPath = join(directory, 'current-latest.json');
   let current;
@@ -179,13 +185,13 @@ export async function upload(tag, directory, run = execFileSync) {
     if (!/NoSuchKey|Not Found|404/i.test(details)) throw error;
   }
   if (current && compareVersions(latest.version, current.version) < 0) {
-    console.log(`Synced ${manifest.files.length} EXE asset(s) for ${tag}; kept newer latest ${current.version}`);
+    console.log(`Synced ${manifest.files.length} installer asset(s) for ${tag}; kept newer latest ${current.version}`);
     return;
   }
   const latestPath = join(directory, 'latest.json');
   await writeFile(latestPath, `${JSON.stringify(latest, null, 2)}\n`);
   aws(['s3', 'cp', latestPath, `s3://${bucket}/updates/latest.json`, '--only-show-errors', '--content-type', 'application/json; charset=utf-8', '--cache-control', 'no-cache']);
-  console.log(`Synced ${manifest.files.length} EXE asset(s) and latest metadata for ${tag}`);
+  console.log(`Synced ${manifest.files.length} installer asset(s) and latest metadata for ${tag}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
