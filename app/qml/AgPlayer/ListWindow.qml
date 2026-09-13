@@ -18,6 +18,7 @@ Window {
     readonly property int defaultListHeight:
         titleBarHeight + trackHeaderHeight
         + defaultVisibleTrackCount * defaultTrackRowHeight + filterBarHeight
+        + Theme.spacingSm
     width: 960
     height: defaultListHeight
     readonly property int pageMinimumWidth: 956

@@ -7,15 +7,41 @@ Dialog {
 
     modal: true
     padding: Theme.spacingLg
+    // Measure plain text independently of the wrapped Label's live geometry.
+    readonly property bool hasTextContent: contentItem
+        && typeof contentItem.text === "string" && contentItem.font !== undefined
+    TextMetrics {
+        id: contentTextMetrics
+        text: control.hasTextContent ? control.contentItem.text : ""
+        font: control.hasTextContent ? control.contentItem.font : control.font
+    }
     // Measure natural content, not contentWidth (which follows the assigned
     // width when text wraps). Include titles and actions before bounding it.
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
-                            (contentItem ? contentItem.implicitWidth : 0)
+                            (hasTextContent ? contentTextMetrics.boundingRect.width
+                                            : contentItem ? contentItem.implicitWidth : 0)
                                 + leftPadding + rightPadding,
                             dialogTitle.visible ? dialogTitle.implicitWidth : 0,
                             dialogButtons.visible ? dialogButtons.implicitWidth : 0)
-    width: Math.min(implicitWidth, parent && parent.width > 0
-                    ? Math.max(0, parent.width - 2 * Theme.spacingLg) : implicitWidth)
+    // Apply measured width after text/layout notifications have settled, so
+    // changing a visible message cannot re-enter Popup's height calculation.
+    property real fittedContentWidth: implicitWidth
+    width: fittedContentWidth
+    Binding on fittedContentWidth {
+        delayed: true
+        value: Math.min(control.implicitWidth, control.parent && control.parent.width > 0
+                       ? Math.max(0, control.parent.width - 2 * Theme.spacingLg)
+                       : control.implicitWidth)
+    }
+    property real fittedContentHeight: 0
+    implicitHeight: fittedContentHeight
+    Binding on fittedContentHeight {
+        delayed: true
+        value: Math.max(control.implicitBackgroundHeight + control.topInset + control.bottomInset,
+                        control.contentHeight + control.topPadding + control.bottomPadding
+                        + (control.implicitHeaderHeight > 0 ? control.implicitHeaderHeight + control.spacing : 0)
+                        + (control.implicitFooterHeight > 0 ? control.implicitFooterHeight + control.spacing : 0))
+    }
     font.family: Theme.fontPrimary
     font.pixelSize: Theme.fontSizeBody
     palette.window: Theme.surfaceElevated

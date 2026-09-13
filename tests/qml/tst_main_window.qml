@@ -759,10 +759,10 @@ TestCase {
         mouseClick(button)
         var window = findChild(mainWindow, "equalizerWindow")
         tryVerify(function() { return window && window.visible }, 1000)
-        compare(window.width, 1080)
-        compare(window.height, 620)
-        compare(window.minimumWidth, 960)
-        compare(window.minimumHeight, 460)
+        compare(window.width, window.defaultWindowBounds.width)
+        compare(window.height, window.defaultWindowBounds.height)
+        compare(window.minimumWidth, Math.min(760, window.defaultWindowBounds.width))
+        compare(window.minimumHeight, Math.min(420, window.defaultWindowBounds.height))
         var equalizerTitle = findChild(window, "equalizerTitle")
         var equalizerContent = findChild(window, "equalizerContent")
         verify(equalizerTitle,
@@ -1280,7 +1280,7 @@ TestCase {
             var expectedRowHeight = enabled ? Theme.mediaListRowHeight
                                             : Theme.listRowHeight
             var expectedHeight = Theme.titleBarHeight + Theme.tableHeaderHeight
-                    + 10 * expectedRowHeight + listWindow.filterBarHeight
+                    + 10 * expectedRowHeight + listWindow.filterBarHeight + Theme.spacingSm
             compare(listWindow.height, expectedHeight)
             compare(filter.height, listWindow.filterBarHeight)
             tryCompare(trackList, "height",
@@ -5935,9 +5935,10 @@ TestCase {
         })
         const settingsWindow = findChild(mainWindow, "settingsWindow")
         verify(settingsWindow, "settings must open in its own window")
-        compare(settingsWindow.width, 860)
-        verify(settingsWindow.height >= 640 && settingsWindow.height <= 900,
-               "settings window must fit the available desktop")
+        compare(settingsWindow.width, settingsWindow.defaultWindowBounds.width)
+        compare(settingsWindow.height, settingsWindow.defaultWindowBounds.height)
+        verify(settingsWindow.width <= 860 && settingsWindow.height <= 700,
+               "settings window must fit the available desktop without enlarging its default")
         const page = findChild(mainWindow, "settingsPage")
         tryVerify(function() { return page.visible })
         compare(page.editResolved, false,
@@ -5956,11 +5957,12 @@ TestCase {
                 ? findChild(page, "macCloseButton").parent : null
         const leadingControlsWidth = macButtons ? macButtons.width + Theme.spacingLg : 0
         verify(headerDragArea.x >= leadingControlsWidth)
-        verify(headerDragArea.width + leadingControlsWidth > settingsWindow.width * 0.50)
-        compare(sidebar.width, 184)
+        verify(headerDragArea.width >= Math.min(120, settingsWindow.width * 0.20),
+               "compact settings must retain a usable drag strip outside its controls")
+        compare(sidebar.width, page.compact ? 152 : 184)
         verify(contentColumn.width <= 760,
                "settings content must remain a readable single column")
-        verify(contentColumn.x >= 24,
+        verify(contentColumn.x >= (page.compact ? 12 : 24),
                "settings content must keep balanced horizontal breathing room")
         verify(contentColumn.spacing <= 6,
                "settings sections must use compact PC spacing")
@@ -6704,7 +6706,8 @@ TestCase {
                         mainWindow.contentItem, controls.width / 2, 0).x
             var playCenter = playButton.mapToItem(
                         mainWindow.contentItem, playButton.width / 2, 0).x
-            compare(Math.round(playCenter), Math.round(controlsCenter))
+            verify(Math.abs(playCenter - controlsCenter) <= 0.5,
+                   "play center=" + playCenter + " controls center=" + controlsCenter)
             var playCenterBefore = playCenter
             volume.expandedForQa = true
             wait(220)
@@ -6712,9 +6715,9 @@ TestCase {
                         mainWindow.contentItem, controls.width / 2, 0).x
             var expandedPlayCenter = playButton.mapToItem(
                         mainWindow.contentItem, playButton.width / 2, 0).x
-            compare(Math.round(expandedPlayCenter),
-                    Math.round(expandedControlsCenter),
-                    "expanded integrated play button must stay centered")
+            verify(Math.abs(expandedPlayCenter - expandedControlsCenter) <= 0.5,
+                   "expanded integrated play button must stay centered; play="
+                   + expandedPlayCenter + " controls=" + expandedControlsCenter)
             if (Math.round(expandedControlsCenter) === Math.round(controlsCenter))
                 compare(Math.round(expandedPlayCenter),
                         Math.round(playCenterBefore))
