@@ -1,5 +1,7 @@
 # 正式发布版本
 
+从 1.0.3 起，Windows 与 macOS 采用同一版本号、同一发布标签同步更新；两端均完成相应验收并提供安装包后，才更新共同下载清单。macOS 的内部版本同样来自 `cmake/AgPlayerVersion.cmake`，不得另起版本序列。补充发布 macOS 1.0.3 时沿用用户已验收的相同文件，实际为 ad-hoc、未公证；网站必须如实说明并保留 Apple 官方打开教程，不能标记为 Developer ID 签名或已公证。
+
 正式首版从 **1.0.0** 开始。此前 1.1.x 属于内部测试编号，不作为正式版发布序列。已安装内测 1.1.2 的用户需要手动安装正式 1.0.0 一次；正常语义版本比较不会将 1.0.0 识别为 1.1.2 的升级，也不为此修改比较规则。
 
 唯一版本源为 `cmake/AgPlayerVersion.cmake`。CMake 从它生成程序版本、关于页版本、Windows EXE 的 FileVersion/ProductVersion 和 manifest；安装器版本及文件名由同一值派生。Windows PE 表示为 `1.0.0.0`。`deployment/updates/latest.json` 是网站更新接口的模板，版本工具仅同步其 `version` 字段，不发布模板到网站。

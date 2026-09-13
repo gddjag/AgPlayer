@@ -128,10 +128,15 @@ OrtOperationResult OrtModelSession::open(const QString& runtimePath,
     const auto getApiBase = reinterpret_cast<GetApiBaseFunction>(
         impl_->runtime.ortGetApiBase());
     const OrtApiBase* apiBase = getApiBase == nullptr ? nullptr : getApiBase();
-    impl_->api = apiBase == nullptr ? nullptr : apiBase->GetApi(ORT_API_VERSION);
+#ifdef Q_OS_MACOS
+    constexpr uint32_t apiVersion = 18;
+#else
+    constexpr uint32_t apiVersion = ORT_API_VERSION;
+#endif
+    impl_->api = apiBase == nullptr ? nullptr : apiBase->GetApi(apiVersion);
     if (impl_->api == nullptr) {
         return {false, QStringLiteral("runtime_api_mismatch"),
-                QStringLiteral("ONNX Runtime does not provide C API version 24"), {}};
+                QStringLiteral("ONNX Runtime does not provide C API version %1").arg(apiVersion), {}};
     }
     QString error = statusMessage(
         impl_->api, impl_->api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
@@ -195,6 +200,24 @@ OrtOperationResult OrtModelSession::open(const QString& runtimePath,
             options, "session.disable_cpu_ep_fallback", "1"));
         if (!error.isEmpty()) return {false, QStringLiteral("cuda_session_failed"), error, {}};
     }
+    if (provider == ExecutionProvider::CoreMl) {
+        using AppendCoreMlFunction = OrtStatus*(ORT_API_CALL*)(OrtSessionOptions*, uint32_t);
+        const auto appendCoreMl = reinterpret_cast<AppendCoreMlFunction>(
+            impl_->runtime.resolve("OrtSessionOptionsAppendExecutionProvider_CoreML"));
+        if (appendCoreMl == nullptr)
+            return {false, QStringLiteral("coreml_export_missing"),
+                    QStringLiteral("当前运行时未提供 CoreML；可继续使用 CPU"), {}};
+        // ORT 1.18 flags: fixed shapes (0x08), CoreML MLProgram (0x10).
+        // A graph that requires CPU EP fallback must not be advertised as GPU.
+        error = statusMessage(impl_->api, appendCoreMl(options, 0x08 | 0x10));
+        if (error.isEmpty()) error = statusMessage(impl_->api, impl_->api->AddSessionConfigEntry(
+            options, "session.disable_cpu_ep_fallback", "1"));
+        if (!error.isEmpty()) return {false, QStringLiteral("coreml_session_failed"), error, {}};
+    }
+    std::mutex cancellationMutex;
+    QString cancellationError;
+    CancellationToken::Subscription cancellationSubscription;
+#ifndef Q_OS_MACOS
     if (impl_->api->SessionOptionsSetLoadCancellationFlag == nullptr) {
         return {false, QStringLiteral("runtime_api_mismatch"),
                 QStringLiteral("ONNX Runtime does not support cancellable session loading"), {}};
@@ -206,10 +229,8 @@ OrtOperationResult OrtModelSession::open(const QString& runtimePath,
         return {false, QStringLiteral("session_options_failed"), error, {}};
     }
 
-    std::mutex cancellationMutex;
-    QString cancellationError;
     const OrtApi* api = impl_->api;
-    auto cancellationSubscription = cancelled.notifyOnCancel(
+    cancellationSubscription = cancelled.notifyOnCancel(
         [api, options, &cancellationMutex, &cancellationError] {
             const QString flagError = statusMessage(
                 api, api->SessionOptionsSetLoadCancellationFlag(options, true));
@@ -218,6 +239,9 @@ OrtOperationResult OrtModelSession::open(const QString& runtimePath,
                 cancellationError = flagError;
             }
         });
+#endif
+    // API 18 has no session-load cancellation member. Never access the v24
+    // struct tail on macOS; the isolated worker's process deadline cancels it.
     OrtStatus* loadStatus = impl_->api->CreateSessionFromArray(
         impl_->environment, approvedModelBytes.constData(),
         static_cast<size_t>(approvedModelBytes.size()), options, &impl_->session);

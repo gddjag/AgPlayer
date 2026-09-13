@@ -22,6 +22,11 @@ enum class WriteError {
     CommitFailed
 };
 
+enum class OutputCommitMode {
+    CreateNoReplace,
+    Overwrite
+};
+
 struct WriteRequest final {
     TimelineSnapshot snapshot;
     std::filesystem::path output_path;
@@ -34,6 +39,7 @@ struct WriteRequest final {
     bool variable_bit_rate{};
     int quality{75};
     std::optional<Selection> range;
+    OutputCommitMode commit_mode{OutputCommitMode::CreateNoReplace};
 };
 
 struct WriteResult final {

@@ -8,6 +8,7 @@ Rectangle {
     objectName: "losslessTaskPanel"
     property var controller
     property bool compact: false
+    readonly property bool shortLayout: compact && height < 220
     readonly property bool englishUi: SettingsController.language
                                        && SettingsController.language.toLowerCase()
                                           .startsWith("en")
@@ -96,15 +97,15 @@ Rectangle {
 
         Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: 92
+            Layout.preferredHeight: root.shortLayout ? 70 : 92
 
             ColumnLayout {
                 anchors.fill: parent
                 anchors.leftMargin: Theme.spacingLg
                 anchors.rightMargin: Theme.spacingLg
-                anchors.topMargin: Theme.spacingSm
-                anchors.bottomMargin: Theme.spacingSm
-                spacing: Theme.spacingSm
+                anchors.topMargin: root.shortLayout ? 2 : Theme.spacingSm
+                anchors.bottomMargin: root.shortLayout ? 2 : Theme.spacingSm
+                spacing: root.shortLayout ? Theme.spacingXs : Theme.spacingSm
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -215,7 +216,7 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: Theme.tableHeaderHeight
+            Layout.preferredHeight: root.shortLayout ? 28 : Theme.tableHeaderHeight
             color: Theme.losslessPanelHeaderSurface
             border.width: 0
 
@@ -324,6 +325,7 @@ Rectangle {
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            clip: true
 
             ListView {
                 id: taskList
@@ -498,6 +500,7 @@ Rectangle {
                 visible: taskList.count === 0
 
                 ThemedIcon {
+                    visible: emptyState.parent.height >= 80
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Theme.iconSizeLg
                     height: width
@@ -520,7 +523,7 @@ Rectangle {
 
         Text {
             Layout.fillWidth: true
-            Layout.preferredHeight: 34
+            Layout.preferredHeight: root.shortLayout ? 22 : 34
             Layout.leftMargin: Theme.spacingMd
             verticalAlignment: Text.AlignVCenter
             text: qsTr("共 %1 个文件（已选择 %2 个）")

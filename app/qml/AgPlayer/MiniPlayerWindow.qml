@@ -9,8 +9,8 @@ Window {
     visible: false
     width: 588
     height: 186
-    minimumWidth: 588
-    minimumHeight: 186
+    minimumWidth: 480
+    minimumHeight: 160
     maximumHeight: 186
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
@@ -68,6 +68,12 @@ Window {
                     anchors.rightMargin: 5
                     spacing: 1
 
+                    ThemedMacWindowControls {
+                        targetWindow: miniWindow
+                        allowFullScreen: false
+                        onCloseRequested: windows.requestClose()
+                    }
+
                     Image {
                         source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
                         sourceSize.width: 18
@@ -121,6 +127,7 @@ Window {
                     ThemedIconButton {
                         id: minimizeButton
                         objectName: "miniMinimizeButton"
+                        visible: Qt.platform.os !== "osx"
                         Layout.preferredWidth: Theme.controlHeight
                         Layout.preferredHeight: Theme.controlHeight
                         iconSource: Theme.icon("subtract-line")
@@ -137,6 +144,7 @@ Window {
                     ThemedIconButton {
                         id: closeButton
                         objectName: "miniCloseButton"
+                        visible: Qt.platform.os !== "osx"
                         Layout.preferredWidth: Theme.controlHeight
                         Layout.preferredHeight: Theme.controlHeight
                         iconSource: Theme.icon("close-line")
@@ -159,15 +167,24 @@ Window {
                 }
             }
 
-            MiniPlayerControls {
-                id: controls
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                playback: miniWindow.playback
-                windows: miniWindow.windows
-                waveformSession: miniWindow.waveformSession
-                waveformActive: miniWindow.visible
-                                && miniWindow.visibility !== Window.Minimized
+
+                MiniPlayerControls {
+                    id: controls
+                    readonly property real fitScale:
+                        Math.max(0.01, Math.min(1, parent.width / 584, parent.height / 150))
+                    width: parent.width / fitScale
+                    height: parent.height / fitScale
+                    scale: fitScale
+                    transformOrigin: Item.TopLeft
+                    playback: miniWindow.playback
+                    windows: miniWindow.windows
+                    waveformSession: miniWindow.waveformSession
+                    waveformActive: miniWindow.visible
+                                    && miniWindow.visibility !== Window.Minimized
+                }
             }
         }
     }

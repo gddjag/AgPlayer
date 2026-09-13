@@ -452,7 +452,7 @@ void SeparationOutputTransactionTest::recoveryCleansOnlyReservedFlatTemporaryJob
 void SeparationOutputTransactionTest::rootJunctionIsRejectedWithoutTouchingItsTarget()
 {
 #ifndef Q_OS_WIN
-    QSKIP("NTFS junction coverage is Windows-only");
+    QSKIP("NTFS junction coverage is Windows-only", "");
 #else
     QTemporaryDir holder;
     QTemporaryDir external;
@@ -462,7 +462,7 @@ void SeparationOutputTransactionTest::rootJunctionIsRejectedWithoutTouchingItsTa
     QVERIFY(writePayload(sentinel, QByteArrayLiteral("outside")));
     const QString junction = holder.filePath(QStringLiteral("output-junction"));
     if (!createJunction(junction, external.path())) {
-        QSKIP("This environment cannot create an NTFS directory junction");
+        QSKIP("This environment cannot create an NTFS directory junction", "");
     }
     JunctionGuard guard(junction);
 
@@ -480,7 +480,7 @@ void SeparationOutputTransactionTest::rootJunctionIsRejectedWithoutTouchingItsTa
 void SeparationOutputTransactionTest::nestedJunctionFailsClosedWithoutTouchingItsTarget()
 {
 #ifndef Q_OS_WIN
-    QSKIP("NTFS junction coverage is Windows-only");
+    QSKIP("NTFS junction coverage is Windows-only", "");
 #else
     QTemporaryDir output;
     QTemporaryDir external;
@@ -492,7 +492,7 @@ void SeparationOutputTransactionTest::nestedJunctionFailsClosedWithoutTouchingIt
     const QString junction = QDir(stale.temporaryPath).filePath(
         QStringLiteral("nested-junction"));
     if (!createJunction(junction, external.path())) {
-        QSKIP("This environment cannot create an NTFS directory junction");
+        QSKIP("This environment cannot create an NTFS directory junction", "");
     }
     JunctionGuard guard(junction);
 

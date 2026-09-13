@@ -16,20 +16,58 @@
 #include <utility>
 #include <QtConcurrent/QtConcurrentRun>
 #include "vocal_separation_path_safety.hpp"
+#ifdef Q_OS_UNIX
+#include <signal.h>
+#include <unistd.h>
+#endif
 
 static void initializePythonResources() { Q_INIT_RESOURCE(agplayer_separation_python); }
 static VocalDownloadFile uvArchive(bool mirror = false) {
+#ifdef Q_OS_MACOS
+#ifdef Q_PROCESSOR_ARM_64
+    const QString name = QStringLiteral("uv-aarch64-apple-darwin.tar.gz");
+    constexpr qint64 bytes = 18'194'566;
+    const QString hash = QStringLiteral("3f61099e261e449527141dbf125629fab33ad696468c8c90cebbac40185a306c");
+#else
+    const QString name = QStringLiteral("uv-x86_64-apple-darwin.tar.gz");
+    constexpr qint64 bytes = 19'569'884;
+    const QString hash = QStringLiteral("76638fdcfa91357858771551a1c88de1f7c3b270b33ab1866f8a0618d9e442d8");
+#endif
+    const QString official = QStringLiteral("https://github.com/astral-sh/uv/releases/download/0.8.22/") + name;
+    return {name, QUrl(mirror ? QStringLiteral("https://ghfast.top/") + official : official), bytes, hash};
+#else
     const QString official = QStringLiteral("https://github.com/astral-sh/uv/releases/download/0.8.22/uv-x86_64-pc-windows-msvc.zip");
     // The relay changes transport only; both routes must match the same pinned
     // official release size and SHA-256 before any archive is extracted.
     return {"uv.zip", QUrl(mirror ? QStringLiteral("https://ghfast.top/") + official : official),
             20716936, "5049375aa2a5162f132b2c1cb992e25d42d47d934cab8c174dbe6f60973dcc12"};
+#endif
+}
+
+static QString pythonVersion() {
+#ifdef Q_OS_MACOS
+    return QStringLiteral("3.10.18"); // diffq's official Mac wheels include cp310.
+#else
+    return QStringLiteral("3.11.13");
+#endif
 }
 
 static const QByteArray& verifiedVrMarker()
 {
+#ifdef Q_OS_MACOS
+#ifdef Q_PROCESSOR_ARM_64
+    static const QByteArray marker = QByteArrayLiteral(
+        "audio-separator=0.30.2\npython=3.10.18\ntorch=2.5.1\nplatform=macos-arm64\n"
+        "verification=external-separation-worker-v2\n");
+#else
+    static const QByteArray marker = QByteArrayLiteral(
+        "audio-separator=0.24.1\npython=3.10.18\ntorch=2.2.2\nplatform=macos-x86_64\n"
+        "verification=external-separation-worker-v2\n");
+#endif
+#else
     static const QByteArray marker = QByteArrayLiteral(
         "audio-separator=0.30.2\nverification=external-separation-worker-v1\n");
+#endif
     return marker;
 }
 
@@ -38,12 +76,19 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
     : QObject(parent), root_(std::move(root)), downloader_(network),
       inactivity_(this), ioPoll_(this), stopDeadline_(this)
 {
+#ifdef Q_OS_MACOS
+#ifdef Q_PROCESSOR_ARM_64
+    root_ = QDir(root_).filePath(QStringLiteral("macos-arm64"));
+#else
+    root_ = QDir(root_).filePath(QStringLiteral("macos-x86_64"));
+#endif
+#endif
     initializePythonResources();
     QFile bundled(":/separation/external_separation_worker.py");
     if (bundled.open(QIODevice::ReadOnly)) bundledWorker_ = bundled.readAll();
     // Updating the application updates its bridge, not the optional Python
     // installation. Reuse a verified environment without any network/process.
-    if (vocal_separation_paths::safeExistingFileWithin(python(), root_))
+    if (pythonPathIsSafe())
         synchronizeWorker();
     connect(&downloader_, &VocalSeparationDownloader::progressChanged, this,
             [this](qint64 received, qint64 total) {
@@ -95,8 +140,8 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
         stopInstaller();
     });
     ioPoll_.setInterval(2000);
-    connect(&ioPoll_, &QTimer::timeout, this, [this] {
 #ifdef Q_OS_WIN
+    connect(&ioPoll_, &QTimer::timeout, this, [this] {
         const auto pid = process_.processId();
         if (!pid || stopping_ || paused_) return;
         HANDLE handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, DWORD(pid));
@@ -109,8 +154,8 @@ ExternalSeparationRuntime::ExternalSeparationRuntime(QString root,
             processIoBytes_ = bytes;
             inactivity_.start();
         }
-#endif
     });
+#endif
     stopDeadline_.setSingleShot(true);
     stopDeadline_.setInterval(1500);
     connect(&stopDeadline_, &QTimer::timeout, this, [this] {
@@ -188,12 +233,33 @@ ExternalSeparationRuntime::~ExternalSeparationRuntime()
     cacheVerification_.waitForFinished();
 }
 
-QString ExternalSeparationRuntime::python() const { return QDir(root_).filePath("env/Scripts/python.exe"); }
+QString ExternalSeparationRuntime::python() const {
+#ifdef Q_OS_MACOS
+    return QDir(root_).filePath("env/bin/python");
+#else
+    return QDir(root_).filePath("env/Scripts/python.exe");
+#endif
+}
+bool ExternalSeparationRuntime::pythonPathIsSafe() const {
+    using namespace vocal_separation_paths;
+    if (safeExistingFileWithin(python(), root_)) return true;
+#ifdef Q_OS_MACOS
+    // uv venvs legitimately symlink the interpreter to its managed Python.
+    // Permit only this final link, whose resolved regular file stays in root.
+    const QFileInfo executable(python());
+    const QString target = executable.canonicalFilePath();
+    return executable.isSymbolicLink()
+        && safeExistingPathWithin(executable.absolutePath(), root_, SafePathKind::Directory)
+        && safeExistingFileWithin(target, QDir(root_).filePath("python"));
+#else
+    return false;
+#endif
+}
 QString ExternalSeparationRuntime::workerScript() const { return QDir(root_).filePath("external_separation_worker.py"); }
 bool ExternalSeparationRuntime::ready() const
 {
     return vocal_separation_paths::safeExistingDirectory(root_)
-        && vocal_separation_paths::safeExistingFileWithin(python(), root_)
+        && pythonPathIsSafe()
         && markerMatchesVerificationContract()
         && workerMatchesBundle();
 }
@@ -262,7 +328,7 @@ bool ExternalSeparationRuntime::start()
         if (!busy_) installationLock_.reset();
     });
     if (!synchronizeWorker()) return false;
-    const bool verifyExistingEnvironment = vocal_separation_paths::safeExistingFileWithin(python(), root_);
+    const bool verifyExistingEnvironment = pythonPathIsSafe();
     if (!verifyExistingEnvironment && !clearVerificationMarker()) return false;
     busy_ = true;
     paused_ = false;
@@ -310,6 +376,11 @@ void ExternalSeparationRuntime::launch(const QString& program, const QStringList
     environment.insert("RUST_LOG", "error");
     environment.insert("AGPLAYER_PYTHON_ROOT", root_);
     process_.setProcessEnvironment(environment);
+#ifdef Q_OS_UNIX
+    // Give uv, Python and their children a dedicated process group so cancel
+    // never leaves pip/build/download subprocesses behind.
+    process_.setChildProcessModifier([] { if (::setsid() < 0) ::_exit(127); });
+#endif
     process_.start(program, arguments);
     process_.closeWriteChannel();
     inactivity_.start();
@@ -319,29 +390,63 @@ void ExternalSeparationRuntime::launch(const QString& program, const QStringList
 void ExternalSeparationRuntime::advance()
 {
     if (!busy_ || paused_ || stopping_ || process_.state() != QProcess::NotRunning) return;
+#ifdef Q_OS_MACOS
+    const QString uv = QDir(root_).filePath("uv");
+#else
     const QString uv = QDir(root_).filePath("uv.exe");
+#endif
     if (step_ == 1) {
         emit progress(-1, tr("解压已校验配置器"));
+#ifdef Q_OS_MACOS
+        if (vocal_separation_paths::safePathKind(uv) != vocal_separation_paths::SafePathKind::Missing
+            && !vocal_separation_paths::safeExistingFileWithin(uv, root_)) {
+            fail(tr("拒绝替换不安全的配置器路径")); return;
+        }
+        const QString member = uvArchive().fileName.chopped(7) + QStringLiteral("/uv");
+        launch(QStringLiteral("/usr/bin/tar"), {QStringLiteral("-xzf"), QDir(root_).filePath("uv.zip"),
+            QStringLiteral("--strip-components=1"), QStringLiteral("-C"), root_, member});
+#else
         launch("powershell.exe", {"-NoProfile", "-NonInteractive", "-Command",
             "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; "
             "$z=[IO.Compression.ZipFile]::OpenRead([IO.Path]::Combine($env:AGPLAYER_PYTHON_ROOT,'uv.zip')); "
             "try {$e=$z.GetEntry('uv.exe'); if(!$e){throw 'Missing uv.exe'}; "
             "[IO.Compression.ZipFileExtensions]::ExtractToFile($e,[IO.Path]::Combine($env:AGPLAYER_PYTHON_ROOT,'uv.exe'),$true) } finally {$z.Dispose()}"});
+#endif
     } else if (step_ == 2) {
+#ifdef Q_OS_MACOS
+        if (!vocal_separation_paths::safeExistingFileWithin(uv, root_)
+            || !QFile::setPermissions(uv, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) {
+            fail(tr("无法安全设置配置器执行权限")); return;
+        }
+#endif
         if (!recoverIncompletePython()) {
             fail(tr("无法安全恢复不完整的 Python 环境；请查看 install.log")); return;
         }
-        emit progress(-1, tr("下载独立 Python 3.11 环境"));
+        emit progress(-1, tr("下载独立 Python %1 环境").arg(pythonVersion()));
         if (QFileInfo(python()).isFile()) { ++step_; advance(); return; }
-        launch(uv, {"venv", "--python", "3.11.13", "--managed-python", QDir(root_).filePath("env")});
+        launch(uv, {"venv", "--python", pythonVersion(), "--managed-python", QDir(root_).filePath("env")});
     } else if (step_ == 3) {
         emit progress(-1, tr("下载 / 安装 PyTorch、VR 适配器和 FFmpeg（保留缓存，可暂停续装）"));
         QStringList arguments{"pip", "install"};
+#ifdef Q_OS_MACOS
+        arguments.append({"--only-binary", ":all:"});
+#endif
         if (repairAttempted_) arguments.append("--reinstall");
         arguments.append({"--index-url", mirror_ ? "https://pypi.tuna.tsinghua.edu.cn/simple" : "https://pypi.org/simple",
-                          "--python", python(), "audio-separator[cpu]==0.30.2",
-                          "torch==2.5.1", "torchaudio==2.5.1", "torchvision==0.20.1", "numpy==1.26.4", "imageio-ffmpeg==0.6.0",
-                          "onnxruntime==1.20.1", "onnx==1.17.0", "numba==0.60.0", "scipy==1.14.1", "librosa==0.10.2.post1"});
+                          "--python", python(),
+#if defined(Q_OS_MACOS) && !defined(Q_PROCESSOR_ARM_64)
+                          "audio-separator[cpu]==0.24.1", "torch==2.2.2", "torchaudio==2.2.2", "torchvision==0.17.2",
+#else
+                          "audio-separator[cpu]==0.30.2",
+                          "torch==2.5.1", "torchaudio==2.5.1", "torchvision==0.20.1",
+#endif
+                          "numpy==1.26.4", "imageio-ffmpeg==0.6.0",
+#ifdef Q_OS_MACOS
+                          "onnxruntime==1.18.1", "diffq==0.2.4",
+#else
+                          "onnxruntime==1.20.1",
+#endif
+                          "onnx==1.17.0", "numba==0.60.0", "scipy==1.14.1", "librosa==0.10.2.post1"});
         launch(uv, arguments);
     } else if (step_ == 4) {
         emit progress(-1, tr("验证实际 Python / PyTorch / FFmpeg 导入"));
@@ -428,6 +533,7 @@ void ExternalSeparationRuntime::stopInstaller()
     // finishes, so a late taskkill can never target a subsequent installation.
     terminateTree_.start("taskkill.exe", {"/PID", QString::number(process_.processId()), "/T", "/F"});
 #else
+    ::kill(-static_cast<pid_t>(process_.processId()), SIGKILL);
     process_.kill();
 #endif
     stopDeadline_.start();
@@ -518,14 +624,24 @@ bool ExternalSeparationRuntime::recoverIncompletePython()
         appendLog(QStringLiteral("preserved incomplete %1 as %2").arg(label, QFileInfo(destination).fileName()));
         return true;
     };
+#ifdef Q_OS_MACOS
+    // uv owns its managed version directory names. Preserve partial downloads;
+    // validate the venv's confined interpreter link before reusing it.
+    if (pythonPathIsSafe()) return true;
+    return quarantine(QDir(root_).filePath("env"), python(), "env");
+#else
     const QString managed = QDir(root_).filePath("python/cpython-3.11.13-windows-x86_64-none");
     return quarantine(managed, QDir(managed).filePath("python.exe"), "python")
         && quarantine(QDir(root_).filePath("env"), python(), "env");
+#endif
 }
 
 namespace {
 QJsonObject nvidiaHardware()
 {
+#ifdef Q_OS_MACOS
+    return {{"available", false}, {"diagnostic", "macOS 使用 CoreML / MPS 或 CPU"}};
+#else
     QString program = QStandardPaths::findExecutable("nvidia-smi.exe");
     if (program.isEmpty()) {
         const auto standard = QDir(qEnvironmentVariable("SystemRoot")).filePath("System32/nvidia-smi.exe");
@@ -550,6 +666,7 @@ QJsonObject nvidiaHardware()
     }
     return {{"available", !names.isEmpty()}, {"name", names.join(" / ")},
             {"driverVersion", versions.join(" / ")}, {"diagnostic", names.isEmpty() ? "Empty NVIDIA driver response" : ""}};
+#endif
 }
 bool verifyCudaFiles(const QString& root, const QList<VocalDownloadFile>& files,
                      const std::shared_ptr<std::atomic_bool>& cancellation)

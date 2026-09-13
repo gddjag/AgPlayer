@@ -101,6 +101,31 @@ TestCase {
     }
 
     Component {
+        id: lyricsReadabilityServiceComponent
+        QtObject {
+            property bool enabled: true
+            property int status: LyricsService.Ready
+            property bool synchronizedLyrics: true
+            property bool instrumental: false
+            property string untimedLyrics: ""
+            property string previousLine: "窗外的风慢慢吹过"
+            property string currentLine: "让音乐陪你走过长夜"
+            property string nextLine: "下一句旋律正在靠近"
+            property int currentLineIndex: 1
+            property string sourceProvider: ""
+            property string sourceAttribution: ""
+            property var routeNotice: ({})
+            property var routeAttempts: []
+            property var lines: ListModel {
+                ListElement { text: "窗外的风慢慢吹过" }
+                ListElement { text: "让音乐陪你走过长夜" }
+                ListElement { text: "下一句旋律正在靠近" }
+                ListElement { text: "把每个字都看得清楚" }
+            }
+        }
+    }
+
+    Component {
         id: defaultListWindowComponent
         ListWindow { visible: true }
     }
@@ -631,8 +656,7 @@ TestCase {
 
     function createIsolatedTrackModel(prefix, count) {
         var model = isolatedTrackModelComponent.createObject(testCase)
-        var path = decodeURIComponent(testAudioUrl.toString()
-                                      .replace(/^file:\/\/\//, ""))
+        var path = nativeDropHelper.localFilePath(testAudioUrl)
         for (var row = 0; row < count; ++row) {
             model.append({
                 "trackId": prefix + row,
@@ -946,6 +970,11 @@ TestCase {
     function test_import_files_reaches_real_controller() {
         verify(testAudioUrl.toString().length > 0,
                "generated audio fixture should be available")
+        // Earlier drag/drop tests populate this shared library. Start this
+        // import assertion from its own empty state, including async completion.
+        tryCompare(ImportController, "busy", false, 5000)
+        PlaybackController.stop()
+        nativeDropHelper.clearLibrary()
         compare(LibraryModel.count, 0)
         mainWindow.importFiles([testAudioUrl])
         tryVerify(function() { return LibraryModel.count === 1 }, 5000)
@@ -1034,8 +1063,7 @@ TestCase {
         const previousShell = SettingsController.playerShellMode
         const folder = nativeDropHelper.createDropDirectory()
         verify(folder)
-        let folderPath = decodeURIComponent(folder.toString()
-                                             .replace(/^file:\/\/\//, ""))
+        let folderPath = nativeDropHelper.localFilePath(folder)
         folderPath = folderPath.replace(/\\/g, "/")
         const initialCount = ResourceFolderController.monitoredFolders.length
         SettingsController.playerShellMode = data.shellMode
@@ -1382,8 +1410,7 @@ TestCase {
     function test_track_context_play_action_uses_real_mouse_click() {
         mainWindow.importFiles([testAudioUrl])
         tryVerify(function() { return !ImportController.busy }, 5000)
-        var playablePath = decodeURIComponent(testAudioUrl.toString()
-                                              .replace(/^file:\/\/\//, ""))
+        var playablePath = nativeDropHelper.localFilePath(testAudioUrl)
         var playableIndex = -1
         for (var row = 0; row < LibraryModel.count; ++row) {
             var path = String(LibraryModel.data(LibraryModel.index(row, 0),
@@ -1425,8 +1452,7 @@ TestCase {
         compare(AudioToolsController.currentTool, 0)
         mainWindow.importFiles([testAudioUrl])
         tryVerify(function() { return !ImportController.busy }, 5000)
-        var playablePath = decodeURIComponent(testAudioUrl.toString()
-                                              .replace(/^file:\/\/\//, ""))
+        var playablePath = nativeDropHelper.localFilePath(testAudioUrl)
         var playableIndex = -1
         for (var row = 0; row < LibraryModel.count; ++row) {
             var path = String(LibraryModel.data(LibraryModel.index(row, 0),
@@ -1650,8 +1676,7 @@ TestCase {
         mouseClick(secondArea, secondArea.width / 2, secondArea.height / 2,
                    Qt.LeftButton, Qt.ControlModifier)
         compare(list.selectedTrackIds.length, 2)
-        var playablePath = decodeURIComponent(testAudioUrl.toString()
-                                              .replace(/^file:\/\/\//, ""))
+        var playablePath = nativeDropHelper.localFilePath(testAudioUrl)
         var playableIndex = -1
         for (var rowIndex = 0; rowIndex < LibraryModel.count; ++rowIndex) {
             var rowPath = String(LibraryModel.data(
@@ -2244,8 +2269,7 @@ TestCase {
         var laterImportedIds = ImportController.importedTrackIds.slice(0)
         compare(laterImportedIds.length, 2)
 
-        var folderPath = decodeURIComponent(busyFolder.toString()
-                                           .replace(/^file:\/\/\//, ""))
+        var folderPath = nativeDropHelper.localFilePath(busyFolder)
         folderPath = folderPath.replace(/\\/g, "/")
         verify(ResourceFolderController.removeMonitoredFolder(folderPath))
         LibraryModel.removeTrack(firstImportedId)
@@ -2690,8 +2714,7 @@ TestCase {
         verify(waveform, "main waveform should exist after importing audio")
         verify(seekSurface, "visible waveform surface should own seeking")
 
-        var playablePath = decodeURIComponent(testAudioUrl.toString()
-                                              .replace(/^file:\/\/\//, ""))
+        var playablePath = nativeDropHelper.localFilePath(testAudioUrl)
         var playableIndex = -1
         for (var row = 0; row < LibraryModel.count; ++row) {
             var path = String(LibraryModel.data(LibraryModel.index(row, 0),
@@ -2933,8 +2956,7 @@ TestCase {
     function test_play_button_tracks_real_playback_state() {
         mainWindow.importFiles([testAudioUrl])
         tryVerify(function() { return !ImportController.busy }, 5000)
-        var playablePath = decodeURIComponent(testAudioUrl.toString()
-                                              .replace(/^file:\/\/\//, ""))
+        var playablePath = nativeDropHelper.localFilePath(testAudioUrl)
         var playableIndex = -1
         for (var row = 0; row < LibraryModel.count; ++row) {
             var path = String(LibraryModel.data(LibraryModel.index(row, 0),
@@ -3485,6 +3507,8 @@ TestCase {
             var list = findChild(window, "sharedTrackList")
             verify(list)
             compare(list.layoutProfile, "classic")
+            window.show()
+            verify(waitForRendering(list))
 
             var title = findChild(list, "trackHeaderTitle")
             var duration = findChild(list, "trackHeaderDuration")
@@ -3574,7 +3598,7 @@ TestCase {
             var trailingWidth = -1
             for (var widthIndex = 0; widthIndex < widths.length; ++widthIndex) {
                 list.width = widths[widthIndex]
-                wait(0)
+                verify(waitForRendering(list))
                 var duration = findChild(list, "trackHeaderDuration")
                 var rating = findChild(list, "trackHeaderRating")
                 var favorite = findChild(list, "trackHeaderFavorite")
@@ -4970,8 +4994,7 @@ TestCase {
         for (importedId of ImportController.importedTrackIds)
             LibraryModel.removeTrack(importedId)
         tryCompare(LibraryModel, "count", initialLibraryCount, 1000)
-        var folderPath = decodeURIComponent(folderUrl.toString()
-                                           .replace(/^file:\/\/\//, ""))
+        var folderPath = nativeDropHelper.localFilePath(folderUrl)
         folderPath = folderPath.replace(/\\/g, "/")
         var rootNode = null
         for (var row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
@@ -5014,8 +5037,7 @@ TestCase {
             return ResourceFolderController.monitoredFolders.length
                     === initialFolderCount + 2
         }, 1000)
-        var secondFolderPath = decodeURIComponent(secondFolderUrl.toString()
-                .replace(/^file:\/\/\//, "")).replace(/\\/g, "/")
+        var secondFolderPath = nativeDropHelper.localFilePath(secondFolderUrl).replace(/\\/g, "/")
         rootNode = null
         var secondRootNode = null
         for (row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
@@ -5121,7 +5143,9 @@ TestCase {
         var previousEnabled = SettingsController.listWaveformThumbnailEnabled
         var previousMode = SettingsController.listWaveformThumbnailMode
         SettingsController.listWaveformThumbnailEnabled = false
-        var list = trackListComponent.createObject(mainWindow.contentItem)
+        // QtTest destroys this overlay even when a check fails, so later
+        // pointer tests cannot be intercepted by a leaked list.
+        var list = createTemporaryObject(trackListComponent, mainWindow.contentItem)
         verify(list)
         tryVerify(function() { return list.count > 0 })
         compare(list.rowHeight, Theme.listRowHeight)
@@ -5140,7 +5164,10 @@ TestCase {
             return TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
                     > readsBefore
         }, 3000)
-        wait(100)
+        verify(waitForRendering(list))
+        tryVerify(function() {
+            return TrackWaveformThumbnailProvider.diagnostics().inFlightTracks === 0
+        }, 5000)
         var settledReads = TrackWaveformThumbnailProvider.diagnostics().cacheReadAttempts
         SettingsController.listWaveformThumbnailMode = "Mono"
         wait(100)
@@ -5830,6 +5857,10 @@ TestCase {
             nativeDropHelper.ensureSortableTracks()
         var oldWidth = mainWindow.width
         var oldHeight = mainWindow.height
+        var resizedVolume = findChild(mainWindow, "mainVolumeControl")
+        verify(resizedVolume)
+        resizedVolume.expandedForQa = true
+        wait(180)
         mainWindow.width = mainWindow.minimumWidth
         mainWindow.height = mainWindow.minimumHeight
         wait(50)
@@ -5921,7 +5952,11 @@ TestCase {
         verify(contentColumn, "settings must expose the single content column")
         var headerDragArea = findChild(page, "settingsHeaderDragArea")
         verify(headerDragArea, "settings header must expose a full-width native drag surface")
-        verify(headerDragArea.width > settingsWindow.width * 0.50)
+        const macButtons = Qt.platform.os === "osx"
+                ? findChild(page, "macCloseButton").parent : null
+        const leadingControlsWidth = macButtons ? macButtons.width + Theme.spacingLg : 0
+        verify(headerDragArea.x >= leadingControlsWidth)
+        verify(headerDragArea.width + leadingControlsWidth > settingsWindow.width * 0.50)
         compare(sidebar.width, 184)
         verify(contentColumn.width <= 760,
                "settings content must remain a readable single column")
@@ -6104,12 +6139,27 @@ TestCase {
         var covers = findChild(page, "clearCoverCacheButton")
         var temp = findChild(page, "clearTempCacheButton")
         var all = findChild(page, "clearAllCacheButton")
-        verify(limit && waveform && covers && temp && all)
+        verify(limit && waveform && covers && all)
+        verify(!temp, "There is no shared temporary-file cache to clear")
+        var hint = findChild(page, "cacheDirectoryScopeHint")
+        verify(hint)
+        verify(hint.text.indexOf("歌词") >= 0)
+        var confirmation = findChild(page, "clearCacheConfirmDialog")
+        verify(confirmation.contentItem.text.indexOf("歌词") >= 0)
+        var pending = [page]
+        while (pending.length) {
+            var item = pending.pop()
+            verify(item.text !== "退出自动清理临时转码文件（默认开启）",
+                   "Job-owned staging cleanup must not be exposed as an exit setting")
+            if (item.children) {
+                for (var child = 0; child < item.children.length; ++child)
+                    pending.push(item.children[child])
+            }
+        }
         limit.text = "20"
         limit.editingFinished()
         tryCompare(SettingsController, "cacheSizeLimitMB", 20480)
         compare(waveform.parent, covers.parent)
-        compare(waveform.parent, temp.parent)
         compare(waveform.parent, all.parent)
         page.close()
     }
@@ -6727,6 +6777,136 @@ TestCase {
                         20, 100, 180, 180, host, 32), "none")
         } finally {
             window.destroy()
+        }
+    }
+
+    function test_reloading_shell_preserves_independent_sidebar_choices() {
+        for (var warning = 0; !nativeDropHelper.supportsWindowsDropFiles() && warning < 4; ++warning)
+            ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
+        var previousShell = SettingsController.playerShellMode
+        var previousLyrics = PlayerExperienceController.lyricsVisible
+        var saved = [mainWindow.integratedSidePanelPage, mainWindow.integratedSidePanelExpanded,
+                     mainWindow.rollingSidePanelPage, mainWindow.rollingSidePanelExpanded]
+        try {
+            PlayerExperienceController.lyricsVisible = true
+            mainWindow.integratedSidePanelPage = 0
+            mainWindow.integratedSidePanelExpanded = false
+            mainWindow.rollingSidePanelPage = 1
+            mainWindow.rollingSidePanelExpanded = false
+            compare(PlayerExperienceController.integratedSidePanelPage, 0)
+            compare(PlayerExperienceController.integratedSidePanelExpanded, false)
+            compare(PlayerExperienceController.rollingSidePanelPage, 1)
+            compare(PlayerExperienceController.rollingSidePanelExpanded, false)
+            for (var mode of [0, 1, 2, 1, 2]) {
+                SettingsController.playerShellMode = mode
+                wait(0)
+                compare(mainWindow.integratedSidePanelPage, 0)
+                compare(mainWindow.integratedSidePanelExpanded, false)
+                compare(mainWindow.rollingSidePanelPage, 1)
+                compare(mainWindow.rollingSidePanelExpanded, false)
+            }
+        } finally {
+            PlayerExperienceController.lyricsVisible = previousLyrics
+            mainWindow.integratedSidePanelPage = saved[0]
+            mainWindow.integratedSidePanelExpanded = saved[1]
+            mainWindow.rollingSidePanelPage = saved[2]
+            mainWindow.rollingSidePanelExpanded = saved[3]
+            SettingsController.playerShellMode = previousShell
+        }
+    }
+
+    function test_navigation_menu_width_follows_text_data() {
+        return [{ tag: "playlist", menu: "playlistContextMenu", item: "playlistMenuCreate" },
+                { tag: "resource", menu: "resourceFolderContextMenu", item: "resourceFolderMenuRemove" }]
+    }
+
+    function test_navigation_menu_width_follows_text(data) {
+        var navigation = createTemporaryObject(sideNavigationComponent, mainWindow.contentItem)
+        var menu = findChild(navigation, data.menu)
+        var item = findChild(menu, data.item)
+        verify(menu && item)
+        menu.popup(20, 20)
+        tryCompare(menu, "opened", true)
+        function expectedWidth() {
+            var widest = 0
+            for (var i = 0; i < menu.count; ++i) {
+                var entry = menu.itemAt(i)
+                if (entry && entry.text !== undefined)
+                    widest = Math.max(widest, entry.contentItem.implicitWidth
+                                      + entry.leftPadding + entry.rightPadding)
+            }
+            return widest + menu.leftPadding + menu.rightPadding
+        }
+        tryVerify(function() { return Math.abs(menu.width - expectedWidth()) <= 2 }, 500,
+                  "Menu width must follow actual labels and padding, not a fixed minimum")
+        var shortWidth = menu.width
+        item.text = "Create a playlist with a longer translated name"
+        tryVerify(function() { return menu.width > shortWidth })
+        tryVerify(function() { return Math.abs(menu.width - expectedWidth()) <= 2 })
+        verify(item.contentItem.width + 1 >= item.contentItem.implicitWidth,
+               "The widest action must not be elided")
+        menu.close()
+    }
+
+    function test_lyrics_text_remains_readable_in_both_appearances_data() {
+        return [{ tag: "dark", mode: 0 }, { tag: "light", mode: 1 }]
+    }
+
+    function test_lyrics_text_remains_readable_in_both_appearances(data) {
+        var oldTheme = SettingsController.themeMode
+        var service = createTemporaryObject(lyricsReadabilityServiceComponent, testCase)
+        var sidePanel = createTemporaryObject(lyricsSidePanelComponent,
+                                             mainWindow.contentItem,
+                                             { lyricsService: service, z: 1000 })
+        verify(sidePanel)
+        try {
+            SettingsController.themeMode = data.mode
+            tryCompare(Theme, "isLight", data.mode === 1)
+            var panel = findChild(sidePanel, "libraryLyricsPanel")
+            verify(panel)
+            panel.lyricOpacity = 88 // The existing immersive default must not dim ordinary lyrics.
+            panel.chromeAutoHideDelay = 60000
+            panel.revealChrome()
+            var timeline = findChild(panel, "lyricsTimelineList")
+            tryCompare(timeline, "count", 4)
+            // Drive a real position change after ListView's initial layout.
+            service.currentLineIndex = 2
+            wait(20)
+            service.currentLineIndex = 1
+            tryCompare(timeline, "currentIndex", 1)
+            tryVerify(function() { return timeline.itemAtIndex(1) && timeline.itemAtIndex(2) })
+            function textFor(index) {
+                var item = timeline.itemAtIndex(index)
+                for (var i = 0; i < item.children.length; ++i)
+                    if (item.children[i].text === service.lines.get(index).text)
+                        return item.children[i]
+                return null
+            }
+            var active = textFor(1), adjacent = textFor(2)
+            verify(active && adjacent)
+            var background = Theme.surface
+            function composed(text) {
+                var alpha = text.color.a * text.opacity * panel.opacity
+                return Qt.rgba(text.color.r * alpha + background.r * (1 - alpha),
+                               text.color.g * alpha + background.g * (1 - alpha),
+                               text.color.b * alpha + background.b * (1 - alpha), 1)
+            }
+            verify(colorContrast(composed(active), background) >= 4.5,
+                   "Current purple lyric must retain readable composed contrast")
+            verify(colorContrast(composed(adjacent), background) >= 4.5,
+                   "Adjacent lyric must not be dimmed by stacked opacity")
+            verify(active.font.weight > adjacent.font.weight)
+            compare(panel.opacity, 1)
+            var retry = findChild(panel, "lyricsRetryButton")
+            verify(retry.enabled)
+            service.status = LyricsService.Loading
+            compare(retry.enabled, false)
+            service.status = LyricsService.Ready
+            wait(350)
+            if (visualFixtureOutput)
+                grabImage(sidePanel).save(visualFixtureOutput + "-" + data.tag + ".png")
+        } finally {
+            SettingsController.themeMode = oldTheme
         }
     }
 

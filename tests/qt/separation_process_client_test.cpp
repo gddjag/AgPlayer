@@ -5,6 +5,10 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QScopeGuard>
+#ifdef Q_OS_UNIX
+#include <signal.h>
+#include <cerrno>
+#endif
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -34,6 +38,7 @@ private slots:
     void rejectsAnOversizedRemainingProtocolTailImmediately();
     void protocolFailureKeepsTheEventLoopResponsive();
     void processFailureTerminatesDescendants();
+    void unixCancellationTerminatesDescendants();
 };
 
 namespace {
@@ -345,7 +350,7 @@ void SeparationProcessClientTest::protocolFailureKeepsTheEventLoopResponsive()
 void SeparationProcessClientTest::processFailureTerminatesDescendants()
 {
 #ifndef Q_OS_WIN
-    QSKIP("Windows Job Object behavior is Windows-specific");
+    QSKIP("Windows Job Object behavior is Windows-specific", "");
 #else
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
@@ -386,6 +391,33 @@ void SeparationProcessClientTest::processFailureTerminatesDescendants()
     QTRY_COMPARE_WITH_TIMEOUT(WaitForSingleObject(child, 0), DWORD(WAIT_OBJECT_0), 2000);
     QVERIFY2(failureTime.elapsed() <= 2000,
              "The worker or its descendant exceeded the 2000 ms failure-cleanup deadline");
+#endif
+}
+
+void SeparationProcessClientTest::unixCancellationTerminatesDescendants()
+{
+#ifndef Q_OS_UNIX
+    QSKIP("Unix process-group cancellation is Unix-specific", "");
+#else
+    QTemporaryDir temporary;
+    const QString marker = temporary.filePath(QStringLiteral("descendant.marker"));
+    SeparationProcessClient client(QString::fromUtf8(AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH),
+        {QStringLiteral("spawn-child-and-fail"), marker}, shortDeadlines());
+    QSignalSpy cancelled(&client, &SeparationProcessClient::cancelled);
+    QVERIFY(client.startJob({}));
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(marker + QStringLiteral(".ready"))
+        && client.state() == SeparationProcessClient::Busy, 5000);
+    QFile ready(marker + QStringLiteral(".ready"));
+    QVERIFY(ready.open(QIODevice::ReadOnly));
+    bool ok = false;
+    const pid_t child = static_cast<pid_t>(ready.readAll().toLongLong(&ok));
+    QVERIFY(ok && child > 0);
+    const auto cleanup = qScopeGuard([child] { ::kill(child, SIGKILL); });
+    QCOMPARE(::kill(child, 0), 0);
+    client.cancel();
+    QTRY_COMPARE_WITH_TIMEOUT(cancelled.count(), 1, 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(::kill(child, 0) == -1 && errno == ESRCH, 3000);
+    QVERIFY(!client.isProcessRunning());
 #endif
 }
 

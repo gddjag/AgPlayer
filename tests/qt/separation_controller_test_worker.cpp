@@ -44,12 +44,21 @@ int main(int argc, char* argv[])
         // observes the process handle, not a scheduling-sensitive delayed file.
         return app.exec();
     }
+    QProcess child;
     if (scenario == QStringLiteral("spawn-child-and-fail")) {
+#ifdef Q_OS_UNIX
+        // Normal subprocesses inherit the worker's process group, as Python
+        // FFmpeg children do; startDetached intentionally creates a new one.
+        child.start(QCoreApplication::applicationFilePath(),
+                    {QStringLiteral("delayed-marker-child"), markerPath});
+        if (!child.waitForStarted()) return 9;
+#else
         if (!QProcess::startDetached(
                 QCoreApplication::applicationFilePath(),
                 {QStringLiteral("delayed-marker-child"), markerPath})) {
             return 9;
         }
+#endif
     }
     std::thread([&app, scenario, markerPath] {
         std::string line;

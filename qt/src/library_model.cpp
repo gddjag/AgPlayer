@@ -707,12 +707,15 @@ int LibraryModel::reorderTracks(const QStringList& trackIds,
             break;
         }
     }
-    for (int index = 0; index < selected.size(); ++index) {
-        remaining.insert(destination + index, selected.at(index));
-    }
+    QList<TrackRecord> reordered;
+    reordered.reserve(tracks_.size());
+    for (int row = 0; row < destination; ++row) reordered.append(remaining.at(row));
+    reordered.append(selected);
+    for (int row = destination; row < remaining.size(); ++row)
+        reordered.append(remaining.at(row));
 
     beginResetModel();
-    tracks_ = std::move(remaining);
+    tracks_ = std::move(reordered);
     pathRows_.clear();
     trackRows_.clear();
     for (int row = 0; row < tracks_.size(); ++row) {
@@ -850,7 +853,7 @@ TrackRecord readLibraryMetadata(const QString& path, const ag_metadata* metadata
     const char* coverMime = nullptr;
     const unsigned char* cover = ag_metadata_cover(metadata, &coverSize, &coverMime);
     if (cover == nullptr || coverSize == 0) {
-        track.coverUrl = {};
+        track.coverUrl = QUrl{};
     } else {
         const QUrl cached = cacheEmbeddedCover(
             cover, coverSize, copiedMetadata(coverMime));

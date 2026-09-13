@@ -64,7 +64,12 @@ TestCase {
         verify(scroller && commandBar && bottomBar)
         verify(scroller.width <= compactPage.width)
         verify(scroller.height > 0)
-        verify(scroller.contentWidth > scroller.width)
+        compare(scroller.contentWidth, scroller.width)
+        const rulesTab = findChild(compactPage, "filenameCompactRulesTab")
+        verify(rulesTab)
+        mouseClick(rulesTab, rulesTab.width / 2, rulesTab.height / 2)
+        wait(0)
+        verify(scroller.contentHeight > scroller.height)
         const commandPosition = commandBar.mapToItem(compactPage, 0, 0)
         const bottomPosition = bottomBar.mapToItem(compactPage, 0, 0)
         verify(commandPosition.x >= 0 && commandPosition.y >= 0)
@@ -100,8 +105,14 @@ TestCase {
         }
         verify(scroller.contentWidth >= scroller.width)
         compare(candidate.compactLayout, data.w < 1500)
-        if (candidate.width < candidate.desktopWorkspaceWidth)
-            verify(scroller.contentWidth > scroller.width)
+        if (candidate.width < candidate.desktopWorkspaceWidth) {
+            compare(scroller.contentWidth, scroller.width)
+            const rulesTab = findChild(candidate, "filenameCompactRulesTab")
+            verify(rulesTab)
+            mouseClick(rulesTab, rulesTab.width / 2, rulesTab.height / 2)
+            wait(0)
+            verify(scroller.contentHeight > scroller.height)
+        }
 
         for (const name of ["filenameReadySummaryCard",
                             "filenameConflictSummaryCard",

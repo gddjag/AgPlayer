@@ -30,6 +30,28 @@
         "VCPKG_TARGET_TRIPLET": "x64-windows",
         "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg-overlays"
       }
+    },
+    {
+      "name": "macos-universal-release",
+      "displayName": "macOS 13+ Universal (Intel + Apple Silicon)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/macos-universal",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0",
+        "CMAKE_OSX_ARCHITECTURES": "x86_64;arm64",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_PREFIX_PATH": "$env{AGPLAYER_QT_ROOT}",
+        "VCPKG_TARGET_TRIPLET": "universal-osx",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/vcpkg-overlays",
+        "BUILD_TESTING": false
+      }
     }
   ],
   "buildPresets": [
@@ -40,6 +62,13 @@
     {
       "name": "windows-msvc-release",
       "configurePreset": "windows-msvc-release"
+    },
+    {
+      "name": "macos-universal-release",
+      "configurePreset": "macos-universal-release",
+      "targets": [
+        "AgPlayer"
+      ]
     }
   ],
   "testPresets": [

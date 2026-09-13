@@ -12,6 +12,8 @@ TestCase {
     height: 480
     visible: true
 
+    function init() { failOnWarning(/Binding loop detected/) }
+
     Rectangle {
         anchors.fill: parent
         color: Theme.contentSurface
@@ -45,8 +47,8 @@ TestCase {
         var names = [["addTagDialog", "renameTagDialog", "removeTagDialog"], ["trackTagDialog"]]
         try {
             for (var f = 0; f < files.length; ++f) {
-                var component = Qt.createComponent(Qt.resolvedUrl(
-                            "../../app/qml/AgPlayer/components/" + files[f]))
+                var component = Qt.createComponent(
+                            "qrc:/qt/qml/AgPlayer/qml/AgPlayer/components/" + files[f])
                 compare(component.status, Component.Ready, component.errorString())
                 var owner = component.createObject(host.contentItem,
                             {"x": host.width - 240, "y": 40,
@@ -83,8 +85,8 @@ TestCase {
         } finally { SettingsController.themeMode = previousMode }
     }
     function test_cache_confirmation_uses_themed_buttons_without_clearing_cache() {
-        var component = Qt.createComponent(Qt.resolvedUrl(
-                    "../../app/qml/AgPlayer/SettingsPage.qml"))
+        var component = Qt.createComponent(
+                    "qrc:/qt/qml/AgPlayer/qml/AgPlayer/SettingsPage.qml")
         compare(component.status, Component.Ready, component.errorString())
         var owner = component.createObject(testCase, {"width": 640, "height": 480})
         verify(owner)
@@ -119,8 +121,8 @@ TestCase {
         var names = [["addTagDialog", "renameTagDialog", "removeTagDialog"],
                      ["trackTagDialog"]]
         for (var f = 0; f < files.length; ++f) {
-            var component = Qt.createComponent(Qt.resolvedUrl(
-                        "../../app/qml/AgPlayer/components/" + files[f]))
+            var component = Qt.createComponent(
+                        "qrc:/qt/qml/AgPlayer/qml/AgPlayer/components/" + files[f])
             compare(component.status, Component.Ready, component.errorString())
             var owner = component.createObject(testCase, {"width": 600, "height": 400})
             verify(owner)
@@ -130,7 +132,13 @@ TestCase {
                     verify(dialog, names[f][n])
                     dialog.open()
                     tryCompare(dialog, "opened", true)
-                    verify(dialog.width >= 280 && dialog.width <= 300)
+                    if (names[f][n] === "removeTagDialog") {
+                        verify(dialog.width <= dialog.parent.width - 2 * Theme.spacingLg)
+                        compare(dialog.width, Math.min(dialog.implicitWidth,
+                            dialog.parent.width - 2 * Theme.spacingLg))
+                    } else {
+                        verify(dialog.width >= 280 && dialog.width <= 300)
+                    }
                     verify(dialog.height <= 220, "compact tag dialog")
                     compare(dialog.standardButton(Dialog.Cancel).text, "取消")
                     compare(dialog.standardButton(Dialog.Ok).text, "确定")
@@ -160,8 +168,8 @@ TestCase {
     }
 
     function test_standard_buttons_are_localized_compact_and_keep_roles() {
-        var component = Qt.createComponent(Qt.resolvedUrl(
-                    "../../app/qml/AgPlayer/components/ThemedDialog.qml"))
+        var component = Qt.createComponent(
+                    "qrc:/qt/qml/AgPlayer/qml/AgPlayer/components/ThemedDialog.qml")
         compare(component.status, Component.Ready, component.errorString())
         var dialog = component.createObject(testCase, {
             "title": "确认操作", "width": 360,

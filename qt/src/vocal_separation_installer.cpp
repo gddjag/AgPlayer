@@ -83,10 +83,20 @@ bool isSha256(const QString& value)
 const QList<VocalDownloadFile>& runtimeFiles()
 {
     static const QList<VocalDownloadFile> files{
+#ifdef Q_OS_MACOS
+#ifdef Q_PROCESSOR_ARM_64
+        {QStringLiteral("libonnxruntime.dylib"), {}, 24'870'696,
+         QStringLiteral("cf0c4da3d0ccae9b71cc854333e716d162869a3c42f9017b142408542fcec9b7")},
+#else
+        {QStringLiteral("libonnxruntime.dylib"), {}, 27'920'304,
+         QStringLiteral("b25f77bf7c58ef0fbcdd5fb090301df4e80f82cf0000ceed1042418729b6594d")},
+#endif
+#else
         {QStringLiteral("onnxruntime.dll"), {}, 17'328'152,
          QStringLiteral("e7eedec6a6f26dc39dc948276a75ef6d2bee3fff944d874ceed0bbd3b97bff40")},
         {QStringLiteral("onnxruntime_providers_shared.dll"), {}, 22'040,
          QStringLiteral("265c8daf29637cb259cac8be9f08f2cd45f3883f0f0e4949cbfddd5b4cbec3b6")},
+#endif
     };
     return files;
 }
@@ -105,13 +115,17 @@ QString VocalSeparationInstaller::runtimeVersionDirectory(
     const QString& runtimeRoot)
 {
     return QDir(runtimeRoot).filePath(
-        VocalSeparationCatalog::directMlRuntime().id);
+        VocalSeparationCatalog::nativeRuntime().id);
 }
 
 QString VocalSeparationInstaller::runtimeLibraryPath(const QString& runtimeRoot)
 {
     return QDir(runtimeVersionDirectory(runtimeRoot))
+#ifdef Q_OS_MACOS
+        .filePath(QStringLiteral("libonnxruntime.dylib"));
+#else
         .filePath(QStringLiteral("onnxruntime.dll"));
+#endif
 }
 
 VocalDownloadState VocalDownloadStateMachine::state() const
@@ -263,19 +277,19 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
 {
     QLockFile installationLock(runtimeRoot + QStringLiteral(".install.lock"));
     if (!QDir().mkpath(QFileInfo(runtimeRoot).absolutePath()) || !installationLock.tryLock())
-        return fail(QStringLiteral("DirectML runtime installation target is locked"));
+        return fail(QStringLiteral("ONNX Runtime installation target is locked"));
     const auto cancelledResult = [] {
-        return fail(QStringLiteral("DirectML runtime installation was cancelled"));
+        return fail(QStringLiteral("ONNX Runtime installation was cancelled"));
     };
     if (isCancelled(cancellation)) return cancelledResult();
-    const VocalRuntimePackage package = VocalSeparationCatalog::directMlRuntime();
+    const VocalRuntimePackage package = VocalSeparationCatalog::nativeRuntime();
     VocalDownloadFile archive;
     archive.fileName = QStringLiteral("runtime.nupkg");
     archive.bytes = package.bytes;
     archive.sha256 = package.sha256;
     if (!fileMatches(archive, nupkgPath, cancellation)) {
         if (isCancelled(cancellation)) return cancelledResult();
-        return fail(QStringLiteral("DirectML runtime package did not match its pinned SHA-256 or size"));
+        return fail(QStringLiteral("ONNX Runtime package did not match its pinned SHA-256 or size"));
     }
 
     const QString versionedRoot = runtimeVersionDirectory(runtimeRoot);
@@ -284,18 +298,18 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
     if (versionKind != vocal_separation_paths::SafePathKind::Missing) {
         if (!runtimeDirectoryIsVerified(
                 versionedRoot, package.sha256, cancellation)) {
-            return fail(QStringLiteral("Existing DirectML runtime failed integrity verification"));
+            return fail(QStringLiteral("Existing ONNX Runtime failed integrity verification"));
         }
         return {true, {}};
     }
     const QSet<QString> allowedNames = runtimeAllowedNames();
     if (!vocal_separation_paths::removeKnownFlatDirectory(
             stagingRoot, allowedNames)) {
-        return fail(QStringLiteral("Refusing to clean an unsafe DirectML staging directory"));
+        return fail(QStringLiteral("Refusing to clean an unsafe ONNX Runtime staging directory"));
     }
     if (isCancelled(cancellation)) return cancelledResult();
     if (!QDir().mkpath(stagingRoot)) {
-        return fail(QStringLiteral("Cannot create DirectML runtime staging directory"));
+        return fail(QStringLiteral("Cannot create ONNX Runtime staging directory"));
     }
     const auto cleanupStaging = [&] {
         return vocal_separation_paths::removeKnownFlatDirectory(
@@ -306,6 +320,7 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
         return cancelledResult();
     }
 
+#ifndef Q_OS_MACOS
     const QString script = QStringLiteral(
         "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; "
         "$zip=[IO.Compression.ZipFile]::OpenRead($env:AGPLAYER_RUNTIME_ARCHIVE); "
@@ -315,15 +330,28 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
         "$target=[IO.Path]::Combine($env:AGPLAYER_RUNTIME_STAGING,$name); "
         "$input=$entry.Open(); try { $output=[IO.File]::Open($target,[IO.FileMode]::CreateNew); try {$input.CopyTo($output)} finally {$output.Dispose()} } finally {$input.Dispose()} } "
         "} finally { $zip.Dispose() }");
+#endif
     QProcess process;
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     environment.insert(QStringLiteral("AGPLAYER_RUNTIME_ARCHIVE"), nupkgPath);
     environment.insert(QStringLiteral("AGPLAYER_RUNTIME_STAGING"), stagingRoot);
     process.setProcessEnvironment(environment);
+#ifdef Q_OS_MACOS
+    // Extract only the known regular file into the verified empty staging
+    // directory; archive paths and symlinks are never materialized.
+#ifdef Q_PROCESSOR_ARM_64
+    const QString member = QStringLiteral("runtimes/osx-arm64/native/libonnxruntime.dylib");
+#else
+    const QString member = QStringLiteral("runtimes/osx-x64/native/libonnxruntime.dylib");
+#endif
+    process.setStandardOutputFile(QDir(stagingRoot).filePath(QStringLiteral("libonnxruntime.dylib")));
+    process.start(QStringLiteral("/usr/bin/unzip"), {QStringLiteral("-p"), nupkgPath, member});
+#else
     process.start(QStringLiteral("powershell.exe"),
                   {QStringLiteral("-NoProfile"), QStringLiteral("-NonInteractive"),
                    QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
                    QStringLiteral("-Command"), script});
+#endif
     process.closeWriteChannel();
     QElapsedTimer extractionTimer;
     extractionTimer.start();
@@ -352,7 +380,7 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
         const QString processError = QString::fromLocal8Bit(
             process.readAllStandardError().right(4'096)).trimmed();
         cleanupStaging();
-        return fail(QStringLiteral("Cannot extract pinned DirectML runtime: %1")
+        return fail(QStringLiteral("Cannot extract pinned ONNX Runtime: %1")
                         .arg(processError));
     }
     for (const VocalDownloadFile& file : runtimeFiles()) {
@@ -364,7 +392,7 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
                          cancellation)) {
             cleanupStaging();
             if (isCancelled(cancellation)) return cancelledResult();
-            return fail(QStringLiteral("Extracted DirectML runtime file failed integrity verification"));
+            return fail(QStringLiteral("Extracted ONNX Runtime file failed integrity verification"));
         }
     }
     if (isCancelled(cancellation)) {
@@ -376,7 +404,7 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
         || stagingMarker.write(package.sha256.toLatin1())
                != static_cast<qint64>(package.sha256.size())) {
         cleanupStaging();
-        return fail(QStringLiteral("Cannot write DirectML runtime verification marker"));
+        return fail(QStringLiteral("Cannot write ONNX Runtime verification marker"));
     }
     stagingMarker.close();
     if (isCancelled(cancellation)) {
@@ -386,11 +414,11 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
     if (!vocal_separation_paths::validateFlatDirectory(
             stagingRoot, allowedNames)) {
         cleanupStaging();
-        return fail(QStringLiteral("DirectML staging directory contained unexpected entries"));
+        return fail(QStringLiteral("ONNX Runtime staging directory contained unexpected entries"));
     }
     if (!QDir().rename(stagingRoot, versionedRoot)) {
         cleanupStaging();
-        return fail(QStringLiteral("Cannot atomically activate DirectML runtime"));
+        return fail(QStringLiteral("Cannot atomically activate ONNX Runtime"));
     }
     if (isCancelled(cancellation)) {
         vocal_separation_paths::removeKnownFlatDirectory(
@@ -401,7 +429,7 @@ VocalInstallResult VocalSeparationInstaller::installDirectMlRuntime(
             versionedRoot, package.sha256, cancellation)) {
         vocal_separation_paths::removeKnownFlatDirectory(
             versionedRoot, allowedNames);
-        return fail(QStringLiteral("Activated DirectML runtime failed final integrity verification"));
+        return fail(QStringLiteral("Activated ONNX Runtime failed final integrity verification"));
     }
     return {true, {}};
 }

@@ -40,6 +40,10 @@ private slots:
         QCOMPARE(controller_->registryRootPath(), registryRoot_);
         QVERIFY(controller_->registryRootPath().startsWith(
             QStringLiteral("Software\\AgPlayer\\Tests\\")));
+#elif defined(Q_OS_MACOS)
+        QVERIFY(!controller_->registerForExtensions({QStringLiteral("agptest")}));
+        QCOMPARE(controller_->lastError(),
+                 QStringLiteral("Info.plist 未声明 .agptest 文件类型"));
 #else
         QVERIFY(!controller_->registerForExtensions({QStringLiteral("agptest")}));
 #endif
@@ -54,6 +58,11 @@ private slots:
         QVERIFY(controller_->isAssociated(QStringLiteral("agptest")));
 
         QVERIFY(controller_->unregisterForExtensions(extensions));
+        QVERIFY(!controller_->isAssociated(QStringLiteral("agptest")));
+#elif defined(Q_OS_MACOS)
+        QVERIFY(!controller_->registerForExtensions({QStringLiteral("agptest")}));
+        QCOMPARE(controller_->lastError(),
+                 QStringLiteral("Info.plist 未声明 .agptest 文件类型"));
         QVERIFY(!controller_->isAssociated(QStringLiteral("agptest")));
 #else
         QVERIFY(!controller_->registerForExtensions({QStringLiteral("agptest")}));
@@ -157,6 +166,9 @@ private slots:
         QVERIFY(keyExists(sentinelPath));
         QCOMPARE(readString(sentinelPath, QStringLiteral("sentinel")),
                  QStringLiteral("keep-settings"));
+#elif defined(Q_OS_MACOS)
+        QVERIFY(controller_->unregisterAll());
+        QVERIFY(controller_->lastError().isEmpty());
 #else
         QVERIFY(!controller_->unregisterAll());
 #endif
@@ -166,6 +178,10 @@ private slots:
     {
 #ifdef Q_OS_WIN
         const auto cleanupSandbox = qScopeGuard([this] { removeTestRoot(); });
+        QVERIFY(controller_->unregisterAll());
+        QVERIFY(controller_->unregisterAll());
+        QVERIFY(controller_->lastError().isEmpty());
+#elif defined(Q_OS_MACOS)
         QVERIFY(controller_->unregisterAll());
         QVERIFY(controller_->unregisterAll());
         QVERIFY(controller_->lastError().isEmpty());

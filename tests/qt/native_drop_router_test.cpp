@@ -4,8 +4,10 @@
 #include <QTest>
 #include <QDropEvent>
 #include <QDragEnterEvent>
+#include <QDragMoveEvent>
 #include <QMimeData>
 #include <QFileInfo>
+#include <QDir>
 #include <QTemporaryDir>
 #include <QWindow>
 
@@ -24,6 +26,7 @@ class NativeDropRouterTest final : public QObject {
 private slots:
     void routesCanonicalLocalPathsToTheRequestedTarget();
     void preservesTheResourceFolderTargetForApplicationDispatch();
+    void receivesQtUrlDropEvents_data();
     void receivesQtUrlDropEvents();
     void leavesQtDirectoryDropsForQmlHitTesting();
     void routesQtAudioDropsToResourceHitTarget();
@@ -56,7 +59,7 @@ void NativeDropRouterTest::routesCanonicalLocalPathsToTheRequestedTarget()
 
     router.routeLocalPaths(
         NativeDropRouter::Target::Main,
-        {QStringLiteral("C:\\音乐\\第一首.wav"),
+        {QDir::toNativeSeparators(QStringLiteral("C:/音乐/第一首.wav")),
          QStringLiteral("C:/音乐/第二首.flac")});
 
     QCOMPARE(dropped.count(), 1);
@@ -68,31 +71,46 @@ void NativeDropRouterTest::routesCanonicalLocalPathsToTheRequestedTarget()
     QVERIFY(!paths.front().contains(QLatin1Char('\\')));
 }
 
+void NativeDropRouterTest::receivesQtUrlDropEvents_data()
+{
+    QTest::addColumn<NativeDropRouter::Target>("target");
+    QTest::newRow("list") << NativeDropRouter::Target::List;
+    QTest::newRow("audio-tools") << NativeDropRouter::Target::AudioTools;
+}
+
 void NativeDropRouterTest::receivesQtUrlDropEvents()
 {
+    QFETCH(NativeDropRouter::Target, target);
     NativeDropRouter router;
     QWindow window;
     window.resize(320, 180);
     window.show();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
-    router.registerWindow(&window, NativeDropRouter::Target::List);
+    router.registerWindow(&window, target);
 
     QSignalSpy dropped(&router, &NativeDropRouter::pathsDropped);
     QMimeData mime;
-    mime.setUrls({QUrl::fromLocalFile(QStringLiteral("C:/音乐/Qt 拖放.flac"))});
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("音乐 Qt 拖放.flac"));
+    mime.setUrls({QUrl::fromLocalFile(path)});
     QDragEnterEvent enter(QPoint(100, 60), Qt::CopyAction, &mime,
                           Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(&window, &enter);
     QVERIFY(enter.isAccepted());
+    QDragMoveEvent move(QPoint(110, 65), Qt::CopyAction, &mime,
+                       Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(&window, &move);
+    QVERIFY(move.isAccepted());
     QDropEvent drop(QPointF(100, 60), Qt::CopyAction, &mime,
                     Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(&window, &drop);
 
     QCOMPARE(dropped.count(), 1);
     QCOMPARE(dropped.front().at(0).value<NativeDropRouter::Target>(),
-             NativeDropRouter::Target::List);
+             target);
     QCOMPARE(dropped.front().at(1).toStringList(),
-             QStringList({QStringLiteral("C:/音乐/Qt 拖放.flac")}));
+             QStringList({path}));
 }
 
 void NativeDropRouterTest::leavesQtDirectoryDropsForQmlHitTesting()
@@ -133,7 +151,10 @@ void NativeDropRouterTest::routesQtAudioDropsToResourceHitTarget()
 
     QSignalSpy dropped(&router, &NativeDropRouter::pathsDropped);
     QMimeData mime;
-    mime.setUrls({QUrl::fromLocalFile(QStringLiteral("C:/音乐/资源区音频.flac"))});
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("音乐 资源区音频.flac"));
+    mime.setUrls({QUrl::fromLocalFile(path)});
     QDragEnterEvent enter(QPoint(40, 40), Qt::CopyAction, &mime,
                           Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(&window, &enter);
@@ -147,7 +168,7 @@ void NativeDropRouterTest::routesQtAudioDropsToResourceHitTarget()
     QCOMPARE(dropped.front().at(0).value<NativeDropRouter::Target>(),
              NativeDropRouter::Target::ResourceFolder);
     QCOMPARE(dropped.front().at(1).toStringList(),
-             QStringList({QStringLiteral("C:/音乐/资源区音频.flac")}));
+             QStringList({path}));
 }
 
 #ifdef Q_OS_WIN

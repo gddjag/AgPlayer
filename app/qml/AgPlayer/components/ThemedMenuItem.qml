@@ -5,7 +5,7 @@ import AgPlayer
 MenuItem {
     id: control
     property int labelPixelSize: Theme.fontSizeBody
-    implicitWidth: 230
+    implicitWidth: Math.ceil(contentItem.implicitWidth + leftPadding + rightPadding)
     implicitHeight: Theme.controlHeight
     leftPadding: control.checkable ? 30 : 12
     rightPadding: control.subMenu ? 30 : 12

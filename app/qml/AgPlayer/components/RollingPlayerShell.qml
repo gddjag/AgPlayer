@@ -174,6 +174,10 @@ Item {
     signal openSettingsRequested()
     signal openEqualizerRequested()
 
+    function focusSearch() {
+        rollingSearchFilter.focusSearch()
+    }
+
     function clamp(value, minimum, maximum) {
         return Math.max(minimum, Math.min(maximum, value))
     }
@@ -1206,9 +1210,7 @@ Item {
             id: bottomBar
             objectName: "rollingBottomBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.max(
-                                        64,
-                                        rollingControls.childrenRect.height + 8)
+            Layout.preferredHeight: 64
             Layout.leftMargin: 10
             Layout.rightMargin: 10
             Layout.bottomMargin: 2
@@ -1219,9 +1221,19 @@ Item {
             radius: Theme.radiusSm
 
             RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
+                id: rollingControlRow
+                objectName: "rollingControlRow"
+                readonly property real availableWidth: Math.max(1, bottomBar.width - 32)
+                readonly property real naturalWidth: 430 + spacing
+                                                    + rollingControls.singleRowContentWidth
+                width: Math.max(availableWidth, naturalWidth)
+                height: 64
+                x: 16
+                anchors.verticalCenter: parent.verticalCenter
+                // Scale the complete interactive row together; QML maps mouse
+                // coordinates through this transform, including nested actions.
+                scale: Math.min(1, availableWidth / naturalWidth)
+                transformOrigin: Item.Left
                 spacing: 8
 
                 PlayerControls {
@@ -1240,15 +1252,15 @@ Item {
                         root.openEqualizerRequested()
                 }
 
-                Flow {
+                Row {
                     id: rollingControls
                     objectName: "rollingTempoControls"
                     visible: true
                     Layout.fillWidth: true
-                    Layout.minimumWidth: 0
-                    Layout.preferredHeight: childrenRect.height
+                    Layout.minimumWidth: singleRowContentWidth
+                    Layout.preferredHeight: groupHeight
                     Layout.alignment: Qt.AlignVCenter
-                    spacing: root.width < 1180 ? Theme.spacingXs : Theme.spacingSm
+                    spacing: root.width < 1386 ? Theme.spacingXs : Theme.spacingSm
 
                     readonly property real groupHeight:
                         sourceBpm.implicitHeight + Theme.controlHeightCompact + 2
@@ -1710,7 +1722,12 @@ Item {
             objectName: "rollingLibraryWorkspace"
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.minimumHeight: 250
+            // Budget the remaining height after the fixed deck sections and
+            // their four gaps/bottom margin; keep the footer inside small windows.
+            Layout.minimumHeight: Math.min(250, Math.max(140,
+                root.height - Theme.titleBarHeight - (coverFrame.height + 16)
+                - Theme.rollingWaveformHeightCompact - bottomBar.Layout.preferredHeight
+                - bottomBar.Layout.bottomMargin - 24))
             Layout.leftMargin: Theme.spacingSm
             Layout.rightMargin: Theme.spacingSm
             Layout.bottomMargin: 8

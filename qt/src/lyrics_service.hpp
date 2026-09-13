@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QTimer>
 #include <QVariantList>
 
@@ -93,6 +94,7 @@ private:
         quint64 generation = 0;
         bool prefetch = false;
         QList<LyricsProvider::RouteAttempt> carriedAttempts;
+        bool forceRefresh = false;
     };
 
     void requestCurrentTrack();
@@ -101,7 +103,8 @@ private:
                                       const QString& embeddedLyrics) const;
     void beginExact(const TrackRecord& track, bool prefetch = false);
     void beginSearch(const TrackRecord& track, bool prefetch = false,
-                     QList<LyricsProvider::RouteAttempt> carriedAttempts = {});
+                     QList<LyricsProvider::RouteAttempt> carriedAttempts = {},
+                     bool forceRefresh = false);
     void prefetchNext();
     void onProviderFinished(quint64 requestId, const LyricsProvider::Result& result);
     void onRouteFailed(quint64 requestId, const LyricsProvider::RouteAttempt& attempt);
@@ -110,7 +113,8 @@ private:
     void setStatus(Status status);
     void cancelPending();
     [[nodiscard]] LyricsProvider::Track providerTrack(const TrackRecord& track,
-                                                       bool lowPriority = false) const;
+                                                       bool lowPriority = false,
+                                                       bool forceRefresh = false) const;
     [[nodiscard]] std::optional<LyricsProvider::Candidate> bestCandidate(
         const LyricsProvider::Track& track,
         const QList<LyricsProvider::Candidate>& candidates) const;
@@ -147,4 +151,6 @@ private:
     QVariantList routeAttempts_;
     quint64 routeNoticeToken_ = 0;
     QString lastDiagnostic_;
+    QByteArray remoteDocumentFingerprint_;
+    QSet<QByteArray> rejectedRemoteDocuments_;
 };

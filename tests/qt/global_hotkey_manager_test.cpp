@@ -1,4 +1,5 @@
 #include "global_hotkey_manager.hpp"
+#include "macos_system_integration.hpp"
 
 #include <QObject>
 #include <QTest>
@@ -15,6 +16,7 @@ private slots:
     void mediaKeysAreAcceptedWithoutModifiers();
     void volumeMediaKeysRemainAvailableToWindows();
     void modifierPlusKeyCombo();
+    void macMediaKeysMatchAllModifiers();
 };
 
 void GlobalHotkeyManagerTest::emptyOrInvalidShortcutsAreRejected()
@@ -78,7 +80,11 @@ void GlobalHotkeyManagerTest::volumeMediaKeysRemainAvailableToWindows()
                                      GlobalHotkeyManager::Action::VolumeUp));
     QVERIFY(manager.registerShortcut("VolumeDown",
                                      GlobalHotkeyManager::Action::VolumeDown));
+#ifdef Q_OS_WIN
     QCOMPARE(manager.passiveSystemShortcutCount(), 2);
+#else
+    QCOMPARE(manager.passiveSystemShortcutCount(), 0);
+#endif
 }
 
 void GlobalHotkeyManagerTest::modifierPlusKeyCombo()
@@ -87,6 +93,27 @@ void GlobalHotkeyManagerTest::modifierPlusKeyCombo()
     QVERIFY(manager.registerShortcut("Alt + P", GlobalHotkeyManager::Action::PlayPause));
     QVERIFY(manager.registerShortcut("Ctrl + Shift + F",
                                       GlobalHotkeyManager::Action::PlayPause));
+}
+
+void GlobalHotkeyManagerTest::macMediaKeysMatchAllModifiers()
+{
+    using agplayer::qt::macos::mediaHotkeyMatches;
+    // Carbon: command 8, shift 9, option 11, control 12.
+    // NSEvent: shift 17, control 18, option 19, command 20.
+    QVERIFY(mediaHotkeyMatches(16, 0, 16, 0));
+    QVERIFY(!mediaHotkeyMatches(16, 0, 17, 0));
+    QVERIFY(!mediaHotkeyMatches(16, 1U << 9, 16, 0));
+    QVERIFY(!mediaHotkeyMatches(16, 0, 16, 1ULL << 17));
+    QVERIFY(mediaHotkeyMatches(16, 1U << 9, 16, 1ULL << 17));
+    QVERIFY(mediaHotkeyMatches(16, 1U << 8, 16, 1ULL << 20));
+    QVERIFY(mediaHotkeyMatches(16, 1U << 12, 16, 1ULL << 18));
+    QVERIFY(mediaHotkeyMatches(16, 1U << 11, 16, 1ULL << 19));
+    QVERIFY(!mediaHotkeyMatches(16, 1U << 8, 16, 1ULL << 18));
+    QVERIFY(!mediaHotkeyMatches(16, 1U << 9, 16, (1ULL << 17) | (1ULL << 19)));
+    QVERIFY(mediaHotkeyMatches(16, (1U << 8) | (1U << 11), 16,
+                               (1ULL << 20) | (1ULL << 19)));
+    // Caps lock, function and numeric-pad flags are not shortcut modifiers.
+    QVERIFY(mediaHotkeyMatches(16, 0, 16, (1ULL << 16) | (1ULL << 21) | (1ULL << 23)));
 }
 
 QTEST_GUILESS_MAIN(GlobalHotkeyManagerTest)

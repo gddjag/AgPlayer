@@ -246,9 +246,15 @@ BackendResult proveProvider(const NativeStartRequest& request,
                             ExecutionProvider provider, int adapterId,
                             const CancellationToken& cancelled)
 {
+#ifdef Q_OS_MACOS
+    const QStringList probePaths = request.modelFiles;
+#else
+    const QStringList probePaths = request.modelFiles.mid(0, 1);
+#endif
+    for (const QString& modelPath : probePaths) {
     ModelArtifactReadResult artifact;
     BackendResult loaded = loadTrustedModelArtifact(
-        request.modelFiles.front(), profile, cancelled, &artifact);
+        modelPath, profile, cancelled, &artifact);
     if (!loaded.ok) return loaded;
     std::unique_ptr<OrtModelSession> session;
     BackendResult opened = openSession(request, profile, artifact.bytes,
@@ -265,8 +271,11 @@ BackendResult proveProvider(const NativeStartRequest& request,
     QVector<float> zeros(count);
     const OrtOperationResult run = session->run(zeros, inputShape, outputShape,
                                                  cancelled);
-    return run.ok ? BackendResult{true, {}, {}, {}}
-                  : fail(run.code, run.message);
+    if (!run.ok) return fail(run.code, run.message);
+    }
+    return request.modelFiles.isEmpty()
+        ? fail(QStringLiteral("model_missing"), QStringLiteral("No model files to probe"))
+        : BackendResult{true, {}, {}, {}};
 }
 
 class OrtNativeProviderProbe final : public NativeProviderProbe {
@@ -297,6 +306,24 @@ NativeProviderSelection selectNativeProvider(
             QStringLiteral("Provider probe cancelled")};
     };
     if (cancelled.isCancelled()) return cancelledResult();
+#ifdef Q_OS_MACOS
+    QString gpuReason;
+#ifdef Q_PROCESSOR_ARM_64
+    if (request.device != DeviceMode::Cpu) {
+        const BackendResult gpu = probe.prove(request, profile, ExecutionProvider::CoreMl, 0, cancelled);
+        if (cancelled.isCancelled()) return cancelledResult();
+        if (gpu.ok) return {true, ExecutionProvider::CoreMl, 0, {}, {}, {}};
+        gpuReason = QStringLiteral("当前模型 CoreML 验证失败：%1").arg(gpu.message);
+    }
+#else
+    gpuReason = QStringLiteral("Intel Mac 使用 CPU 分离；Apple Silicon 可逐模型验证 CoreML");
+#endif
+    if (request.device == DeviceMode::Gpu)
+        return {false, ExecutionProvider::CoreMl, 0, {}, QStringLiteral("gpu_probe_failed"), gpuReason};
+    const BackendResult cpu = probe.prove(request, profile, ExecutionProvider::Cpu, 0, cancelled);
+    if (cancelled.isCancelled()) return cancelledResult();
+    return {cpu.ok, ExecutionProvider::Cpu, 0, gpuReason, cpu.code, cpu.message};
+#else
     const bool cudaRuntime = QFileInfo(QDir(QFileInfo(request.runtimePath).absolutePath())
         .filePath(QStringLiteral("onnxruntime_providers_cuda.dll"))).isFile();
     if (cudaRuntime && request.device != DeviceMode::Cpu) {
@@ -369,6 +396,7 @@ NativeProviderSelection selectNativeProvider(
                                           cancelled);
     if (cancelled.isCancelled()) return cancelledResult();
     return {cpu.ok, ExecutionProvider::Cpu, 0, gpuReason, cpu.code, cpu.message};
+#endif
 }
 
 namespace {
@@ -1153,15 +1181,28 @@ BackendResult NativeWorkerBackend::probeCancellable(const QJsonObject& payload, 
              static_cast<double>(adapter.dedicatedVideoMemory)}});
     }
     const bool hasHardwareCandidate = !adapters.isEmpty();
+#ifndef Q_OS_MACOS
     const bool cuda = QFileInfo(QDir(QFileInfo(runtimePath).absolutePath()).filePath("onnxruntime_providers_cuda.dll")).isFile();
+#endif
     const QString family = payload.value("family").toString();
     if (!family.isEmpty()) {
+#ifdef Q_OS_MACOS
+        const QString provider = QStringLiteral("coreml");
+#else
         const QString provider = cuda ? QStringLiteral("cuda") : QStringLiteral("directml");
+#endif
         QString reason;
         bool compatible = false;
         bool validated = false;
+#ifdef Q_OS_MACOS
+        bool cpuCompatible = false;
+        bool cpuValidated = false;
+        QString cpuReason;
+#endif
         if (family == "vr") reason = QStringLiteral("当前 VR 适配器仅支持 CPU");
+#ifndef Q_OS_MACOS
         else if (family == "demucs" && !cuda) reason = QStringLiteral("标准五轨需要可选 NVIDIA CUDA 环境；此固定图不支持 DirectML");
+#endif
         else if (payload.value("modelFiles").toArray().isEmpty()) reason = QStringLiteral("模型尚未校验，GPU 兼容性待验证");
         else {
             NativeStartRequest request; request.runtimePath = runtimePath; request.device = DeviceMode::Gpu;
@@ -1176,12 +1217,26 @@ BackendResult NativeWorkerBackend::probeCancellable(const QJsonObject& payload, 
             const auto profile = trustedProfileForHashes(hashes);
             if (profile && hashes.size() == request.modelFiles.size()) {
                 OrtNativeProviderProbe probe;
+#ifdef Q_OS_MACOS
+                request.device = DeviceMode::Cpu;
+                const auto cpuSelection = selectNativeProvider(request, *profile, cancelled, probe);
+                cpuValidated = true;
+                cpuCompatible = cpuSelection.ok;
+                cpuReason = cpuSelection.message;
+                request.device = DeviceMode::Gpu;
+#endif
                 const auto selection = selectNativeProvider(request, *profile, cancelled, probe);
                 compatible = selection.ok; validated = selection.ok;
                 reason = selection.ok ? QStringLiteral("当前模型已通过 %1 GPU 推理验证").arg(provider.toUpper()) : selection.message;
             } else if (reason.isEmpty()) reason = QStringLiteral("模型缺少受信 GPU 推理契约");
         }
-        return {true, {}, {}, {{"cpu", true}, {"gpu", compatible}, {"provider", provider},
+        return {true, {}, {}, {
+#ifdef Q_OS_MACOS
+            {"cpu", cpuCompatible}, {"cpuValidated", cpuValidated}, {"cpuReason", cpuReason},
+#else
+            {"cpu", true},
+#endif
+            {"gpu", compatible}, {"provider", provider},
             {"modelValidated", validated}, {"gpuReason", reason}, {"adapters", adapters}}};
     }
     return {true, {}, {},
@@ -1312,7 +1367,7 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
     QJsonObject completionPayload{
         {QStringLiteral("outputs"), outputs},
         {QStringLiteral("provider"),
-         provider.provider == ExecutionProvider::Cuda ? QStringLiteral("cuda") : provider.provider == ExecutionProvider::DirectMl
+         provider.provider == ExecutionProvider::CoreMl ? QStringLiteral("coreml") : provider.provider == ExecutionProvider::Cuda ? QStringLiteral("cuda") : provider.provider == ExecutionProvider::DirectMl
              ? QStringLiteral("directml") : QStringLiteral("cpu")},
         {QStringLiteral("device"), provider.provider == ExecutionProvider::Cpu
              ? QStringLiteral("CPU") : QStringLiteral("GPU %1").arg(provider.adapterId)},

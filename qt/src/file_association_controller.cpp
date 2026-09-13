@@ -5,6 +5,10 @@
 #include <QDebug>
 #include <QDir>
 
+#ifdef Q_OS_MACOS
+#include "macos_system_integration.hpp"
+#endif
+
 #ifdef Q_OS_WIN
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -17,8 +21,10 @@
 
 namespace {
 
+#ifdef Q_OS_WIN
 constexpr char kProgId[] = "AgPlayerAudioFile";
 constexpr char kProgIdDisplayName[] = "AgPlayer Audio File";
+#endif
 
 QString normalizeExtension(const QString& ext)
 {
@@ -121,6 +127,23 @@ bool FileAssociationController::registerForExtensions(const QStringList& extensi
     }
     if (!writeCapabilities(extensions, progId)) return false;
     return true;
+#elif defined(Q_OS_MACOS)
+    QStringList registered;
+    for (const QString& ext : extensions) {
+        const QString normalized = normalizeExtension(ext);
+        if (normalized.isEmpty()) continue;
+        QString error;
+        if (!agplayer::qt::macos::setFileAssociation(normalized, &error)) {
+            for (const QString& rollbackExtension : registered) {
+                QString ignored;
+                agplayer::qt::macos::restoreFileAssociation(rollbackExtension, &ignored);
+            }
+            lastError_ = error;
+            return false;
+        }
+        registered.append(normalized);
+    }
+    return true;
 #else
     lastError_ = tr("not supported on this platform");
     return false;
@@ -142,6 +165,20 @@ bool FileAssociationController::unregisterForExtensions(const QStringList& exten
             allOk = false;
         }
     }
+    return allOk;
+#elif defined(Q_OS_MACOS)
+    bool allOk = true;
+    QStringList errors;
+    for (const QString& ext : extensions) {
+        const QString normalized = normalizeExtension(ext);
+        if (normalized.isEmpty()) continue;
+        QString error;
+        if (!agplayer::qt::macos::restoreFileAssociation(normalized, &error)) {
+            allOk = false;
+            errors.append(error);
+        }
+    }
+    lastError_ = errors.join(QStringLiteral("; "));
     return allOk;
 #else
     lastError_ = tr("not supported on this platform");
@@ -182,6 +219,8 @@ bool FileAssociationController::unregisterAll()
     }
     lastError_.clear();
     return true;
+#elif defined(Q_OS_MACOS)
+    return unregisterForExtensions(agplayer::qt::macos::managedFileAssociations());
 #else
     lastError_ = tr("not supported on this platform");
     return false;
@@ -217,6 +256,8 @@ bool FileAssociationController::isAssociated(const QString& extension) const
     RegCloseKey(key);
 
     return status == ERROR_SUCCESS && valueType == REG_SZ;
+#elif defined(Q_OS_MACOS)
+    return agplayer::qt::macos::isFileAssociationActive(normalized);
 #else
     return false;
 #endif

@@ -21,6 +21,10 @@ private slots:
     void updatesRatingAndPlaybackHistory();
     void removesOnlyTheSelectedHistoryEntry();
     void updatesTagsAndManualOrder();
+    void bulkReorderPreservesOrderIndexesAndNotifications_data();
+    void bulkReorderPreservesOrderIndexesAndNotifications();
+    void benchmarkBulkReorder_data();
+    void benchmarkBulkReorder();
     void batchesTagMutationsWithoutResetOrExtraFlush();
     void removesOneTagOnlyFromRequestedTracks();
     void removesTrackWithoutDeletingTheFile();
@@ -690,6 +694,88 @@ void LibraryModelTest::updatesTagsAndManualOrder()
     QCOMPARE(snapshot.value(QStringLiteral("tags")).toStringList(),
              QStringList({QStringLiteral("Workout"), QStringLiteral("Night")}));
     QCOMPARE(snapshot.value(QStringLiteral("title")).toString(), first.title);
+}
+
+void LibraryModelTest::bulkReorderPreservesOrderIndexesAndNotifications_data()
+{
+    QTest::addColumn<QStringList>("selected");
+    QTest::addColumn<QString>("before");
+    QTest::addColumn<QStringList>("expected");
+    QTest::addColumn<int>("moved");
+    QTest::newRow("middle-and-duplicate-request")
+        << QStringList{"E", "B", "E", "missing"} << QStringLiteral("D")
+        << QStringList{"A", "C", "B", "E", "D", "F"} << 2;
+    QTest::newRow("front") << QStringList{"E", "C"} << QStringLiteral("A")
+        << QStringList{"C", "E", "A", "B", "D", "F"} << 2;
+    QTest::newRow("append") << QStringList{"D", "B"} << QString()
+        << QStringList{"A", "C", "E", "F", "B", "D"} << 2;
+    QTest::newRow("selected-destination-appends")
+        << QStringList{"D", "B"} << QStringLiteral("B")
+        << QStringList{"A", "C", "E", "F", "B", "D"} << 2;
+    QTest::newRow("all-selected") << QStringList{"F", "E", "D", "C", "B", "A"}
+        << QStringLiteral("A") << QStringList{"A", "B", "C", "D", "E", "F"} << 6;
+    QTest::newRow("missing") << QStringList{"missing"} << QStringLiteral("C")
+        << QStringList{"A", "B", "C", "D", "E", "F"} << 0;
+}
+
+void LibraryModelTest::bulkReorderPreservesOrderIndexesAndNotifications()
+{
+    QFETCH(QStringList, selected);
+    QFETCH(QString, before);
+    QFETCH(QStringList, expected);
+    QFETCH(int, moved);
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QList<TrackRecord> tracks;
+    for (const QString& id : QStringList{"A", "B", "C", "D", "E", "F"}) {
+        TrackRecord track;
+        track.trackId = id;
+        track.path = directory.filePath(id + ".wav");
+        tracks.append(track);
+    }
+    LibraryModel model;
+    model.replaceAll(tracks);
+    QSignalSpy reset(&model, &QAbstractItemModel::modelReset);
+    QSignalSpy flush(&model, &LibraryModel::flushRequested);
+    QCOMPARE(model.reorderTracks(selected, before), moved);
+    QCOMPARE(reset.count(), moved > 0 ? 1 : 0);
+    QCOMPARE(flush.count(), moved > 0 ? 1 : 0);
+    QCOMPARE(model.rowCount(), 6);
+    for (int row = 0; row < expected.size(); ++row) {
+        QCOMPARE(model.data(model.index(row), LibraryModel::TrackIdRole).toString(), expected[row]);
+        QCOMPARE(model.indexForTrackId(expected[row]), row);
+        QCOMPARE(model.indexForLocalFile(directory.filePath(expected[row] + ".wav")), row);
+    }
+}
+
+void LibraryModelTest::benchmarkBulkReorder_data()
+{
+    QTest::addColumn<int>("selectedCount");
+    QTest::newRow("100-of-10000") << 100;
+    QTest::newRow("1000-of-10000") << 1000;
+}
+
+void LibraryModelTest::benchmarkBulkReorder()
+{
+    QFETCH(int, selectedCount);
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QList<TrackRecord> tracks;
+    tracks.reserve(10000);
+    QStringList selected;
+    for (int index = 0; index < 10000; ++index) {
+        TrackRecord track;
+        track.trackId = QString::number(index);
+        track.path = directory.filePath(track.trackId + ".wav");
+        tracks.append(track);
+        if (index >= 5000 && index < 5000 + selectedCount) selected.append(track.trackId);
+    }
+    LibraryModel model;
+    model.replaceAll(tracks);
+    int moved = 0;
+    QBENCHMARK { moved = model.reorderTracks(selected, QStringLiteral("1000")); }
+    QCOMPARE(moved, selectedCount);
+    QCOMPARE(model.indexForTrackId(QStringLiteral("5000")), 1000);
 }
 
 void LibraryModelTest::batchesTagMutationsWithoutResetOrExtraFlush()

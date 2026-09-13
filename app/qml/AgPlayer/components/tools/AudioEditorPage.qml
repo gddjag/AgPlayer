@@ -303,11 +303,10 @@ Rectangle {
         title: qsTr("舍弃未保存更改？")
         modal: true
         anchors.centerIn: parent
-        width: Math.min(420, page.width - 2 * Theme.spacing2Xl)
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: AudioEditorController.confirmDiscardAndOpen()
         onRejected: AudioEditorController.cancelDiscardAndOpen()
-        Label { text: qsTr("当前工程包含未保存更改。") }
+        contentItem: Label { text: qsTr("当前工程包含未保存更改。"); wrapMode: Text.Wrap }
     }
     Connections {
         target: AudioEditorController

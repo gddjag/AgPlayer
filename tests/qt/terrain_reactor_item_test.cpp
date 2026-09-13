@@ -100,47 +100,12 @@ private slots:
         const auto inactive = TerrainReactorItem::advanceReferenceAudioFrame(analyzer, response, snapshot, .016, snare).terrain;
         for (double band : inactive.bands) QCOMPARE(band, 0.0);
     }
-    void delayedPcmBatchPreservesIntermediateKick()
+    void rendererSnapshotDoesNotEmbedUnusedPcmHistory()
     {
-        TerrainReactorItem::RenderSnapshot snapshot;
-        snapshot.style.rhythmSensitivity = 1.0F;
-        snapshot.pcmBatch.count = 3;
-        for (std::size_t frame = 0; frame < snapshot.pcmBatch.count; ++frame) {
-            auto& pcm = snapshot.pcmBatch.frames[frame];
-            pcm.sampleRate = 48000;
-            pcm.epoch = 1;
-            pcm.firstSampleIndex = frame * pcm.pcm.size();
-            pcm.sequence = frame + 1;
-            pcm.valid = true;
-        }
-        constexpr double tau = 6.2831853071795864769;
-        auto& kick = snapshot.pcmBatch.frames[1];
-        for (std::size_t sample = 0; sample < kick.pcm.size(); ++sample)
-            kick.pcm[sample] = float(0.85 * std::sin(
-                tau * 80.0 * double(kick.firstSampleIndex + sample) / 48000.0));
-        auto& mixedTail = snapshot.pcmBatch.frames[2];
-        for (std::size_t sample = 0; sample < mixedTail.pcm.size(); ++sample)
-            mixedTail.pcm[sample] = float(0.25 * std::sin(
-                tau * 1200.0 * double(mixedTail.firstSampleIndex + sample) / 48000.0));
-        snapshot.pcm = mixedTail;
-
-        for (const int fps : {30, 45, 60}) {
-            agplayer::VisualAudioFrameAnalyzer analyzer;
-            agplayer::VisualTerrainResponse response;
-            agplayer::VisualSnareTrigger snare;
-            std::uint64_t consumedSequence = 0;
-            const auto result = TerrainReactorItem::advanceReferenceAudioFrames(
-                analyzer, response, snapshot, 1.0 / double(fps), snare, consumedSequence);
-            QCOMPARE(consumedSequence, std::uint64_t(3));
-            QCOMPARE(result.beatCount, 1);
-            QVERIFY2(result.terrain.bands[0] > 0.0,
-                     "An intermediate kick must still lift the final rendered terrain");
-            const auto heldTerrain = result.terrain;
-            const auto repeated = TerrainReactorItem::advanceReferenceAudioFrames(
-                analyzer, response, snapshot, 1.0 / double(fps), snare, consumedSequence);
-            QCOMPARE(repeated.beatCount, 0);
-            QCOMPARE(repeated.terrain.bands, heldTerrain.bands);
-        }
+        // The renderer analyzes one latest PCM window per displayed frame, not
+        // the batch history. Keep the handoff below even one unused batch.
+        QVERIFY(sizeof(TerrainReactorItem::RenderSnapshot)
+                < sizeof(agplayer::VisualAudioFrameAnalyzer::Batch));
     }
     void canonicalAmplitudeUsesOriginalCurve()
     {
@@ -185,6 +150,7 @@ private slots:
     void featureSourceImpactRevisionIsConsumedWithoutAnotherDecoder();
     void trackIdentitySelectsStablePaletteWithoutThemeCycling();
     void highDpiInternalScaleUsesPhysicalPixels();
+    void internalScaleFollowsRuntimeDpiAndWindowChanges();
     void adaptiveRenderScaleChangesItemSampleCount();
     void duplicateRendererIsRejectedBySharedLifecycle();
     void cameraPropertiesSupportTaskFourInput();
@@ -740,6 +706,42 @@ void TerrainReactorItemTest::highDpiInternalScaleUsesPhysicalPixels()
     QCOMPARE(window.effectiveDevicePixelRatio(), 2.0);
     QCOMPARE(item.fixedColorBufferWidth(), 150);
     QCOMPARE(item.fixedColorBufferHeight(), 75);
+}
+
+void TerrainReactorItemTest::internalScaleFollowsRuntimeDpiAndWindowChanges()
+{
+    QQuickWindow firstWindow;
+    QQuickWindow secondWindow;
+    QImage image(400, 200, QImage::Format_RGBA8888_Premultiplied);
+    auto target = QQuickRenderTarget::fromPaintDevice(&image);
+    target.setDevicePixelRatio(1.0);
+    firstWindow.setRenderTarget(target);
+    secondWindow.setRenderTarget(target);
+    TestableTerrainReactorItem item(firstWindow.contentItem());
+    item.setSize(QSizeF(100, 50));
+    item.applyInternalScale(0.75F, 4);
+    QCOMPARE(item.fixedColorBufferWidth(), 75);
+
+    target.setDevicePixelRatio(2.0);
+    firstWindow.setRenderTarget(target);
+    QEvent changed(QEvent::DevicePixelRatioChange);
+    QCoreApplication::sendEvent(&firstWindow, &changed);
+    QTRY_COMPARE(item.fixedColorBufferWidth(), 150);
+    QCOMPARE(item.fixedColorBufferHeight(), 75);
+    // Reparent without a logical resize; the former window must not affect it.
+    item.setParentItem(secondWindow.contentItem());
+    QTRY_COMPARE(item.fixedColorBufferWidth(), 75);
+    QCOMPARE(item.fixedColorBufferHeight(), 38);
+    QCoreApplication::sendEvent(&firstWindow, &changed);
+    QCOMPARE(item.fixedColorBufferWidth(), 75);
+
+    secondWindow.setRenderTarget(target);
+    QCoreApplication::sendEvent(&secondWindow, &changed);
+    QTRY_COMPARE(item.fixedColorBufferWidth(), 150);
+    target.setDevicePixelRatio(1.0);
+    secondWindow.setRenderTarget(target);
+    QCoreApplication::sendEvent(&secondWindow, &changed);
+    QTRY_COMPARE(item.fixedColorBufferWidth(), 75);
 }
 
 void TerrainReactorItemTest::adaptiveRenderScaleChangesItemSampleCount()

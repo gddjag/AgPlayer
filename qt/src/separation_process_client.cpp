@@ -6,6 +6,10 @@
 
 #include <algorithm>
 #include <utility>
+#ifdef Q_OS_UNIX
+#include <signal.h>
+#include <unistd.h>
+#endif
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -147,6 +151,9 @@ SeparationProcessClient::SeparationProcessClient(
         if (process_.state() != QProcess::NotRunning) terminateProcess();
     });
     connect(&process_, &QProcess::started, this, [this] {
+#ifdef Q_OS_UNIX
+        processGroup_ = process_.processId();
+#endif
         if (userCancellation_) {
             shutdownSent_ = true;
             send(ProtocolType::Shutdown, activeRequestId_);
@@ -186,6 +193,12 @@ SeparationProcessClient::SeparationProcessClient(
         heartbeatTimer_.stop();
         exitTimer_.stop();
         buffer_.clear();
+#ifdef Q_OS_UNIX
+        // The group survives its leader. Clean descendants even if the worker
+        // itself crashed or acknowledged shutdown before its FFmpeg exited.
+        if (processGroup_ > 0) ::kill(-static_cast<pid_t>(processGroup_), SIGKILL);
+        processGroup_ = 0;
+#endif
 #ifdef Q_OS_WIN
         windowsJob_.reset();
 #endif
@@ -289,6 +302,10 @@ bool SeparationProcessClient::begin(ProtocolType type,
             QProcess::CreateProcessArguments* arguments) {
         windowsJob_->apply(arguments);
     });
+#endif
+#ifdef Q_OS_UNIX
+    processGroup_ = 0;
+    process_.setChildProcessModifier([] { if (::setsid() < 0) ::_exit(127); });
 #endif
     process_.start();
 #ifdef Q_OS_WIN
@@ -478,6 +495,10 @@ void SeparationProcessClient::requestShutdown()
 
 void SeparationProcessClient::terminateProcess()
 {
+#ifdef Q_OS_UNIX
+    const qint64 group = processGroup_ > 0 ? processGroup_ : process_.processId();
+    if (group > 0) ::kill(-static_cast<pid_t>(group), SIGKILL);
+#endif
 #ifdef Q_OS_WIN
     if (windowsJob_) windowsJob_->terminate();
 #endif

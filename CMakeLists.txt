@@ -9,7 +9,13 @@ endif()
 project(AgPlayer VERSION "${AGPLAYER_VERSION}" LANGUAGES C CXX)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
-set(AGPLAYER_UPDATE_MANIFEST_URL "https://download.agplayer.com/updates/latest.json" CACHE STRING "Direct HTTPS URL of the official release manifest; empty disables update requests")
+set(AGPLAYER_DEFAULT_UPDATE_MANIFEST_URL "https://download.agplayer.com/updates/latest.json")
+# Migrate the former built-in Mac endpoint in existing build caches, without
+# overwriting custom endpoints or an explicitly disabled update service.
+if(AGPLAYER_UPDATE_MANIFEST_URL STREQUAL "https://download.agplayer.com/updates/macos/latest.json")
+    set(AGPLAYER_UPDATE_MANIFEST_URL "${AGPLAYER_DEFAULT_UPDATE_MANIFEST_URL}" CACHE STRING "Direct HTTPS URL of the official release manifest; empty disables update requests" FORCE)
+endif()
+set(AGPLAYER_UPDATE_MANIFEST_URL "${AGPLAYER_DEFAULT_UPDATE_MANIFEST_URL}" CACHE STRING "Direct HTTPS URL of the official release manifest; empty disables update requests")
 if(AGPLAYER_UPDATE_MANIFEST_URL AND NOT AGPLAYER_UPDATE_MANIFEST_URL MATCHES "^https://[A-Za-z0-9][A-Za-z0-9./_?=&%:+~-]*$")
     message(FATAL_ERROR "AGPLAYER_UPDATE_MANIFEST_URL must be a safe direct HTTPS URL")
 endif()
@@ -34,7 +40,12 @@ include(Warnings)
 include(CTest)
 include(FetchContent)
 
-find_package(Qt6 6.7 REQUIRED COMPONENTS
+if(APPLE)
+    include(cmake/MacOS.cmake)
+    agplayer_validate_macos_target()
+endif()
+
+set(AGPLAYER_QT_COMPONENTS
     Core
     Gui
     Quick
@@ -43,11 +54,13 @@ find_package(Qt6 6.7 REQUIRED COMPONENTS
     QuickControls2
     Concurrent
     Network
-    Test
-    QuickTest
     LinguistTools
     Widgets
 )
+if(BUILD_TESTING)
+    list(APPEND AGPLAYER_QT_COMPONENTS Test QuickTest)
+endif()
+find_package(Qt6 6.7 REQUIRED COMPONENTS ${AGPLAYER_QT_COMPONENTS})
 # The vcpkg FindFFMPEG module caches the aggregate result.  In an existing
 # build tree that cache otherwise stays stale when a newly enabled FFmpeg
 # feature (such as swscale) is added to vcpkg.json.
@@ -79,30 +92,39 @@ add_subdirectory(core)
 add_subdirectory(qt)
 add_subdirectory(worker)
 add_subdirectory(app)
-add_subdirectory(tools)
-add_subdirectory(tests)
-
-include(cmake/LosslessSacd.cmake)
+if(BUILD_TESTING)
+    add_subdirectory(tools)
+    add_subdirectory(tests)
+    include(cmake/LosslessSacd.cmake)
+endif()
 include(cmake/LosslessCore.cmake)
 agplayer_enable_lossless_core()
-add_executable(lossless_scan_cli tests/core/lossless_scan_cli.cpp)
-target_include_directories(lossless_scan_cli PRIVATE ${CMAKE_SOURCE_DIR}/core/src)
-target_link_libraries(lossless_scan_cli PRIVATE agplayer_core Qt6::Core)
-if(MSVC)
-    target_compile_options(lossless_scan_cli PRIVATE /utf-8)
+if(BUILD_TESTING)
+    add_executable(lossless_scan_cli tests/core/lossless_scan_cli.cpp)
+    target_include_directories(lossless_scan_cli PRIVATE ${CMAKE_SOURCE_DIR}/core/src)
+    target_link_libraries(lossless_scan_cli PRIVATE agplayer_core Qt6::Core)
+    if(MSVC)
+        target_compile_options(lossless_scan_cli PRIVATE /utf-8)
+    endif()
 endif()
 include(cmake/LosslessQt.cmake)
 include(cmake/LosslessUi.cmake)
-add_test(NAME qml_lossless_identification_test
-    COMMAND qml_audio_tools_test -o ${CMAKE_BINARY_DIR}/qml-lossless-identification.txt,txt
-        -input ${CMAKE_SOURCE_DIR}/tests/qml/tst_lossless_identification.qml)
-set_tests_properties(qml_lossless_identification_test PROPERTIES
-    TIMEOUT 60 RESOURCE_LOCK qml_audio_tools_runtime
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
-    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>")
+if(BUILD_TESTING)
+    add_test(NAME qml_lossless_identification_test
+        COMMAND qml_audio_tools_test -o ${CMAKE_BINARY_DIR}/qml-lossless-identification.txt,txt
+            -input ${CMAKE_SOURCE_DIR}/tests/qml/tst_lossless_identification.qml)
+    set_tests_properties(qml_lossless_identification_test PROPERTIES
+        TIMEOUT 60 RESOURCE_LOCK qml_audio_tools_runtime
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<IF:$<CONFIG:Debug>,debug/bin,bin>")
+endif()
 
+set(AGPLAYER_TRANSLATION_TARGETS AgPlayer)
+if(BUILD_TESTING)
+    list(APPEND AGPLAYER_TRANSLATION_TARGETS translation_manager_test qml_main_window_test)
+endif()
 qt_add_translations(
-    TARGETS AgPlayer translation_manager_test qml_main_window_test
+    TARGETS ${AGPLAYER_TRANSLATION_TARGETS}
     SOURCE_TARGETS agplayer_app_qml agplayer_qt AgPlayer
     TS_FILES
         ${CMAKE_SOURCE_DIR}/translations/agplayer_zh.ts

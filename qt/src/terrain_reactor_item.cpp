@@ -1198,6 +1198,7 @@ TerrainReactorItem::~TerrainReactorItem()
         visual->releaseRenderFrameAnalysis();
     if (trackedWindow_ != nullptr) trackedWindow_->removeEventFilter(this);
     disconnect(windowVisibilityConnection_);
+    disconnect(windowScreenConnection_);
     disconnect(featureConnection_);
     disconnect(impactConnection_);
     disconnect(sourceDestroyedConnection_);
@@ -1661,7 +1662,6 @@ TerrainReactorItem::RenderSnapshot TerrainReactorItem::snapshotForRenderer() con
         && qobject_cast<AudioVisualFeatureController*>(featureSource_) != nullptr;
     if (auto* visual = qobject_cast<AudioVisualFeatureController*>(featureSource_)) {
         result.pcm = visual->visualPcmSnapshot();
-        result.pcmBatch = visual->visualPcmBatch();
     }
     result.visualResetRevision = visualResetRevision_;
     result.style = renderStyle_;
@@ -1889,93 +1889,6 @@ TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudi
             audio.pulse.triggered ? audio.pulse.strength : 0.0, audio.meteor};
 }
 
-TerrainReactorItem::ReferenceAudioFrame TerrainReactorItem::advanceReferenceAudioFrames(
-    agplayer::VisualAudioFrameAnalyzer& analyzer, agplayer::VisualTerrainResponse& response,
-    const RenderSnapshot& snapshot, double wallDelta, agplayer::VisualSnareTrigger& snare,
-    std::uint64_t& consumedSequence)
-{
-    int beatCount = 0;
-    double beatStrength = 0.0;
-    int pulseCount = 0;
-    double pulseStrength = 0.0;
-    agplayer::VisualSnareTrigger::Output strongestSnare;
-    agplayer::VisualSnareTrigger::Output strongestMeteor;
-    const agplayer::VisualAudioFrameAnalyzer::Frame* finalAudio = nullptr;
-    const agplayer::VisualSpectrumFeatures::Features* finalTerrain = nullptr;
-    const auto analyzePcm = [&](const agplayer::VisualAudioFrameAnalyzer::Snapshot& pcm,
-                                double delta) {
-        const auto& audio = analyzer.process(pcm, delta,
-            qRound(snapshot.style.rhythmSensitivity * 100.0F));
-        if (!audio.valid) response.reset();
-        agplayer::VisualTerrainResponse::EqBands eq;
-        for (std::size_t i = 0; i < eq.size(); ++i)
-            eq[i] = snapshot.style.visualEqGains[i];
-        const auto& terrain = response.update(audio.descriptors, audio.kick.envelope, eq,
-            snapshot.style.visualEqEnabled, delta, snapshot.style.motionResponse * 100.0);
-        const auto snareOutput = snare.process(audio.spectrum, audio.valid);
-        return ReferenceAudioFrame{audio, terrain, snareOutput,
-            audio.kick.onset > 0 ? 1 : 0,
-            audio.kick.onset > 0 ? audio.kick.confidence : 0.0,
-            audio.pulse.triggered ? 1 : 0,
-            audio.pulse.triggered ? audio.pulse.strength : 0.0, audio.meteor};
-    };
-
-    for (std::size_t index = 0; index < snapshot.pcmBatch.count; ++index) {
-        const auto& pcm = snapshot.pcmBatch.frames[index];
-        if (pcm.sequence <= consumedSequence) continue;
-        double dt = wallDelta;
-        if (index > 0) {
-            const auto& previous = snapshot.pcmBatch.frames[index - 1];
-            if (previous.epoch == pcm.epoch && previous.sampleRate == pcm.sampleRate
-                && pcm.firstSampleIndex > previous.firstSampleIndex) {
-                dt = double(pcm.firstSampleIndex - previous.firstSampleIndex)
-                    / double(pcm.sampleRate);
-            }
-        }
-        const auto analyzed = analyzePcm(pcm, dt);
-        finalAudio = &analyzed.audio;
-        finalTerrain = &analyzed.terrain;
-        beatCount += analyzed.beatCount;
-        beatStrength = std::max(beatStrength, analyzed.beatStrength);
-        pulseCount += analyzed.pulseCount;
-        pulseStrength = std::max(pulseStrength, analyzed.pulseStrength);
-        if (analyzed.meteor.triggered) strongestMeteor = analyzed.meteor;
-        if (analyzed.snare.triggered
-            && analyzed.snare.strength >= strongestSnare.strength) {
-            strongestSnare = analyzed.snare;
-        }
-        consumedSequence = pcm.sequence;
-    }
-
-    if (finalAudio == nullptr) {
-        const bool needsAnalysis = !snapshot.pcm.valid || snapshot.pcm.paused
-            || snapshot.pcm.sequence == 0
-            || snapshot.pcm.sequence > consumedSequence;
-        if (needsAnalysis) {
-            const auto frame = advanceReferenceAudioFrame(analyzer, response, snapshot,
-                                                           wallDelta, snare);
-            finalAudio = &frame.audio;
-            finalTerrain = &frame.terrain;
-            beatCount = frame.beatCount;
-            beatStrength = frame.beatStrength;
-            strongestSnare = frame.snare;
-            pulseCount = frame.pulseCount;
-            pulseStrength = frame.pulseStrength;
-            strongestMeteor = frame.meteor;
-            if (snapshot.pcm.sequence > consumedSequence)
-                consumedSequence = snapshot.pcm.sequence;
-        } else {
-            // A late GUI handoff is not a new audio observation. Hold the last
-            // continuous terrain state until the next monotonic PCM window;
-            // reprocessing the same samples can synthesize a falling-flux peak.
-            finalAudio = &analyzer.frame();
-            finalTerrain = &response.features();
-        }
-    }
-    return {*finalAudio, *finalTerrain, strongestSnare, beatCount, beatStrength,
-            pulseCount, pulseStrength, strongestMeteor};
-}
-
 void TerrainReactorItem::restoreRenderAudioEvents(BeatEvent& beat, ImpactEvent& impact,
     const RenderSnapshot& snapshot, const RendererResourceState& resources)
 {
@@ -2089,6 +2002,7 @@ void TerrainReactorItem::updateWindowState(QQuickWindow* window)
 {
     if (trackedWindow_ != nullptr) trackedWindow_->removeEventFilter(this);
     if (windowVisibilityConnection_) disconnect(windowVisibilityConnection_);
+    if (windowScreenConnection_) disconnect(windowScreenConnection_);
     trackedWindow_ = window;
     if (window == nullptr) {
         windowExposed_ = true;
@@ -2103,8 +2017,11 @@ void TerrainReactorItem::updateWindowState(QQuickWindow* window)
         const auto refresh = [this] { refreshWindowExposure(); };
         windowVisibilityConnection_ = connect(window, &QWindow::visibilityChanged,
                                                this, refresh);
+        windowScreenConnection_ = connect(window, &QWindow::screenChanged,
+            this, [this] { updateColorBufferSize(); });
         refreshWindowExposure();
     }
+    updateColorBufferSize();
     emit renderingRequestedChanged();
     scheduleIfRunnable();
 }
@@ -2113,6 +2030,9 @@ bool TerrainReactorItem::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched == trackedWindow_ && event != nullptr) {
         switch (event->type()) {
+        case QEvent::DevicePixelRatioChange:
+            updateColorBufferSize();
+            break;
         case QEvent::Expose:
         case QEvent::Show:
         case QEvent::Hide:

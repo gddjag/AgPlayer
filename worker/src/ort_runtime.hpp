@@ -38,6 +38,7 @@ enum class ExecutionProvider {
     Cpu,
     DirectMl,
     Cuda,
+    CoreMl,
 };
 
 } // namespace agplayer::separation

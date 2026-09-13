@@ -176,6 +176,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/ThemedMenuItem.qml
         qml/AgPlayer/components/ThemedButton.qml
         qml/AgPlayer/components/ThemedIconButton.qml
+        qml/AgPlayer/components/ThemedMacWindowControls.qml
         qml/AgPlayer/components/ThemedTextField.qml
         qml/AgPlayer/components/ThemedSlider.qml
         qml/AgPlayer/components/ThemedListRow.qml
@@ -226,8 +227,19 @@ target_link_libraries(agplayer_app_qml
 
 qt_add_executable(AgPlayer
     main.cpp
+    agplayer_application.hpp
     ${AGPLAYER_PLATFORM_SOURCES}
 )
+if(APPLE)
+    set_target_properties(AgPlayer PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.agplayer.AgPlayer"
+        MACOSX_BUNDLE_BUNDLE_NAME "AgPlayer"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info.plist.in"
+        INSTALL_RPATH "@executable_path/../Frameworks")
+endif()
 target_include_directories(AgPlayer PRIVATE "${CMAKE_BINARY_DIR}/generated")
 if(TARGET AgSeparationWorker)
     add_dependencies(AgPlayer AgSeparationWorker)

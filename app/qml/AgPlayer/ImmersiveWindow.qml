@@ -16,7 +16,8 @@ Window {
     property int qaViewportWidth: 0
     property int qaViewportHeight: 0
     property alias surfaceItem: surface
-    property rect windowedGeometry: Qt.rect(0, 0, 0, 0)
+    property bool geometryReady: false
+    property bool synchronizingHost: false
     property int synchronizedHostMode: PlayerExperienceController.Windowed
 
     readonly property bool hasKeyboardFocus:
@@ -69,12 +70,14 @@ Window {
     }
 
     visible: false
-    width: qaViewportWidth > 0 ? qaViewportWidth
-                               : Math.min(1440, Screen.width * 0.92)
-    height: qaViewportHeight > 0 ? qaViewportHeight
-                                 : Math.min(900, Screen.height * 0.88)
-    minimumWidth: 960
-    minimumHeight: 640
+    readonly property rect defaultWindowBounds:
+        WindowController.startupGeometryForAvailableArea(
+            Qt.rect(0, 0, 1440, 900),
+            WindowController.availableGeometryForWindow(root), true)
+    width: qaViewportWidth > 0 ? qaViewportWidth : defaultWindowBounds.width
+    height: qaViewportHeight > 0 ? qaViewportHeight : defaultWindowBounds.height
+    minimumWidth: Math.min(760, defaultWindowBounds.width)
+    minimumHeight: Math.min(420, defaultWindowBounds.height)
     color: PlayerExperienceController.hostMode === PlayerExperienceController.Desktop
            ? "transparent" : "#050206" // theme-color-allow: immersive media visual contract
     title: qsTr("AgPlayer 沉浸视觉")
@@ -85,7 +88,39 @@ Window {
               && PlayerExperienceController.desktopMousePassthrough
               ? Qt.WindowTransparentForInput : 0)
 
+    function rememberWindowedGeometry() {
+        if (!geometryReady || synchronizingHost || !visible
+                || visibility !== Window.Windowed
+                || synchronizedHostMode !== PlayerExperienceController.Windowed
+                || PlayerExperienceController.hostMode !== PlayerExperienceController.Windowed)
+            return
+        WindowController.persistImmersiveWindowGeometry(root)
+    }
+
+    onXChanged: rememberWindowedGeometry()
+    onYChanged: rememberWindowedGeometry()
+    onWidthChanged: rememberWindowedGeometry()
+    onHeightChanged: rememberWindowedGeometry()
+
     function synchronizeHost() {
+        if (synchronizingHost)
+            return
+        synchronizingHost = true
+        try {
+            // Capture the outgoing normal rectangle before a host transition
+            // or close; never let construction/fullscreen/desktop sizes win.
+            if (geometryReady && visibility === Window.Windowed
+                    && synchronizedHostMode === PlayerExperienceController.Windowed)
+                WindowController.persistImmersiveWindowGeometry(root)
+            synchronizeHostPresentation()
+        } finally {
+            geometryReady = true
+            synchronizingHost = false
+            rememberWindowedGeometry()
+        }
+    }
+
+    function synchronizeHostPresentation() {
         if (PlayerExperienceController.immersiveMode
                 === PlayerExperienceController.Off) {
             visible = false
@@ -96,11 +131,6 @@ Window {
         var wasVisible = visible
         var requestedHostMode = PlayerExperienceController.hostMode
         var previousHostMode = synchronizedHostMode
-        if (previousHostMode === PlayerExperienceController.Windowed
-                && requestedHostMode !== PlayerExperienceController.Windowed
-                && visibility === Window.Windowed) {
-            windowedGeometry = Qt.rect(x, y, width, height)
-        }
         synchronizedHostMode = requestedHostMode
         if (requestedHostMode === PlayerExperienceController.Fullscreen) {
             showFullScreen()
@@ -113,21 +143,18 @@ Window {
             y = Screen.virtualY
             width = Screen.width
             height = Screen.height
-        } else if (!wasVisible) {
-            x = Screen.virtualX + Math.max(0, (Screen.width - width) / 2)
-            y = Screen.virtualY + Math.max(0, (Screen.height - height) / 2)
         }
         var restoreGeometry = requestedHostMode
                 === PlayerExperienceController.Windowed
-                && windowedGeometry.width > 0
-                && (visibility === Window.FullScreen
-                    || previousHostMode === PlayerExperienceController.Desktop)
+                && (!wasVisible || visibility !== Window.Windowed
+                    || previousHostMode !== PlayerExperienceController.Windowed)
         showNormal()
         if (restoreGeometry) {
-            x = windowedGeometry.x
-            y = windowedGeometry.y
-            width = windowedGeometry.width
-            height = windowedGeometry.height
+            if (!WindowController.restoreImmersiveWindowGeometry(root) && !wasVisible) {
+                const available = WindowController.availableGeometryForWindow(root)
+                x = available.x + Math.max(0, (available.width - width) / 2)
+                y = available.y + Math.max(0, (available.height - height) / 2)
+            }
         }
         WindowController.enterImmersivePresentation()
         requestActivate()

@@ -482,7 +482,8 @@ private:
                             const QString& codecName, int sampleRate,
                             int channels, qint64 bitRate, bool keepMetadata,
                             bool variableBitRate, int quality,
-                            bool usePersistedDefaults);
+                            bool usePersistedDefaults,
+                            agplayer::editor::OutputCommitMode commitMode);
 
     EditorActionModel actions_;
     EditorViewport viewport_;

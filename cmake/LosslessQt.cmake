@@ -7,6 +7,10 @@ target_sources(agplayer_qt PRIVATE
     ${CMAKE_SOURCE_DIR}/qt/src/lossless_task_model.hpp
 )
 
+if(NOT BUILD_TESTING)
+    return()
+endif()
+
 add_executable(lossless_analysis_controller_test
     ${CMAKE_SOURCE_DIR}/tests/qt/lossless_analysis_controller_test.cpp
 )

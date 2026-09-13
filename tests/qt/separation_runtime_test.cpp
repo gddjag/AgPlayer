@@ -69,7 +69,7 @@ public:
             return {false, QStringLiteral("cancelled"),
                     QStringLiteral("Provider probe cancelled"), {}};
         }
-        if (provider == ExecutionProvider::DirectMl) {
+        if (provider == ExecutionProvider::DirectMl || provider == ExecutionProvider::CoreMl) {
             ++gpuCalls;
             return gpu ? BackendResult{true, {}, {}, {}}
                        : BackendResult{false, QStringLiteral("gpu_probe_failed"),
@@ -276,8 +276,18 @@ void SeparationRuntimeTest::productionAutoSelectionFallsBackToCpuWithReason()
         selectNativeProvider(request, profile, cancelled, probe);
     QVERIFY(selection.ok);
     QCOMPARE(selection.provider, ExecutionProvider::Cpu);
+#ifdef Q_OS_MACOS
+    QVERIFY(!selection.fallbackReason.isEmpty());
+#ifdef Q_PROCESSOR_ARM_64
+    QVERIFY(selection.fallbackReason.contains(QStringLiteral("minimal inference failed")));
+    QCOMPARE(probe.gpuCalls, 1);
+#else
+    QCOMPARE(probe.gpuCalls, 0);
+#endif
+#else
     QCOMPARE(selection.fallbackReason, QStringLiteral("minimal inference failed"));
     QCOMPARE(probe.gpuCalls, 1);
+#endif
     QCOMPARE(probe.cpuCalls, 1);
 }
 
@@ -307,6 +317,19 @@ void SeparationRuntimeTest::sessionLoadUsesTheStartCancellationTokenAndUnsubscri
     QVERIFY(entered != nullptr);
     QVERIFY(calls != nullptr);
     QVERIFY(reset != nullptr);
+
+#ifdef Q_OS_MACOS
+    reset();
+    CancellationToken cancellation;
+    OrtModelSession macSession;
+    const auto result = macSession.open(QString::fromUtf8(AG_SEPARATION_FAKE_ORT_PATH),
+        QByteArray::fromHex("42021011"), ExecutionProvider::DirectMl, 0, cancellation);
+    QCOMPARE(result.code, QStringLiteral("model_open_failed"));
+    QCOMPARE(result.message, QStringLiteral("strict-array-session"));
+    cancellation.cancel();
+    QCOMPARE(calls(), 0); // API18 guard-page fixture makes tail reads fatal.
+    return; // Blocking session loads are covered by Unix worker-group tests.
+#endif
 
     reset();
     CancellationToken cancelled;

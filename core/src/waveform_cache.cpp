@@ -109,7 +109,9 @@ bool write_little_endian(std::ostream& stream, const Value value)
     std::array<char, sizeof(Value)> bytes{};
     for (std::size_t index = 0U; index < bytes.size(); ++index) {
         bytes[index] = static_cast<char>(bits & 0xFFU);
-        bits >>= 8U;
+        if constexpr (sizeof(Unsigned) > 1U) {
+            bits >>= 8U;
+        }
     }
     stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     return static_cast<bool>(stream);

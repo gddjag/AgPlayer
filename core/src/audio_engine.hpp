@@ -161,6 +161,8 @@ private:
     using TimelineTestHook = void (*)(void*, bool) noexcept;
     using TimePitchTestHook = void (*)(void*, std::uint64_t, int) noexcept;
     using ScratchCommitTestHook = void (*)(void*, int) noexcept;
+    using SeekWaitTestHook = void (*)(void*, int) noexcept;
+    void set_seek_wait_test_hook(SeekWaitTestHook hook, void* context) noexcept;
     void set_timeline_test_hook(TimelineTestHook hook,
                                 void* context) noexcept;
     void set_time_pitch_test_hook(TimePitchTestHook hook,

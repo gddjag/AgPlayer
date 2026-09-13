@@ -154,12 +154,6 @@ QVariantList build_variant_peaks(
     return result;
 }
 
-qint64 clamped_int64_to_qint64(const std::size_t value)
-{
-    return value > static_cast<std::size_t>(std::numeric_limits<qint64>::max())
-        ? std::numeric_limits<qint64>::max() : static_cast<qint64>(value);
-}
-
 qint64 scaledBucket(const qint64 frame, const qint64 totalFrames,
                     const qint64 bucketCount)
 {
@@ -1411,7 +1405,7 @@ bool AudioEditorController::saveAs(const QUrl& target)
 {
     if (!exportSupported()) return false;
     return exportWithSettings(target, false, {}, 0, 0, 0, true, true, 80,
-                              false);
+                              false, agplayer::editor::OutputCommitMode::Overwrite);
 }
 
 bool AudioEditorController::exportTo(
@@ -1422,7 +1416,8 @@ bool AudioEditorController::exportTo(
     if (!exportSupported()) return false;
     return exportWithSettings(target, selectionOnly, codecName, sampleRate,
                               channels, bitRate, keepMetadata,
-                              variableBitRate, quality, true);
+                              variableBitRate, quality, true,
+                              agplayer::editor::OutputCommitMode::Overwrite);
 }
 
 bool AudioEditorController::exportToConfiguredDirectory(
@@ -1499,14 +1494,16 @@ bool AudioEditorController::exportToConfiguredDirectory(
         project_export_settings_.bitRate,
         project_export_settings_.keepMetadata,
         project_export_settings_.variableBitRate,
-        project_export_settings_.quality, false);
+        project_export_settings_.quality, false,
+        agplayer::editor::OutputCommitMode::CreateNoReplace);
 }
 
 bool AudioEditorController::exportWithSettings(
     const QUrl& target, const bool selectionOnly, const QString& codecName,
     const int sampleRate, const int channels, const qint64 bitRate,
     const bool keepMetadata, const bool variableBitRate, const int quality,
-    const bool usePersistedDefaults)
+    const bool usePersistedDefaults,
+    const agplayer::editor::OutputCommitMode commitMode)
 {
     const QString path = local_path(target);
     const auto selection = document_.selection();
@@ -1548,6 +1545,7 @@ bool AudioEditorController::exportWithSettings(
     request.snapshot = document_.timelineSnapshot();
     applyTrackMix(request.snapshot);
     request.output_path = std::filesystem::path(path.toStdWString());
+    request.commit_mode = commitMode;
     request.codec_name = effective.codecName.toStdString();
     if (!source_path_.isEmpty()) {
         request.metadata_source_path = std::filesystem::path(

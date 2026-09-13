@@ -30,9 +30,10 @@ public:
     struct Track final {
         QString title;
         QString artist;
-        QString album;
+        QString album{};
         qint64 durationMs = 0;
         bool lowPriority = false;
+        bool forceRefresh = false;
     };
     struct Candidate final {
         Source source;

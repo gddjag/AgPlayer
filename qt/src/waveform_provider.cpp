@@ -2,6 +2,7 @@
 #include "runtime_log.hpp"
 #include "settings_controller.hpp"
 #include "waveform_cache.hpp"
+#include "cache_janitor.hpp"
 
 #include <QDir>
 #include <QFileInfo>
@@ -68,7 +69,8 @@ QString cacheFilePathForDirectory(
     if (directory.isEmpty() || sourcePath.isEmpty()) {
         return {};
     }
-    if (!QDir().mkpath(directory)) {
+    const QString storage = CacheJanitor::storageDirectory(directory, true);
+    if (storage.isEmpty()) {
         return {};
     }
     const std::string key =
@@ -82,7 +84,7 @@ QString cacheFilePathForDirectory(
             : aggregation == AG_WAVEFORM_AGGREGATION_AVERAGE_ABSOLUTE
                   ? QStringLiteral("-average")
                   : QString();
-    return QDir(directory).filePath(QString::fromStdString(key) + suffix
+    return QDir(storage).filePath(QString::fromStdString(key) + suffix
                                     + QStringLiteral(".agwf"));
 }
 

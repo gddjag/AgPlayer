@@ -230,4 +230,24 @@ if(WIN32)
     target_link_libraries(agplayer_qt PRIVATE dwmapi shell32)
 endif()
 
+if(APPLE)
+    enable_language(OBJCXX)
+    set_target_properties(agplayer_qt PROPERTIES
+        OBJCXX_STANDARD 17
+        OBJCXX_STANDARD_REQUIRED ON
+        OBJCXX_EXTENSIONS OFF)
+    target_sources(agplayer_qt PRIVATE
+        src/macos_system_integration.hpp
+        src/macos_system_integration.mm
+    )
+    target_link_libraries(agplayer_qt PRIVATE
+        "-framework AppKit"
+        "-framework ServiceManagement"
+        "-framework Carbon"
+        "-framework ApplicationServices"
+        "-framework CoreServices"
+        "-framework UniformTypeIdentifiers"
+    )
+endif()
+
 agplayer_enable_warnings(agplayer_qt)

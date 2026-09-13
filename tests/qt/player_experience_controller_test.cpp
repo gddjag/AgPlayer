@@ -111,7 +111,11 @@ private slots:
     void initTestCase();
     void defaultsAreIndependent();
     void persistsAndNormalizesValues();
-    void legacyActivePresentationNeverReopensOnStartup();
+    void ignoresLegacyPresentationUntilUserMakesANewChoice();
+    void restoresLyricsVisibilityChoice();
+    void restoresSidePanelChoicesIndependently();
+    void migratesMissingSidePanelChoices();
+    void normalizesPersistedPresentationValues();
     void defaultsExposeV46ExperienceControls();
     void clampsPersistsAndNotifiesV46ExperienceControls();
     void persistsAndClampsLyricPlacement();
@@ -437,7 +441,7 @@ void PlayerExperienceControllerTest::topographyDensityIsIndependentPersistentAnd
     QCOMPARE(high.topographyDensity(), 100);
 }
 
-void PlayerExperienceControllerTest::legacyActivePresentationNeverReopensOnStartup()
+void PlayerExperienceControllerTest::ignoresLegacyPresentationUntilUserMakesANewChoice()
 {
     QSettings settings;
     settings.clear();
@@ -451,7 +455,110 @@ void PlayerExperienceControllerTest::legacyActivePresentationNeverReopensOnStart
     QCOMPARE(restored.immersiveMode(), PlayerExperienceController::TerrainReactor);
     QVERIFY(!settings.contains(QStringLiteral("immersiveVisual/mode")));
     PlayerExperienceController restarted;
-    QCOMPARE(restarted.immersiveMode(), PlayerExperienceController::Off);
+    QCOMPARE(restarted.immersiveMode(), PlayerExperienceController::TerrainReactor);
+    restarted.setImmersiveMode(PlayerExperienceController::Off);
+    PlayerExperienceController closed;
+    QCOMPARE(closed.immersiveMode(), PlayerExperienceController::Off);
+}
+
+void PlayerExperienceControllerTest::restoresLyricsVisibilityChoice()
+{
+    QSettings().clear();
+    {
+        PlayerExperienceController firstLaunch;
+        QVERIFY(!firstLaunch.lyricsVisible());
+        firstLaunch.setLyricsVisible(true);
+    }
+    {
+        PlayerExperienceController reopened;
+        QVERIFY(reopened.lyricsVisible());
+        reopened.setLyricsVisible(false);
+    }
+    PlayerExperienceController explicitlyHidden;
+    QVERIFY(!explicitlyHidden.lyricsVisible());
+}
+
+void PlayerExperienceControllerTest::restoresSidePanelChoicesIndependently()
+{
+    QSettings().clear();
+    const char* names[] = {"integratedSidePanelPage", "integratedSidePanelExpanded",
+                           "rollingSidePanelPage", "rollingSidePanelExpanded"};
+    const QVariant defaults[] = {0, true, 0, true};
+    const QVariant choices[] = {1, false, 0, true};
+    {
+        PlayerExperienceController experience;
+        // Visibility remains independent of the last selected/collapsed page.
+        experience.setLyricsVisible(true);
+        for (int index = 0; index < 4; ++index) {
+            const int propertyIndex = experience.metaObject()->indexOfProperty(names[index]);
+            QVERIFY2(propertyIndex >= 0, names[index]);
+            const QMetaProperty property = experience.metaObject()->property(propertyIndex);
+            QVERIFY(property.isWritable());
+            QVERIFY(property.hasNotifySignal());
+            QSignalSpy changed(&experience, property.notifySignal());
+            QCOMPARE(property.read(&experience), defaults[index]);
+            QVERIFY(property.write(&experience, choices[index]));
+            QCOMPARE(changed.count(), defaults[index] != choices[index] ? 1 : 0);
+            QVERIFY(property.write(&experience, choices[index]));
+            QCOMPARE(changed.count(), defaults[index] != choices[index] ? 1 : 0);
+        }
+    }
+    PlayerExperienceController reopened;
+    QVERIFY(reopened.lyricsVisible());
+    for (int index = 0; index < 4; ++index)
+        QCOMPARE(reopened.property(names[index]), choices[index]);
+    const QVariant reversedChoices[] = {0, true, 1, false};
+    for (int index = 0; index < 4; ++index)
+        QVERIFY(reopened.setProperty(names[index], reversedChoices[index]));
+    PlayerExperienceController reopenedAgain;
+    for (int index = 0; index < 4; ++index)
+        QCOMPARE(reopenedAgain.property(names[index]), reversedChoices[index]);
+}
+
+void PlayerExperienceControllerTest::migratesMissingSidePanelChoices()
+{
+    QSettings settings;
+    for (bool lyricsVisible : {false, true}) {
+        settings.clear();
+        settings.setValue(QStringLiteral("immersiveVisual/lyricsVisible"), lyricsVisible);
+        {
+            PlayerExperienceController migrated;
+            QCOMPARE(migrated.property("integratedSidePanelPage"), QVariant(lyricsVisible ? 1 : 0));
+            QCOMPARE(migrated.property("rollingSidePanelPage"), QVariant(lyricsVisible ? 1 : 0));
+            QCOMPARE(migrated.property("integratedSidePanelExpanded"), QVariant(true));
+            QCOMPARE(migrated.property("rollingSidePanelExpanded"), QVariant(true));
+            // Migration only supplies missing values, not future startup overrides.
+            migrated.setLyricsVisible(!lyricsVisible);
+        }
+        PlayerExperienceController reopened;
+        QCOMPARE(reopened.property("integratedSidePanelPage"), QVariant(lyricsVisible ? 1 : 0));
+        QCOMPARE(reopened.property("rollingSidePanelPage"), QVariant(lyricsVisible ? 1 : 0));
+    }
+}
+
+void PlayerExperienceControllerTest::normalizesPersistedPresentationValues()
+{
+    QSettings settings;
+    settings.clear();
+    settings.setValue(QStringLiteral("immersiveVisual/immersiveMode"), QStringLiteral("1.0"));
+    settings.setValue(QStringLiteral("immersiveVisual/lyricsVisible"), QStringLiteral(" true"));
+    settings.setValue(QStringLiteral("immersiveVisual/integratedSidePanelPage"), 99);
+    settings.setValue(QStringLiteral("immersiveVisual/rollingSidePanelPage"), -1);
+    settings.setValue(QStringLiteral("immersiveVisual/integratedSidePanelExpanded"), 0);
+    settings.setValue(QStringLiteral("immersiveVisual/rollingSidePanelExpanded"), QStringLiteral("false"));
+    PlayerExperienceController normalized;
+    QCOMPARE(normalized.immersiveMode(), PlayerExperienceController::Off);
+    QVERIFY(!normalized.lyricsVisible());
+    QCOMPARE(normalized.property("integratedSidePanelPage"), QVariant(0));
+    QCOMPARE(normalized.property("rollingSidePanelPage"), QVariant(0));
+    QCOMPARE(normalized.property("integratedSidePanelExpanded"), QVariant(true));
+    QCOMPARE(normalized.property("rollingSidePanelExpanded"), QVariant(false));
+    QVERIFY(normalized.setProperty("integratedSidePanelPage", 99));
+    QVERIFY(normalized.setProperty("rollingSidePanelPage", -1));
+    QCOMPARE(normalized.property("integratedSidePanelPage"), QVariant(0));
+    QCOMPARE(normalized.property("rollingSidePanelPage"), QVariant(0));
+    QCOMPARE(settings.value(QStringLiteral("immersiveVisual/integratedSidePanelPage")), QVariant(0));
+    QCOMPARE(settings.value(QStringLiteral("immersiveVisual/rollingSidePanelExpanded")), QVariant(false));
 }
 
 void PlayerExperienceControllerTest::defaultsAreIndependent()
@@ -496,9 +603,9 @@ void PlayerExperienceControllerTest::persistsAndNormalizesValues()
     }
 
     PlayerExperienceController reloaded;
-    QCOMPARE(reloaded.immersiveMode(), PlayerExperienceController::Off);
+    QCOMPARE(reloaded.immersiveMode(), PlayerExperienceController::TerrainReactor);
     QCOMPARE(reloaded.hostMode(), 2);
-    QVERIFY(!reloaded.lyricsVisible());
+    QVERIFY(reloaded.lyricsVisible());
     QVERIFY(!reloaded.panelVisible());
     QVERIFY(reloaded.desktopMousePassthrough());
     QVERIFY(!reloaded.songAdaptiveColorEnabled());
@@ -507,7 +614,7 @@ void PlayerExperienceControllerTest::persistsAndNormalizesValues()
     QCOMPARE(reloaded.terrainAmplitude(), 72);
     QCOMPARE(reloaded.visualEqGains(), QVariantList({0, 1, 2, 3, 4, 5, 6, 7}));
 
-    settings.setValue(QStringLiteral("immersiveVisual/mode"), 99);
+    settings.setValue(QStringLiteral("immersiveVisual/immersiveMode"), 99);
     settings.setValue(QStringLiteral("immersiveVisual/hostMode"), -1);
     settings.setValue(QStringLiteral("immersiveVisual/qualityPreset"), 99);
     settings.setValue(QStringLiteral("immersiveVisual/coolColor"), QStringLiteral("bad"));

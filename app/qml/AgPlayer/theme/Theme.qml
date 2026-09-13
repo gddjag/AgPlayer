@@ -64,6 +64,9 @@ QtObject {
     readonly property color accentSoft: isLight ? "#1F6D28D9" : "#4D7657E8"
     readonly property color accentText: "#FFFFFF"
     readonly property color accentBorder: accent
+    // Reading text needs a different tone from filled buttons/selected rows.
+    readonly property color lyricCurrentText: isLight ? "#7941C9" : "#AD8EEB"
+    readonly property color lyricContextText: isLight ? "#59616D" : "#A6ADB8"
     readonly property color focus: accent
     readonly property color highlight: accent
     readonly property color highlightHover: accentHover
@@ -217,6 +220,14 @@ QtObject {
     readonly property int radiusMd: 8
     readonly property int radiusLg: 8
     readonly property int windowRadius: Qt.platform.os === "osx" ? 10 : 8
+    // Platform window controls; preserve the application's existing theme.
+    readonly property color macWindowClose: "#ff5f57"
+    readonly property color macWindowMinimize: "#febc2e"
+    readonly property color macWindowFullScreen: "#28c840"
+    readonly property color macWindowInactive: "#98989d"
+    readonly property color macWindowGlyph: "#252525"
+    readonly property int macWindowDotExtent: 12
+    readonly property int macWindowGlyphExtent: 10
     readonly property int spacingXs: 4
     readonly property int spacingSm: 8
     readonly property int spacingMd: 12

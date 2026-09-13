@@ -25,12 +25,12 @@ struct VocalModelCard {
     QStringList stems;
     QString provenance;
     QString resourceGuidance;
-    QString displayName;
-    QString useCase;
-    QString tierLabel;
-    QString badgeLabel;
-    QString provider;
-    QString repositoryUrl;
+    QString displayName{};
+    QString useCase{};
+    QString tierLabel{};
+    QString badgeLabel{};
+    QString provider{};
+    QString repositoryUrl{};
 };
 
 struct VocalRuntimePackage {
@@ -44,6 +44,7 @@ class VocalSeparationCatalog {
 public:
     static QList<VocalModelCard> models();
     static VocalRuntimePackage directMlRuntime();
+    static VocalRuntimePackage nativeRuntime();
 };
 
 struct CustomManifestValidationResult {

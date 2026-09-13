@@ -17,7 +17,29 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <new>
 #include <vector>
+
+namespace {
+
+thread_local bool recordBufferAllocations = false;
+thread_local std::size_t bufferAllocations = 0;
+
+void* allocateBufferTestMemory(const std::size_t size)
+{
+    if (recordBufferAllocations) ++bufferAllocations;
+    if (void* const pointer = std::malloc(size == 0 ? 1 : size)) return pointer;
+    throw std::bad_alloc();
+}
+
+} // namespace
+
+void* operator new(const std::size_t size) { return allocateBufferTestMemory(size); }
+void* operator new[](const std::size_t size) { return allocateBufferTestMemory(size); }
+void operator delete(void* const pointer) noexcept { std::free(pointer); }
+void operator delete[](void* const pointer) noexcept { std::free(pointer); }
+void operator delete(void* const pointer, std::size_t) noexcept { std::free(pointer); }
+void operator delete[](void* const pointer, std::size_t) noexcept { std::free(pointer); }
 
 namespace {
 
@@ -467,10 +489,99 @@ void multiEventProcessingAndDecodeFailuresAreCovered()
 
 } // namespace
 
+void playbackBuffersAreReused(const bool benchmarkOnly)
+{
+    using namespace agplayer::editor;
+    // Muted events use the real timeline and time/pitch engine, without file
+    // decoder allocations obscuring the work-buffer allocation measurement.
+    // Reuse one output block across mono/stereo and neutral/processed streams.
+    agplayer::DecodedAudioBlock block;
+    for (const auto format : {std::pair{44'100U, 1U}, std::pair{48'000U, 2U}}) {
+        for (const double speed : {1.0, 0.75}) {
+            constexpr SampleFrame totalFrames = 4'096 * 1'024;
+            auto source = std::make_shared<AudioSource>();
+            source->path = "unused-muted-source.wav";
+            source->sample_rate = format.first;
+            source->channels = format.second;
+            source->total_frames = totalFrames;
+            AudioEvent event{1, source, 0, totalFrames, 0};
+            event.mute = true;
+            EditorPlaybackParameters parameters;
+            parameters.speed_ratio = speed;
+            parameters.keep_pitch = true;
+            std::string error;
+            auto stream = EditorPlaybackStream::create(
+                TimelineSnapshot{{event}, totalFrames, 1}, parameters, error);
+            require(stream != nullptr, "buffer reuse stream creation failed");
+            for (int warmup = 0; warmup < 16; ++warmup) {
+                require(stream->read(block) == AG_OK && block.frames > 0,
+                        "buffer reuse warmup failed");
+            }
+            bufferAllocations = 0;
+            recordBufferAllocations = true;
+            const auto start = std::chrono::steady_clock::now();
+            ag_result result = AG_OK;
+            std::size_t reads = 0;
+            for (; reads < 512; ++reads) {
+                result = stream->read(block);
+                if (result != AG_OK || block.frames == 0) break;
+            }
+            const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - start).count();
+            recordBufferAllocations = false;
+            const std::size_t allocations = bufferAllocations;
+            std::cout << "editor buffers rate=" << format.first
+                      << " channels=" << format.second << " speed=" << speed
+                      << " reads=" << reads << " allocations=" << allocations
+                      << " elapsed_us=" << elapsed << '\n';
+            require(result == AG_OK && reads == 512,
+                    "buffer reuse measured reads failed");
+            if (!benchmarkOnly) {
+                require(allocations == 0,
+                        "steady editor reads allocated new work buffers");
+            }
+            const auto capacity = block.samples.capacity();
+            std::int64_t nextFrame = block.timestamp_frame
+                + static_cast<std::int64_t>(block.frames);
+            do {
+                require(stream->read(block) == AG_OK,
+                        "buffer reuse EOF read failed");
+                require(block.timestamp_frame == nextFrame,
+                        "buffer reuse changed frame timestamps");
+                require(block.samples.size() == block.frames * format.second,
+                        "buffer reuse retained samples from the previous format");
+                require(std::all_of(block.samples.begin(), block.samples.end(),
+                                    [](float sample) { return sample == 0.0F; }),
+                        "buffer reuse exposed stale PCM instead of silence");
+                nextFrame += static_cast<std::int64_t>(block.frames);
+            } while (!block.end_of_stream);
+            if (!benchmarkOnly) {
+                require(block.samples.capacity() >= capacity,
+                        "EOF discarded the reusable output allocation");
+            }
+            require(block.samples.empty() && block.frames == 0,
+                    "EOF retained a previous audio block");
+            require(stream->seek(0) == AG_OK && stream->read(block) == AG_OK
+                        && block.frames > 0 && !block.end_of_stream
+                        && block.timestamp_frame == 0,
+                    "buffer reuse failed to restart after EOF seek");
+        }
+    }
+}
+
 int main(int argc, char** argv)
 {
     using namespace agplayer::editor;
     require(argc == 2, "fixture path argument missing");
+    if (std::string(argv[1]) == "--buffer-benchmark") {
+        playbackBuffersAreReused(true);
+        return 0;
+    }
+    if (std::string(argv[1]) == "--buffer-reuse-regression") {
+        playbackBuffersAreReused(false);
+        return 0;
+    }
+    playbackBuffersAreReused(false);
     formantPreserverRestoresControlledSpectralCentroids();
     automationRunsAfterTimePitchInRealtimeStream();
     sequentialAutomationCursorSearchRemainsNearLinear();

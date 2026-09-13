@@ -201,3 +201,37 @@ baseline. A legitimate domain colour or visualization-only font calculation
 must carry an inline `theme-color-allow:` or `typography-size-allow:` reason so
 that the exception is visible in review. New generic controls belong in
 `components/Themed*.qml`; page-local copies are not accepted.
+
+## 9. macOS platform policy (all future updates and additions)
+
+The macOS edition targets macOS 13+ and follows Apple's official Human Interface
+Guidelines. This is a standing user requirement, including new features and later
+updates. `ui-ux-pro-max` supplements this policy; generic web/mobile presets do
+not override Apple's macOS guidance or the approved AgPlayer layout.
+
+- Preserve the existing content layout, navigation and complete Windows feature
+  set. Reuse Theme and shared controls; macOS styling must not redesign Windows.
+- Use the system application font, semantic light/dark colours, visible keyboard
+  focus and accessible labels. Existing 28 pt desktop targets remain the baseline.
+- Place close/minimise/full-screen controls at the left. Keep window-specific
+  close confirmation and unsaved-work protection. Prefer system APIs for native
+  behaviour; label custom QML controls honestly and validate them on a real Mac.
+- Provide the system application menu, Settings (Command-comma), Quit (Command-Q),
+  Close Window (Command-W) and Minimise (Command-M). Display native shortcut symbols
+  while storing portable key sequences. Closing a window and quitting are distinct
+  actions; retain the user's configured close behaviour.
+- Show environment/model errors and recovery actions inside the affected cards;
+  retain one-click setup and official model compatibility links. Do not hide a
+  feature because a model or acceleration provider is unavailable.
+- Do not require macOS 26 visual APIs or raise the macOS 13 minimum. Avoid new
+  runtime dependencies, decorative effects and changes to playback behaviour.
+- Review changed surfaces on macOS for focus, pointer hit areas, window actions,
+  standard shortcuts and light/dark appearance. Windows previews, lint and CI
+  compilation are not physical Mac visual/audio acceptance.
+
+Official references (checked 2026-09-13):
+[Designing for macOS](https://developer.apple.com/design/human-interface-guidelines/designing-for-macos/),
+[Windows](https://developer.apple.com/design/human-interface-guidelines/windows),
+[Keyboards](https://developer.apple.com/design/human-interface-guidelines/keyboards),
+[Settings](https://developer.apple.com/design/human-interface-guidelines/settings),
+[Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility).

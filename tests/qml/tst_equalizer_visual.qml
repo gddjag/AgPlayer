@@ -121,6 +121,10 @@ TestCase {
         temporaryPresetId = ""
         equalizer = equalizerComponent.createObject(null)
         verify(equalizer)
+        // Visual references use explicit sizes; startup defaults now fit the
+        // current work area, which is deliberately small with offscreen QPA.
+        equalizer.width = 1080
+        equalizer.height = 620
         wait(80)
         EqualizerController.resetAll()
         verify(EqualizerController.setGainRangeDb(12))
@@ -404,10 +408,10 @@ TestCase {
         var preamp = findChild(equalizer, "equalizerPreampSlider")
         verify(scroller && repeater && preamp)
         compare(repeater.count, 18)
-        verify(scroller.contentWidth > scroller.width,
-               "default EQ must scroll rather than squeeze nineteen columns")
+        compare(scroller.contentWidth, scroller.width,
+                "all nineteen bands must adapt without horizontal clipping")
         var first = repeater.itemAt(0)
-        verify(first.width >= 52, "band width=" + first.width)
+        verify(first.width >= 40, "band width=" + first.width)
         compare(preamp.width, first.width)
         for (var index = 1; index < repeater.count; ++index) {
             compare(repeater.itemAt(index).width, first.width)
@@ -420,15 +424,15 @@ TestCase {
         scroller.contentX = scroller.contentWidth - scroller.width
         wait(30)
         var preampPoint = preamp.mapToItem(scroller, 0, 0)
-        verify(preampPoint.x < scroller.width
-               && preampPoint.x + preamp.width > 0)
+        verify(preampPoint.x >= 0
+               && preampPoint.x + preamp.width <= scroller.width)
     }
 
     function test_reference_and_minimum_viewports_render() {
         compare(equalizer.width, 1080)
         compare(equalizer.height, 620)
-        compare(equalizer.minimumWidth, 960)
-        compare(equalizer.minimumHeight, 460)
+        compare(equalizer.minimumWidth, Math.min(760, equalizer.defaultWindowBounds.width))
+        compare(equalizer.minimumHeight, Math.min(420, equalizer.defaultWindowBounds.height))
         compare(findChildrenByPrefix(equalizer, "equalizerBand-").length, 18)
         compare(findChild(equalizer, "equalizerTitle").font.pixelSize,
                 Theme.fontSizePageTitle)
@@ -549,11 +553,11 @@ TestCase {
         compare(findChild(equalizer, "equalizerContentScrollBar").policy,
                 ScrollBar.AlwaysOff)
         compare(findChild(equalizer, "equalizerBandScrollBar").policy,
-                ScrollBar.AlwaysOn)
+                ScrollBar.AlwaysOff)
         compare(findChild(equalizer, "equalizerFooterScrollBar").policy,
                 ScrollBar.AlwaysOff)
         verify(!findChild(equalizer, "equalizerContentScrollBar").visible)
-        verify(findChild(equalizer, "equalizerBandScrollBar").visible)
+        verify(!findChild(equalizer, "equalizerBandScrollBar").visible)
         verify(!findChild(equalizer, "equalizerFooterScrollBar").visible)
         verifyFooterOutputReachable(860, 520)
         var compactCurve = findChild(equalizer, "equalizerResponseCurve")
@@ -602,18 +606,18 @@ TestCase {
         verify(contentScroller.contentHeight <= contentScroller.height + 0.5)
         var footer = findChild(equalizer, "equalizerFooterPanel")
         var footerPoint = footer.mapToItem(contentScroller, 0, 0)
+        var footerBottom = footer.mapToItem(contentScroller, footer.width, footer.height)
         verify(footerPoint.y >= 0
-               && footerPoint.y + footer.height <= contentScroller.height + 0.5,
+               && footerBottom.y <= contentScroller.height + 0.5,
                "footer controls must remain fully visible at minimum size")
         var bandScroller = findChild(equalizer, "equalizerBandScroller")
-        verify(bandScroller.contentWidth > bandScroller.width)
-        bandScroller.contentX = bandScroller.contentWidth - bandScroller.width
+        compare(bandScroller.contentWidth, bandScroller.width)
         wait(50)
         var preamp = findChild(equalizer, "equalizerPreampSlider")
         var preampPoint = preamp.mapToItem(bandScroller, 0, 0)
-        verify(preampPoint.x + preamp.width > 0
-               && preampPoint.x < bandScroller.width,
-               "preamp must be horizontally reachable at minimum size")
+        verify(preampPoint.x >= 0
+               && preampPoint.x + preamp.width <= bandScroller.width,
+               "preamp must fit without horizontal scrolling at minimum size")
         bandScroller.contentX = 0
         capture(temp + "/AgPlayer-equalizer-860x520.png",
                 Qt.size(860, 520))

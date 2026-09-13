@@ -73,6 +73,10 @@ Item {
     signal waveformZoomRequested(real factor, real timeMs)
     signal openSettingsRequested()
 
+    function focusSearch() {
+        searchFilter.focusSearch()
+    }
+
     function syncFilterControls() {
         if (!filterModel)
             return

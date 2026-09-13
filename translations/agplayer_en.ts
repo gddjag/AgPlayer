@@ -5379,6 +5379,15 @@ Clear: Remove all known aliases for this field.</translation>
 <context>
         <name>SettingsPage</name>
         <message>
+            <source>波形使用所选目录下的专用子目录，封面使用程序缓存目录；清理不删除歌词或旧的未标记波形文件。</source>
+            <translation>Waveforms use a dedicated subfolder in the selected directory; covers use the app cache. Cleaning preserves lyrics and old unmarked waveform files.</translation>
+        </message>
+        <message>
+            <source>仅清理可重建的波形和封面缓存，不删除歌词。确定继续吗？</source>
+            <translation>Only rebuildable waveform and cover caches will be cleared. Lyrics will be preserved. Continue?</translation>
+        </message>
+        <message><source>聚焦后按下要设置的快捷键</source><translation>Focus this field and press the shortcut you want to use</translation></message>
+        <message>
             <source>下载由浏览器完成。若下载卡顿、超时或失败，请返回官网切换 GitHub / R2 线路。</source>
             <translation>Your browser handles downloads. If a download stalls, times out or fails, return to the official website and switch between GitHub and R2.</translation>
         </message>
@@ -5630,13 +5639,13 @@ Clear: Remove all known aliases for this field.</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2162" />
-            <source>缓存上限</source>
-            <translation>Cache Limit</translation>
+            <source>波形缓存上限</source>
+            <translation>Waveform Cache Limit</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2192" />
-            <source>缓存自动清理（超出上限自动删旧文件，默认开启）</source>
-            <translation>Automatic cache cleaning (automatically delete old files when the upper limit is exceeded, enabled by default)</translation>
+            <source>波形缓存自动清理（超出上限删除旧波形，默认开启）</source>
+            <translation>Automatic waveform cleaning (remove old waveforms when over the limit; on by default)</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2014" />
@@ -7636,6 +7645,44 @@ Clear: Remove all known aliases for this field.</translation>
     </context>
 <context>
         <name>VocalSeparationPage</name>
+        <message>
+            <source>macOS 分离环境：
+• MDX / HTDemucs ONNX：原模型卡片一键配置 ONNX Runtime。Intel 与 Apple Silicon 均提供 CPU，Apple Silicon 逐模型验证 CoreML 后显示可用。
+• 5_HP-Karaoke-UVR.pth：原卡片一键配置独立 Python 3.10、PyTorch、audio-separator 与 FFmpeg；Intel 使用兼容的 PyTorch 2.2.2，Apple Silicon 使用 2.5.1 并逐模型验证 MPS。
+
+运行环境和模型均外置下载，不修改系统 Python。下载进度、暂停、继续和失败原因显示在原卡片中。
+
+模型可放入模型目录任意子目录后点击“检测”；已验证的本地模型不会重复下载。其他 .pth / .th / .ckpt 仍需对应适配器，尚未验证不表示不兼容。运行验证失败或尚未适配的卡片提供 UVR 官方 macOS 支持链接，可查看 Intel / Apple Silicon 兼容模型和下载。
+
+模型来源：卡片官方仓库与官方下载；HTDemucs 支持 HF-Mirror 自动备用线路。
+组件来源：
+https://onnxruntime.ai/
+https://docs.astral.sh/uv/
+https://github.com/nomadkaraoke/python-audio-separator
+https://pytorch.org/
+
+第三方公益服务：百度网盘人声伴奏分离模型。
+百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888
+提取码: 8888</source>
+            <translation>macOS separation runtime:
+• MDX / HTDemucs ONNX: configure ONNX Runtime from the existing model card. CPU is available on Intel and Apple Silicon; CoreML is offered on Apple Silicon after per-model validation.
+• 5_HP-Karaoke-UVR.pth: configure standalone Python 3.10, PyTorch, audio-separator and FFmpeg from the existing card. Intel uses compatible PyTorch 2.2.2; Apple Silicon uses 2.5.1 with per-model MPS validation.
+
+Runtimes and models are downloaded separately without modifying system Python. Progress, pause, resume and failure details appear in the model card.
+
+Place models in any subfolder of the model directory, then select Scan. Validated local models are not downloaded again. Other .pth / .th / .ckpt models require their respective adapters; an unverified model is not necessarily incompatible. Cards for failed or unsupported runtimes link to official UVR macOS support for Intel and Apple Silicon models and downloads.
+
+Model sources: official repositories and downloads on the model cards; HTDemucs supports automatic HF-Mirror fallback.
+Component sources:
+https://onnxruntime.ai/
+https://docs.astral.sh/uv/
+https://github.com/nomadkaraoke/python-audio-separator
+https://pytorch.org/
+
+Third-party community service: vocal and instrumental separation models on Baidu Netdisk.
+Baidu Netdisk: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888
+Access code: 8888</translation>
+        </message>
         <message><source>等待共享环境</source><translation>Waiting for shared runtime</translation></message>
         <message><source>配置失败</source><translation>Configuration failed</translation></message>
         <message><source>已配置</source><translation>Configured</translation></message>
@@ -8613,6 +8660,11 @@ A pinned NVIDIA CUDA version is installed separately without changing the existi
 </context>
 <context>
         <name>Main</name>
+        <message><source>设置…</source><translation>Settings…</translation></message>
+        <message><source>退出 AgPlayer</source><translation>Quit AgPlayer</translation></message>
+        <message><source>窗口</source><translation>Window</translation></message>
+        <message><source>最小化</source><translation>Minimise</translation></message>
+        <message><source>关闭窗口</source><translation>Close Window</translation></message>
         <message>
             <source>AgPlayer 桌面沉浸</source>
             <translation>AgPlayer Desktop Immersion</translation>
@@ -8916,5 +8968,39 @@ A pinned NVIDIA CUDA version is installed separately without changing the existi
         <message><source>是</source><translation>Yes</translation></message>
         <message><source>否</source><translation>No</translation></message>
         <message><source>关闭</source><translation>Close</translation></message>
+    </context>
+    <context>
+        <name>ThemedMacWindowControls</name>
+        <message><source>关闭窗口</source><translation>Close Window</translation></message>
+        <message><source>最小化</source><translation>Minimise</translation></message>
+        <message><source>退出全屏</source><translation>Exit Full Screen</translation></message>
+        <message><source>进入全屏</source><translation>Enter Full Screen</translation></message>
+    </context>
+    <context>
+        <name>SettingsController</name>
+        <message>
+            <source>正在清理缓存…</source>
+            <translation>Clearing cache…</translation>
+        </message>
+        <message>
+            <source>缓存清理已停止，已清理 %1 个缓存文件。</source>
+            <translation>Cache cleanup stopped. Removed %1 cache files.</translation>
+        </message>
+        <message>
+            <source>缓存清理未完成：已清理 %1 个文件，%2 项无法清理。</source>
+            <translation>Cache cleanup incomplete: removed %1 files; %2 items could not be cleared.</translation>
+        </message>
+        <message>
+            <source>没有可清理的缓存文件。</source>
+            <translation>No cache files to clear.</translation>
+        </message>
+        <message>
+            <source>已清理 %1 个缓存文件，释放 %2 MB。</source>
+            <translation>Removed %1 cache files, freeing %2 MB.</translation>
+        </message>
+        <message>
+            <source>转码临时文件由各任务自动管理，无需手动清理。</source>
+            <translation>Transcoding temporary files are managed automatically by each job; no manual cleanup is needed.</translation>
+        </message>
     </context>
 </TS>

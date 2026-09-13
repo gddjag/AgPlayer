@@ -1,5 +1,6 @@
 #include "track_waveform_thumbnail_provider.hpp"
 #include "waveform_cache.hpp"
+#include "cache_janitor.hpp"
 
 #include <QDir>
 #include <QPointer>
@@ -295,17 +296,23 @@ TrackWaveformThumbnailProvider::loadFromCacheOnly(
     static constexpr std::array<const char*, 3> suffixes{{
         "-average.agwf", "-rms.agwf", ".agwf",
     }};
-    for (const char* suffix : suffixes) {
-        const QString filename = QString::fromStdString(key)
-            + QString::fromLatin1(suffix);
-        agplayer::WaveformCacheData data;
-        const std::filesystem::path cachePath = filesystemPath(
-            QDir(cacheDirectory).filePath(filename));
-        if (agplayer::WaveformCache::load_v4(cachePath, source, data)) {
-            return {quantizeMixPeaks(data.mix),
-                    quantizeBandEnergy(data.bass, data.mix),
-                    quantizeBandEnergy(data.mid, data.mix),
-                    quantizeBandEnergy(data.high, data.mix)};
+    // Legacy files remain readable, but are never adopted as disposable data.
+    const QString storage = CacheJanitor::storageDirectory(cacheDirectory);
+    const QStringList directories = storage.isEmpty()
+        ? QStringList{cacheDirectory} : QStringList{storage, cacheDirectory};
+    for (const QString& directory : directories) {
+        for (const char* suffix : suffixes) {
+            const QString filename = QString::fromStdString(key)
+                + QString::fromLatin1(suffix);
+            agplayer::WaveformCacheData data;
+            const std::filesystem::path cachePath = filesystemPath(
+                QDir(directory).filePath(filename));
+            if (agplayer::WaveformCache::load_v4(cachePath, source, data)) {
+                return {quantizeMixPeaks(data.mix),
+                        quantizeBandEnergy(data.bass, data.mix),
+                        quantizeBandEnergy(data.mid, data.mix),
+                        quantizeBandEnergy(data.high, data.mix)};
+            }
         }
     }
     return {};

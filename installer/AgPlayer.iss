@@ -67,38 +67,40 @@ Root: HKCU; Subkey: "Software\Classes\AppUserModelId\AgPlayer.Desktop"; ValueTyp
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "{#AppName}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\DefaultIcon"; ValueType: string; ValueData: "{app}\{#AppExeName},0"
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\shell\open\command"; ValueType: string; ValueData: """{app}\{#AppExeName}"" ""%1"""
-Root: HKCU; Subkey: "Software\Classes\AgPlayer.Audio"; ValueType: string; ValueData: "AgPlayer Audio"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\AgPlayer.Audio\DefaultIcon"; ValueType: string; ValueData: "{app}\{#AppExeName},0"
-Root: HKCU; Subkey: "Software\Classes\AgPlayer.Audio\shell\open\command"; ValueType: string; ValueData: """{app}\{#AppExeName}"" ""%1"""
+Root: HKCU; Subkey: "Software\Classes\AgPlayerAudioFile"; ValueType: string; ValueData: "AgPlayer Audio"; Flags: uninsdeletekey
+; Historical installers used this ProgID. Register uninstall cleanup only.
+Root: HKCU; Subkey: "Software\Classes\AgPlayer.Audio"; ValueType: none; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\AgPlayerAudioFile\DefaultIcon"; ValueType: string; ValueData: "{app}\{#AppExeName},0"
+Root: HKCU; Subkey: "Software\Classes\AgPlayerAudioFile\shell\open\command"; ValueType: string; ValueData: """{app}\{#AppExeName}"" ""%1"""
 Root: HKCU; Subkey: "Software\AgPlayer\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "{#AppName}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "AgPlayer"; ValueData: "Software\AgPlayer\Capabilities"; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".mp3"; ValueData: ""
-Root: HKCU; Subkey: "Software\Classes\.mp3\OpenWithProgids"; ValueType: string; ValueName: "AgPlayer.Audio"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
-Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".mp3"; ValueData: "AgPlayer.Audio"
+Root: HKCU; Subkey: "Software\Classes\.mp3\OpenWithProgids"; ValueType: string; ValueName: "AgPlayerAudioFile"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
+Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".mp3"; ValueData: "AgPlayerAudioFile"
 #define AudioExt "wav"
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: ""
-Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayer.Audio"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
-Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: "AgPlayer.Audio"
+Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayerAudioFile"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
+Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: "AgPlayerAudioFile"
 #undef AudioExt
 #define AudioExt "flac"
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: ""
-Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayer.Audio"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
-Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: "AgPlayer.Audio"
+Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayerAudioFile"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
+Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: "AgPlayerAudioFile"
 #undef AudioExt
 #define AudioExt "aac"
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: ""
-Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayer.Audio"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
-Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: "AgPlayer.Audio"
+Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayerAudioFile"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
+Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: "AgPlayerAudioFile"
 #undef AudioExt
 #define AudioExt "m4a"
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: ""
-Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayer.Audio"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
-Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: "AgPlayer.Audio"
+Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayerAudioFile"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
+Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: "AgPlayerAudioFile"
 #undef AudioExt
 #define AudioExt "ogg"
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: ""
-Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayer.Audio"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
-Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: "AgPlayer.Audio"
+Root: HKCU; Subkey: "Software\Classes\.{#AudioExt}\OpenWithProgids"; ValueType: string; ValueName: "AgPlayerAudioFile"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associateaudio
+Root: HKCU; Subkey: "Software\AgPlayer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".{#AudioExt}"; ValueData: "AgPlayerAudioFile"
 #undef AudioExt
 
 [Code]
@@ -110,6 +112,27 @@ begin
     { [Icons] recreates shortcuts on upgrades; invalidate the Shell icon cache. }
     ShellExec('', ExpandConstant('{cmd}'),
       '/c ie4uinit.exe -show', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Keys: TArrayOfString;
+  I: Integer;
+  OpenWith: String;
+begin
+  if CurUninstallStep <> usPostUninstall then Exit;
+  { Runtime associations may have been added after installation, including
+    extensions not selected in Setup. Remove only our two owned values;
+    never delete shared extension keys or another player's defaults. }
+  if RegGetSubkeyNames(HKCU, 'Software\Classes', Keys) then begin
+    for I := 0 to GetArrayLength(Keys) - 1 do begin
+      if Copy(Keys[I], 1, 1) = '.' then begin
+        OpenWith := 'Software\Classes\' + Keys[I] + '\OpenWithProgids';
+        RegDeleteValue(HKCU, OpenWith, 'AgPlayerAudioFile');
+        RegDeleteValue(HKCU, OpenWith, 'AgPlayer.Audio');
+      end;
+    end;
   end;
 end;
 

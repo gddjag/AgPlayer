@@ -32,6 +32,7 @@ private:
     struct RouteHealth final {
         int consecutiveTechnicalFailures = 0;
         qint64 blockedUntilMs = 0;
+        qint64 rateLimitedUntilMs = 0;
         bool probeInFlight = false;
     };
     struct Pending final {
@@ -40,7 +41,7 @@ private:
         int nextRouteIndex = 0;
         int activeRouteIndex = -1;
         quint64 activeInternalId = 0;
-        QList<RouteAttempt> attempts;
+        QList<RouteAttempt> attempts{};
         bool encounteredNoMatch = false;
         bool encounteredUnavailableRoute = false;
     };

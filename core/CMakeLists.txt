@@ -84,6 +84,12 @@ target_link_libraries(agplayer_core PRIVATE
     SoundTouch::SoundTouch
     signalsmith-stretch
 )
+if(APPLE)
+    # Resolve Apple's audio frameworks at link time for signed applications.
+    target_compile_definitions(agplayer_core PRIVATE MA_NO_RUNTIME_LINKING)
+    target_link_libraries(agplayer_core PRIVATE
+        "-framework CoreAudio" "-framework AudioToolbox" "-framework CoreFoundation")
+endif()
 if(BUILD_TESTING)
     target_compile_definitions(agplayer_core PRIVATE
         AGPLAYER_VIDEO_DECODER_TESTING=1

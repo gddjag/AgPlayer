@@ -46,7 +46,7 @@ public:
             return cudaSucceeds ? BackendResult{true, {}, {}, {}}
                 : BackendResult{false, QStringLiteral("cuda_failed"), QStringLiteral("CUDA rejected the model"), {}};
         }
-        if (provider == ExecutionProvider::DirectMl) {
+        if (provider == ExecutionProvider::DirectMl || provider == ExecutionProvider::CoreMl) {
             gpuAttempts.push_back(adapterId);
             if (adapterId == successfulGpuAdapter) {
                 return {true, {}, {}, {}};
@@ -78,6 +78,7 @@ private slots:
     void ffmpegWaveWriterPropagatesDelayedAvioCloseErrors();
     void inferenceProgressLeavesRoomForVerificationAndCompletion();
     void readsTheActualDefaultOnnxOpset();
+    void macosProvidersRequireInferenceAndPreserveCpuFallback();
     void gpuSelectionTriesEveryAdapterUntilOnePasses();
     void gpuSelectionReportsEveryAdapterFailure();
     void autoSelectionTriesEveryGpuBeforeCpuFallback();
@@ -88,6 +89,9 @@ private slots:
 
 void SeparationNativeBackendTest::demucsGpuUsesAnIsolatedCudaRuntime()
 {
+#ifdef Q_OS_MACOS
+    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately", "");
+#endif
     QTemporaryDir runtime;
     QFile provider(runtime.filePath("onnxruntime_providers_cuda.dll"));
     QVERIFY(provider.open(QIODevice::WriteOnly));
@@ -409,6 +413,9 @@ void SeparationNativeBackendTest::readsTheActualDefaultOnnxOpset()
 
 void SeparationNativeBackendTest::gpuSelectionTriesEveryAdapterUntilOnePasses()
 {
+#ifdef Q_OS_MACOS
+    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately", "");
+#endif
     SequencedNativeProviderProbe probe;
     probe.successfulGpuAdapter = 22;
     NativeStartRequest request;
@@ -427,6 +434,9 @@ void SeparationNativeBackendTest::gpuSelectionTriesEveryAdapterUntilOnePasses()
 
 void SeparationNativeBackendTest::gpuSelectionReportsEveryAdapterFailure()
 {
+#ifdef Q_OS_MACOS
+    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately", "");
+#endif
     SequencedNativeProviderProbe probe;
     NativeStartRequest request;
     request.device = DeviceMode::Gpu;
@@ -448,6 +458,9 @@ void SeparationNativeBackendTest::gpuSelectionReportsEveryAdapterFailure()
 
 void SeparationNativeBackendTest::demucsAutoAvoidsUnboundedDirectMlCompilation()
 {
+#ifdef Q_OS_MACOS
+    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately", "");
+#endif
     SequencedNativeProviderProbe probe;
     probe.successfulGpuAdapter = 11;
     NativeStartRequest request;
@@ -468,6 +481,9 @@ void SeparationNativeBackendTest::demucsAutoAvoidsUnboundedDirectMlCompilation()
 
 void SeparationNativeBackendTest::autoSelectionTriesEveryGpuBeforeCpuFallback()
 {
+#ifdef Q_OS_MACOS
+    QSKIP("Windows DirectML/CUDA contract; macOS CoreML/CPU is tested separately", "");
+#endif
     SequencedNativeProviderProbe probe;
     NativeStartRequest request;
     request.device = DeviceMode::Auto;
@@ -492,7 +508,7 @@ probeReportsHardwareGpuCandidateWithoutClaimingInferenceValidation()
     const QString runtimePath = QDir(QCoreApplication::applicationDirPath())
                                     .filePath(QStringLiteral("onnxruntime_test.dll"));
     if (!QFileInfo::exists(runtimePath))
-        QSKIP("The native-backend test runtime is not available");
+        QSKIP("The native-backend test runtime is not available", "");
 
     NativeWorkerBackend backend;
     const BackendResult result = backend.probe(
@@ -513,6 +529,44 @@ probeReportsHardwareGpuCandidateWithoutClaimingInferenceValidation()
         QVERIFY(!result.payload.value(QStringLiteral("gpu")).toBool());
         QCOMPARE(reason, QStringLiteral("No hardware DXGI adapter is available"));
     }
+}
+
+void SeparationNativeBackendTest::macosProvidersRequireInferenceAndPreserveCpuFallback()
+{
+#ifndef Q_OS_MACOS
+    QSKIP("macOS hardware policy; Windows adapters are tested separately", "");
+#else
+    SequencedNativeProviderProbe probe;
+    NativeStartRequest request;
+    TrustedModelProfile profile;
+    profile.family = QStringLiteral("demucs");
+    CancellationToken cancellation;
+    request.device = DeviceMode::Cpu;
+    auto result = selectNativeProvider(request, profile, cancellation, probe);
+    QVERIFY(result.ok);
+    QCOMPARE(result.provider, ExecutionProvider::Cpu);
+    QCOMPARE(probe.cpuCalls, 1);
+    QVERIFY(probe.gpuAttempts.isEmpty());
+    request.device = DeviceMode::Auto;
+    result = selectNativeProvider(request, profile, cancellation, probe);
+    QVERIFY(result.ok);
+    QCOMPARE(result.provider, ExecutionProvider::Cpu);
+    QVERIFY(!result.fallbackReason.isEmpty());
+    const int cpuCalls = probe.cpuCalls;
+    request.device = DeviceMode::Gpu;
+    result = selectNativeProvider(request, profile, cancellation, probe);
+    QVERIFY(!result.ok);
+    QCOMPARE(probe.cpuCalls, cpuCalls);
+#ifdef Q_PROCESSOR_ARM_64
+    QVERIFY(!probe.gpuAttempts.isEmpty());
+    probe.successfulGpuAdapter = 0;
+    result = selectNativeProvider(request, profile, cancellation, probe);
+    QVERIFY(result.ok);
+    QCOMPARE(result.provider, ExecutionProvider::CoreMl);
+#else
+    QVERIFY(probe.gpuAttempts.isEmpty());
+#endif
+#endif
 }
 
 QTEST_GUILESS_MAIN(SeparationNativeBackendTest)

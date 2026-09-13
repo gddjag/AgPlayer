@@ -230,7 +230,6 @@ Rectangle {
                                      ? (page.compactLayout ? 380 : 455) : 40
                 Layout.fillHeight: true
                 converter: page.converter
-                forceCollapsed: page.compactLayout
                 outputDirectory: page.outputDirectory
                 onOutputDirectoryEdited: function(directory) { page.outputDirectory = directory }
                 onChooseOutputDirectory: outputDialogComponent.createObject(page).open()
@@ -308,7 +307,7 @@ Rectangle {
                     ThemedComboBox {
                         id: converterParallelJobsBox
                         objectName: "converterParallelJobsBox"
-                        Layout.preferredWidth: page.compactLayout ? 64 : 72
+                        Layout.preferredWidth: 72
                         model: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
                         currentIndex: Math.max(0, model.indexOf(SettingsController.parallelJobs))
                         enabled: !converter.busy

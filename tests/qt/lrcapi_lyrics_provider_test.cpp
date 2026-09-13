@@ -21,7 +21,7 @@ public:
     }
 
     void respond(const int status, QByteArray body = {},
-                 const QByteArray& contentType = QByteArrayLiteral("text/plain"),
+                 const QByteArray& contentType = QByteArrayLiteral("application/json"),
                  const bool includeContentLength = true)
     {
         setAttribute(QNetworkRequest::HttpStatusCodeAttribute, status);
@@ -78,6 +78,8 @@ private slots:
     void mapsTimedAndPlainResponses();
     void mapsNoMatchAndCancellation();
     void rejectsNonTextHtmlAndOversizedResponses();
+    void refreshRequestsBypassCachesAndHaveUniqueQueries();
+    void timeoutAndRateLimitRemainObservable();
 };
 
 void LrcApiLyricsProviderTest::sendsEncodedMetadataToPublicReadOnlyEndpoint()
@@ -92,11 +94,11 @@ void LrcApiLyricsProviderTest::sendsEncodedMetadataToPublicReadOnlyEndpoint()
     const QNetworkRequest request = manager.requests.constFirst().first;
     QCOMPARE(request.url().scheme(), QStringLiteral("https"));
     QCOMPARE(request.url().host(), QStringLiteral("api.lrc.cx"));
-    QCOMPARE(request.url().path(), QStringLiteral("/lyrics"));
+    QCOMPARE(request.url().path(), QStringLiteral("/jsonapi"));
     QCOMPARE(QUrlQuery(request.url()).queryItemValue(QStringLiteral("title")), track.title);
     QCOMPARE(QUrlQuery(request.url()).queryItemValue(QStringLiteral("artist")), track.artist);
     QCOMPARE(QUrlQuery(request.url()).queryItemValue(QStringLiteral("album")), track.album);
-    QCOMPARE(request.rawHeader("Accept"), QByteArrayLiteral("text/plain"));
+    QCOMPARE(request.rawHeader("Accept"), QByteArrayLiteral("application/json"));
 }
 
 void LrcApiLyricsProviderTest::mapsTimedAndPlainResponses()
@@ -111,13 +113,20 @@ void LrcApiLyricsProviderTest::mapsTimedAndPlainResponses()
     const LyricsProvider::Track track{QStringLiteral("Song"), QStringLiteral("Artist")};
 
     provider.requestExact(1, track);
-    manager.requests.constLast().second->respond(200, QByteArrayLiteral("[00:01.20]line"));
-    QCOMPARE(results.constLast().kind, LyricsProvider::Result::Found);
-    QCOMPARE(results.constLast().candidate.syncedLyrics, QStringLiteral("[00:01.20]line"));
-    QCOMPARE(results.constLast().candidate.source.providerId, QStringLiteral("lrcapi"));
+    manager.requests.constLast().second->respond(200, QByteArrayLiteral(
+        R"([{"title":"Real title","artist":"Real artist","album":"Actual album","duration":180.4,"lrc":"[00:01.20]line"}])"));
+    QCOMPARE(results.constLast().kind, LyricsProvider::Result::SearchResults);
+    const auto candidate = results.constLast().candidates.constFirst();
+    QCOMPARE(candidate.title, QStringLiteral("Real title"));
+    QCOMPARE(candidate.artist, QStringLiteral("Real artist"));
+    QCOMPARE(candidate.album, QStringLiteral("Actual album"));
+    QCOMPARE(candidate.durationSeconds, 180LL);
+    QCOMPARE(candidate.syncedLyrics, QStringLiteral("[00:01.20]line"));
+    QCOMPARE(candidate.source.providerId, QStringLiteral("lrcapi"));
 
     provider.requestSearch(2, track);
-    manager.requests.constLast().second->respond(200, QByteArrayLiteral("plain line"));
+    manager.requests.constLast().second->respond(200, QByteArrayLiteral(
+        R"([{"title":"Song","artist":"Artist","lyrics":"plain line"}])"));
     QCOMPARE(results.constLast().kind, LyricsProvider::Result::SearchResults);
     QCOMPARE(results.constLast().candidates.constFirst().plainLyrics,
              QStringLiteral("plain line"));
@@ -140,6 +149,41 @@ void LrcApiLyricsProviderTest::mapsNoMatchAndCancellation()
     provider.requestExact(2, track);
     provider.cancel(2);
     QCOMPARE(results.size(), 1);
+}
+
+void LrcApiLyricsProviderTest::refreshRequestsBypassCachesAndHaveUniqueQueries()
+{
+    LrcApiFakeManager manager;
+    LrcApiLyricsProvider provider(&manager);
+    LyricsProvider::Track track{QStringLiteral("Song"), QStringLiteral("Artist")};
+    track.forceRefresh = true;
+    provider.requestSearch(1, track);
+    provider.requestSearch(2, track);
+    const auto first = manager.requests.constFirst().first;
+    const auto second = manager.requests.constLast().first;
+    QVERIFY(first.url() != second.url());
+    QVERIFY(!QUrlQuery(first.url()).queryItemValue(QStringLiteral("_refresh")).isEmpty());
+    QCOMPARE(first.attribute(QNetworkRequest::CacheLoadControlAttribute).toInt(),
+             int(QNetworkRequest::AlwaysNetwork));
+    QCOMPARE(first.attribute(QNetworkRequest::CacheSaveControlAttribute).toBool(), false);
+    QCOMPARE(first.rawHeader("Cache-Control"), QByteArray("no-cache, no-store"));
+}
+
+void LrcApiLyricsProviderTest::timeoutAndRateLimitRemainObservable()
+{
+    LrcApiFakeManager manager;
+    LrcApiLyricsProvider provider(&manager, nullptr, 10);
+    QList<LyricsProvider::Result> results;
+    connect(&provider, &LyricsProvider::finished, this,
+            [&results](quint64, const LyricsProvider::Result& result) { results.append(result); });
+    const LyricsProvider::Track track{QStringLiteral("Song"), QStringLiteral("Artist")};
+    provider.requestSearch(1, track);
+    QTRY_COMPARE(results.size(), 1);
+    QCOMPARE(results.constLast().diagnostic, QStringLiteral("timeout"));
+    provider.requestSearch(2, track);
+    manager.requests.constLast().second->respond(429);
+    QCOMPARE(results.constLast().kind, LyricsProvider::Result::RateLimited);
+    QVERIFY(results.constLast().retryAfterMs > 0);
 }
 
 void LrcApiLyricsProviderTest::rejectsNonTextHtmlAndOversizedResponses()

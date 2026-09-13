@@ -21,8 +21,17 @@ Window {
     width: 960
     height: defaultListHeight
     readonly property int pageMinimumWidth: 956
-    minimumWidth: pageMinimumWidth
-    minimumHeight: 320
+    readonly property rect defaultWindowBounds:
+        WindowController.startupGeometryForAvailableArea(
+            WindowController.mainWindowAvailableGeometry,
+            WindowController.mainWindowAvailableGeometry, true)
+    // Native minimums must not undo a docked group's small-screen fit.
+    minimumWidth: Math.max(0, Math.min(pageMinimumWidth, defaultWindowBounds.width,
+        WindowController.listWindowDetached ? pageMinimumWidth
+                                           : WindowController.mainWindowGeometry.width))
+    minimumHeight: Math.min(320, Math.max(180,
+        defaultWindowBounds.height - (WindowController.listWindowDetached
+            ? 0 : WindowController.mainWindowGeometry.height - 2)))
     flags: Qt.FramelessWindowHint
     color: "transparent"
     title: qsTr("AgPlayer 音乐列表")
@@ -126,6 +135,8 @@ Window {
 
     Connections {
         target: windows
+        enabled: listWindow.visible && windows !== null
+                 && windows.mainWindowShellMode === 0
         function onSearchRequested() { searchFilter.focusSearch() }
     }
     Connections {
@@ -421,7 +432,6 @@ Window {
         property string playlistId
         title: qsTr("删除歌单")
         modal: true
-        width: 360
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: {
@@ -462,6 +472,12 @@ Window {
                     anchors.leftMargin: 14
                     anchors.rightMargin: 10
                     spacing: 8
+                    ThemedMacWindowControls {
+                        id: macListControls
+                        targetWindow: listWindow
+                        allowFullScreen: false
+                        onCloseRequested: windows.hideListWindow()
+                    }
                     Label {
                         objectName: "resourceDropStatusLabel"
                         visible: listWindow.resourceDropStatus !== "idle"
@@ -478,6 +494,7 @@ Window {
                     Item { Layout.fillWidth: true }
                     ToolButton {
                         objectName: "listWindowMinimizeButton"
+                        visible: Qt.platform.os !== "osx"
                         icon.source: Theme.icon("subtract-line")
                         icon.color: Theme.secondaryText
                         icon.width: 16
@@ -487,6 +504,7 @@ Window {
                     }
                     ToolButton {
                         objectName: "listWindowCloseButton"
+                        visible: Qt.platform.os !== "osx"
                         icon.source: Theme.icon("close-fill")
                         icon.color: Theme.secondaryText
                         icon.width: 16
@@ -505,7 +523,8 @@ Window {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.right: parent.right
-                    anchors.rightMargin: 84
+                    anchors.leftMargin: Qt.platform.os === "osx" ? 14 + macListControls.width : 0
+                    anchors.rightMargin: Qt.platform.os === "osx" ? 0 : 84
                     acceptedButtons: Qt.LeftButton
                     onPressed: listWindow.startSystemMove()
                 }
@@ -652,6 +671,7 @@ Window {
                             objectName: "centerTrackFooter"
                             Layout.fillWidth: true
                             Layout.preferredHeight: listWindow.filterBarHeight
+                            Layout.bottomMargin: Theme.spacingSm
 
                             SearchFilter {
                                 id: searchFilter

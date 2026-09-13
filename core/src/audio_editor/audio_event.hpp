@@ -38,7 +38,7 @@ struct AudioEvent final {
     double speedRatio{1.0};
     int pitchSemitone{};
     bool mute{};
-    std::vector<EnvelopePoint> envelope;
+    std::vector<EnvelopePoint> envelope{};
     FadeCurve fadeInCurve{FadeCurve::Smooth};
     FadeCurve fadeOutCurve{FadeCurve::Smooth};
 };

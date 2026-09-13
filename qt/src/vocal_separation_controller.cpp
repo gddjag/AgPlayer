@@ -115,7 +115,11 @@ VocalSeparationControllerOptions normalizeOptions(
     }
     if (options.workerProgram.isEmpty()) {
         options.workerProgram = QDir(QCoreApplication::applicationDirPath())
+#ifdef Q_OS_WIN
             .filePath(QStringLiteral("AgSeparationWorker.exe"));
+#else
+            .filePath(QStringLiteral("AgSeparationWorker"));
+#endif
     }
     if (options.runtimeLibraryPath.isEmpty()) {
         options.runtimeLibraryPath = VocalSeparationInstaller::runtimeLibraryPath(
@@ -497,7 +501,7 @@ VocalSeparationController::VocalSeparationController(
                 runtimeVerificationFingerprint_ =
                     runtimeVerificationFingerprint(
                         options_.runtimeLibraryPath,
-                        VocalSeparationCatalog::directMlRuntime().sha256,
+                        VocalSeparationCatalog::nativeRuntime().sha256,
                         options_.verifyRuntimeIntegrity);
                 startNextDownload();
             });
@@ -631,6 +635,7 @@ QString VocalSeparationController::startDisabledReason() const
         return tr("所选模型尚未安装或未通过校验");
     }
     if (selectedStemNames().isEmpty()) return tr("至少选择一个输出音轨");
+#ifndef Q_OS_MACOS
     if (model->family == VocalModelFamily::Demucs && deviceChosenByUser_
         && deviceMode_ == DeviceMode::GPU && !cudaRuntime_->ready()) {
         if (!cudaRuntime_->nvidiaAvailable())
@@ -638,6 +643,7 @@ QString VocalSeparationController::startDisabledReason() const
         return cudaRuntime_->hardwareSummary()
             + tr("；标准五轨 GPU 需要应用专用 CUDA 组件，请点击模型卡片“CUDA · 1.51 GB”，无需重装显卡驱动");
     }
+#endif
     if (!QFileInfo(options_.runtimeLibraryPath).isFile())
         return tr("ONNX Runtime 尚未安装");
     if (!deviceAvailable(deviceMode_)) {
@@ -870,7 +876,7 @@ bool VocalSeparationController::configureRuntime(const QString& modelIdForUi)
     }
 
     const VocalRuntimePackage package =
-        VocalSeparationCatalog::directMlRuntime();
+        VocalSeparationCatalog::nativeRuntime();
     const VocalDownloadFile archive{
         QStringLiteral("runtime.nupkg"), package.url,
         package.bytes, package.sha256};
@@ -932,7 +938,7 @@ bool VocalSeparationController::ensureSharedRuntime()
     if (!downloadQueue_.isEmpty()) return false;
     if (activeRequest_ && activeRequest_->kind == RequestKind::Separation
         && activeRequest_->modelId != QStringLiteral("python-vr-5hp")) return false;
-    const auto package = VocalSeparationCatalog::directMlRuntime();
+    const auto package = VocalSeparationCatalog::nativeRuntime();
     downloadQueue_.push_back({{QStringLiteral("runtime.nupkg"), package.url,
         package.bytes, package.sha256}, QDir(options_.dataRoot).filePath(
             QStringLiteral("downloads/runtime.nupkg")), true, {}, false});
@@ -1017,7 +1023,7 @@ bool VocalSeparationController::beginModelConfiguration(const QString& modelId, 
                 configurationChanged(); return;
             }
             if (result.runtimeChecked && result.runtimeFingerprint == runtimeVerificationFingerprint(
-                    options_.runtimeLibraryPath, VocalSeparationCatalog::directMlRuntime().sha256,
+                    options_.runtimeLibraryPath, VocalSeparationCatalog::nativeRuntime().sha256,
                     options_.verifyRuntimeIntegrity)) {
                 runtimeVerified_ = result.runtimeVerified; runtimeVerificationKnown_ = true;
                 runtimeVerificationFingerprint_ = result.runtimeFingerprint;
@@ -1053,7 +1059,7 @@ bool VocalSeparationController::beginModelConfiguration(const QString& modelId, 
             valid = false; result.verifiedFiles.clear();
         }
         if (valid) result.verifiedModels.insert(snapshot.id);
-        const auto hash = VocalSeparationCatalog::directMlRuntime().sha256;
+        const auto hash = VocalSeparationCatalog::nativeRuntime().sha256;
         const auto fingerprint = runtimeVerificationFingerprint(runtime, hash, verifyRuntime);
         result.runtimeVerified = QFileInfo(runtime).isFile() && (!verifyRuntime
             || VocalSeparationInstaller::runtimeDirectoryIsVerified(QFileInfo(runtime).absolutePath(), hash, cancellation));
@@ -1328,6 +1334,13 @@ bool VocalSeparationController::probeDevices(bool force)
         return true;
     }
     setError({});
+#ifdef Q_OS_MACOS
+    if (selectedModelId_ == QStringLiteral("python-vr-5hp") && externalRuntime_->ready()
+        && selectedModel() && modelInstalled(*selectedModel())) {
+        if (launchProbe()) return true;
+        activeRequest_.reset(); return false;
+    }
+#endif
     setJobState(JobState::Probing, QStringLiteral("runtime_verification"));
     if (beginVerification(VerificationPurpose::Probe, selectedModel()))
         return true;
@@ -1357,6 +1370,7 @@ bool VocalSeparationController::start()
         setJobState(JobState::JobFailed, QStringLiteral("validation"));
         return false;
     }
+#ifndef Q_OS_MACOS
     if (model->family == VocalModelFamily::Demucs && deviceChosenByUser_
         && deviceMode_ == DeviceMode::GPU && !cudaRuntime_->ready()) {
         reportStartDisabledReason();
@@ -1368,6 +1382,7 @@ bool VocalSeparationController::start()
         deviceMode_ = DeviceMode::Auto;
         emit deviceModeChanged();
     }
+#endif
     ActiveRequestContext context;
     context.kind = RequestKind::Separation;
     context.inputPath = inputPath;
@@ -1868,6 +1883,9 @@ QVariantList VocalSeparationController::runtimeConfigurations() const
 {
     QVariantList rows;
     for (const QString& id : {QStringLiteral("directml"), QStringLiteral("python"), QStringLiteral("cuda")}) {
+#ifdef Q_OS_MACOS
+        if (id == QStringLiteral("cuda")) continue;
+#endif
         const bool python = id == "python", cuda = id == "cuda";
         const bool busy = python ? externalRuntime_->busy() : cuda ? cudaRuntime_->busy()
             : runtimeOnlyDownload_ || runtimeInstallerWatcher_ != nullptr;
@@ -1879,7 +1897,12 @@ QVariantList VocalSeparationController::runtimeConfigurations() const
             : ready ? "complete" : !error.isEmpty() ? "failed" : "idle";
         const QString taskId = "runtime:" + id;
         rows.push_back(QVariantMap{{"id", id}, {"taskId", taskId}, {"configurationTaskId", taskId},
-            {"name", python ? "Python / PyTorch" : cuda ? "CUDA / cuDNN" : "ONNX Runtime / DirectML"},
+            {"name", python ? "Python / PyTorch" : cuda ? "CUDA / cuDNN" :
+#ifdef Q_OS_MACOS
+                "ONNX Runtime / CoreML"},
+#else
+                "ONNX Runtime / DirectML"},
+#endif
             {"configurationState", state}, {"configurationProgress", ready && !busy ? 1.0 : runtimeProgress_.value(id, 0)},
             {"configurationDetail", runtimeDetails_.value(id)},
             {"configurationError", error}, {"configurationCanPause", busy && !paused
@@ -1986,7 +2009,7 @@ QString VocalSeparationController::probeFingerprint(const QString& modelId) cons
     const QString runtimePath = cudaRuntime_->ready()
         ? cudaRuntime_->libraryPath() : options_.runtimeLibraryPath;
     return runtimeVerificationFingerprint(runtimePath,
-        VocalSeparationCatalog::directMlRuntime().sha256,
+        VocalSeparationCatalog::nativeRuntime().sha256,
         options_.verifyRuntimeIntegrity)
         + QLatin1Char('|') + cudaRuntime_->hardwareName()
         + QLatin1Char('|') + cudaRuntime_->driverVersion()
@@ -2004,7 +2027,7 @@ bool VocalSeparationController::beginVerification(
     const QString modelStorageDirectory = modelStorageDirectory_;
     const QString runtimePath = options_.runtimeLibraryPath;
     const bool verifyRuntime = options_.verifyRuntimeIntegrity;
-    const QString runtimeHash = VocalSeparationCatalog::directMlRuntime().sha256;
+    const QString runtimeHash = VocalSeparationCatalog::nativeRuntime().sha256;
     const QHash<QString, QString> cachedModelFingerprints =
         modelVerificationFingerprints_;
     const QSet<QString> cachedVerifiedModels = verifiedModelIds_;
@@ -2189,7 +2212,7 @@ void VocalSeparationController::finishVerification(
     verificationPurpose_ = VerificationPurpose::None;
     verifyingModelId_.clear();
     const QString currentRuntimeFingerprint = runtimeVerificationFingerprint(
-        options_.runtimeLibraryPath, VocalSeparationCatalog::directMlRuntime().sha256,
+        options_.runtimeLibraryPath, VocalSeparationCatalog::nativeRuntime().sha256,
         options_.verifyRuntimeIntegrity);
     if (result.runtimeChecked && result.runtimeFingerprint == currentRuntimeFingerprint) {
         runtimeVerified_ = result.runtimeVerified;
@@ -2256,7 +2279,7 @@ void VocalSeparationController::finishVerification(
         }
         if (!runtimeReady()) {
             const VocalRuntimePackage package =
-                VocalSeparationCatalog::directMlRuntime();
+                VocalSeparationCatalog::nativeRuntime();
             const VocalDownloadFile archive{
                 QStringLiteral("runtime.nupkg"), package.url,
                 package.bytes, package.sha256};
@@ -2306,9 +2329,15 @@ void VocalSeparationController::finishVerification(
 
 bool VocalSeparationController::launchProbe()
 {
-    if (!process_.setWorker(options_.workerProgram, options_.workerArguments)) return false;
     const auto* model = modelForId(activeRequest_.has_value()
         ? activeRequest_->modelId : selectedModelId_);
+#ifdef Q_OS_MACOS
+    const bool external = model && model->id == QStringLiteral("python-vr-5hp") && externalRuntime_->ready();
+    if (!process_.setWorker(external ? externalRuntime_->python() : options_.workerProgram,
+            external ? QStringList{externalRuntime_->workerScript()} : options_.workerArguments)) return false;
+#else
+    if (!process_.setWorker(options_.workerProgram, options_.workerArguments)) return false;
+#endif
     activeProbeFingerprint_ = probeFingerprint(model ? model->id : QString());
     QJsonObject payload{{QStringLiteral("runtimePath"), cudaRuntime_->ready() ? cudaRuntime_->libraryPath() : options_.runtimeLibraryPath}};
     if (model) {
@@ -2434,6 +2463,17 @@ void VocalSeparationController::refreshModels()
             }
         }
         models_.push_back(QVariantMap{
+#ifdef Q_OS_MACOS
+            {QStringLiteral("gpuRuntimeReady"), model.id == QStringLiteral("python-vr-5hp") ? externalRuntime_->ready() : runtimeReady()},
+            {QStringLiteral("gpuRuntimeConfigurable"), false},
+            {QStringLiteral("gpuConfigurationEnabled"), false},
+            {QStringLiteral("gpuProvider"), validatedGpuProviders_.value(model.id,
+                 model.id == QStringLiteral("python-vr-5hp") ? QStringLiteral("mps") : QStringLiteral("coreml"))},
+            {QStringLiteral("gpuCompatibility"), validatedGpuProviders_.contains(model.id) ? QStringLiteral("validated") : QStringLiteral("unverified")},
+            {QStringLiteral("gpuReason"), deviceProbeCache_.value(model.id).value(QStringLiteral("gpuReason")).toString().isEmpty()
+                ? tr("Apple Silicon 将使用当前模型验证 CoreML / MPS；Intel Mac 使用 CPU。尚未验证不表示模型不兼容")
+                : deviceProbeCache_.value(model.id).value(QStringLiteral("gpuReason")).toString()},
+#else
             {QStringLiteral("gpuRuntimeReady"), cudaRuntime_->ready()},
             {QStringLiteral("gpuHardwareName"), cudaRuntime_->hardwareName()},
             {QStringLiteral("gpuDriverVersion"), cudaRuntime_->driverVersion()},
@@ -2455,6 +2495,7 @@ void VocalSeparationController::refreshModels()
                         ? tr("；此模型可检测 DirectML，无需 CUDA。可选 CUDA 配置约 1.51 GB 下载、5 GB 可用磁盘")
                         : tr("；标准五轨缺少应用专用 CUDA 组件（不是缺显卡驱动）。一键配置约 1.51 GB 下载、5 GB 可用磁盘，安装后验证当前模型"))
                 : validatedGpuProviders_.contains(model.id) ? tr("当前模型已通过真实 GPU 推理验证") : tr("CUDA 组件已校验，等待当前模型 GPU 推理验证")},
+#endif
             {QStringLiteral("id"), model.id},
             {QStringLiteral("configurationEnabled"), canConfigureModel(model.id)},
             {QStringLiteral("family"), model.family == VocalModelFamily::Mdx
@@ -2509,6 +2550,15 @@ void VocalSeparationController::refreshModels()
     }
     for (QVariant& value : models_) {
         auto card = value.toMap();
+#ifdef Q_OS_MACOS
+        const auto probe = deviceProbeCache_.value(card.value(QStringLiteral("id")).toString());
+        if (probe.value(QStringLiteral("cpuValidated")).toBool()
+            && !probe.value(QStringLiteral("cpu")).toBool()
+            && !probe.value(QStringLiteral("gpu")).toBool()) {
+            card.insert(QStringLiteral("executionError"), probe.value(QStringLiteral("cpuReason")).toString());
+            card.insert(QStringLiteral("available"), false);
+        }
+#endif
         const auto fields = configurationFields(card.value("id").toString());
         for (auto it = fields.cbegin(); it != fields.cend(); ++it) card.insert(it.key(), it.value());
         value = card;
@@ -3083,7 +3133,8 @@ void VocalSeparationController::handleProbe(const QJsonObject& payload)
         ? activeRequest_->modelId : selectedModelId_;
     if (!activeProbeFingerprint_.isEmpty()
         && activeProbeFingerprint_ == probeFingerprint(probedModelId)
-        && (payload.value(QStringLiteral("cpu")).toBool()
+        && (payload.value(QStringLiteral("cpuValidated")).toBool()
+            || payload.value(QStringLiteral("cpu")).toBool()
             || payload.value(QStringLiteral("gpu")).toBool())) {
         deviceProbeCache_.insert(probedModelId, payload);
         deviceProbeFingerprints_.insert(probedModelId, activeProbeFingerprint_);
@@ -3127,7 +3178,9 @@ void VocalSeparationController::handleProbe(const QJsonObject& payload)
     };
     availableDevices_[2] = QVariantMap{
         {QStringLiteral("mode"), int(DeviceMode::GPU)},
-        {QStringLiteral("name"), provider == QStringLiteral("cuda") ? QStringLiteral("CUDA") : QStringLiteral("DirectML")},
+        {QStringLiteral("name"), provider == QStringLiteral("mps") ? QStringLiteral("MPS")
+            : provider == QStringLiteral("coreml") ? QStringLiteral("CoreML")
+            : provider == QStringLiteral("cuda") ? QStringLiteral("CUDA") : QStringLiteral("DirectML")},
         {QStringLiteral("provider"), provider},
         {QStringLiteral("available"), gpuAvailable},
         {QStringLiteral("reason"), gpuReason},

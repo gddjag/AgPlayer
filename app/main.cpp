@@ -15,6 +15,10 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QMenu>
+#ifdef Q_OS_MACOS
+#include <QMenuBar>
+#include <QKeySequence>
+#endif
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQuickStyle>
@@ -35,6 +39,7 @@
 #include <agplayer/c_api.h>
 
 #include "agplayer_version.hpp"
+#include "agplayer_application.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -297,7 +302,7 @@ int main(int argc, char* argv[])
     // keeps those visuals supported and consistent on Windows/macOS while
     // Theme.qml still follows the host system palette when requested.
     QQuickStyle::setStyle(QStringLiteral("Basic"));
-    QApplication app(argc, argv);
+    AgPlayerApplication app(argc, argv);
 #if defined(Q_OS_WIN) && QT_VERSION == QT_VERSION_CHECK(6, 7, 0)
     // Declared before the QML engine so the guard covers its entire teardown.
     QuickWindowDpiTeardownGuard dpiTeardownGuard;
@@ -604,7 +609,12 @@ int main(int argc, char* argv[])
         // test/portable launches can legitimately use different data roots
         // while they still belong to the same desktop user and must forward to
         // the one running player.
+#ifdef Q_OS_WIN
         QByteArray instanceScope = qgetenv("USERNAME");
+#else
+        QByteArray instanceScope = QStandardPaths::writableLocation(
+            QStandardPaths::HomeLocation).toUtf8();
+#endif
         instanceScope += instanceKeySuffix.isEmpty()
             ? qgetenv("AGPLAYER_INSTANCE_KEY_SUFFIX")
             : instanceKeySuffix.toUtf8();
@@ -1008,6 +1018,12 @@ int main(int argc, char* argv[])
             autoReadBpmFlag->store(settings.autoReadBpm(), std::memory_order_relaxed);
         });
         WindowController windows;
+#ifdef Q_OS_MACOS
+        QObject::connect(&app, &QGuiApplication::applicationStateChanged,
+                         &windows, [&windows](Qt::ApplicationState state) {
+            if (state == Qt::ApplicationActive) windows.restoreApplicationWindows();
+        });
+#endif
         NativeDropRouter nativeDrops;
         windows.setMagneticSnapEnabled(settings.windowMagneticSnap());
         windows.setPreferredDockEdge(settings.listWindowPosition());
@@ -1213,7 +1229,7 @@ int main(int argc, char* argv[])
         }
 
         QObject::connect(&importer, &ImportController::finished, &app,
-                         [&library, &playback, &importer, &pendingPlayFilePath,
+                         [&library, &playback, &pendingPlayFilePath,
                           &pendingPlayFinishes]() {
             if (pendingPlayFilePath.isEmpty()) {
                 return;
@@ -1228,6 +1244,16 @@ int main(int argc, char* argv[])
             if (--pendingPlayFinishes <= 0) {
                 pendingPlayFilePath.clear();
                 pendingPlayFinishes = 0;
+            }
+        });
+
+        QObject::connect(&app, &AgPlayerApplication::fileOpenRequested, &playback,
+                         [&](const QUrl& url) {
+            const QFileInfo file(url.toLocalFile());
+            if (file.isFile()) {
+                pendingPlayFilePath = file.absoluteFilePath();
+                playFileIfPending();
+                windows.showMain();
             }
         });
 
@@ -1320,6 +1346,46 @@ int main(int argc, char* argv[])
             result = 3;
             return result;
         }
+
+#ifdef Q_OS_MACOS
+        // A parentless QMenuBar supplies the macOS global menu without adding
+        // a row to the existing QML layout. Roles place Settings/Quit in the app menu.
+        QMenuBar macMenuBar;
+        QMenu* appMenu = macMenuBar.addMenu(QStringLiteral("AgPlayer"));
+        QAction* macSettings = new QAction(appMenu);
+        macSettings->setMenuRole(QAction::PreferencesRole);
+        macSettings->setShortcut(QKeySequence::Preferences);
+        appMenu->addAction(macSettings);
+        QObject::connect(macSettings, &QAction::triggered, &engine, [&windows, &engine] {
+            windows.showMain();
+            QMetaObject::invokeMethod(engine.rootObjects().first(), "openSettingsPage");
+        });
+        QAction* macQuit = new QAction(appMenu);
+        macQuit->setMenuRole(QAction::QuitRole);
+        macQuit->setShortcut(QKeySequence::Quit);
+        appMenu->addAction(macQuit);
+        QObject::connect(macQuit, &QAction::triggered, &windows, &WindowController::requestExit);
+        QMenu* macWindowMenu = macMenuBar.addMenu(QString());
+        QAction* macMinimize = macWindowMenu->addAction(QString());
+        macMinimize->setShortcut(QKeySequence(QStringLiteral("Ctrl+M")));
+        QObject::connect(macMinimize, &QAction::triggered, &app, [] {
+            if (QWindow* focused = QGuiApplication::focusWindow()) focused->showMinimized();
+        });
+        QAction* macClose = macWindowMenu->addAction(QString());
+        macClose->setShortcut(QKeySequence::Close);
+        QObject::connect(macClose, &QAction::triggered, &app, [] {
+            if (QWindow* focused = QGuiApplication::focusWindow()) focused->close();
+        });
+        const auto updateMacMenuText = [macSettings, macQuit, macWindowMenu, macMinimize, macClose] {
+            macSettings->setText(QCoreApplication::translate("Main", "设置…"));
+            macQuit->setText(QCoreApplication::translate("Main", "退出 AgPlayer"));
+            macWindowMenu->setTitle(QCoreApplication::translate("Main", "窗口"));
+            macMinimize->setText(QCoreApplication::translate("Main", "最小化"));
+            macClose->setText(QCoreApplication::translate("Main", "关闭窗口"));
+        };
+        updateMacMenuText();
+        QObject::connect(&translations, &TranslationManager::languageChanged, &macMenuBar, updateMacMenuText);
+#endif
 
         if (!qaPlayPath.isEmpty()) {
             initialFilePath = qaPlayPath;
@@ -1935,22 +2001,33 @@ int main(int argc, char* argv[])
                 }
             }
 
-            // Global hotkeys (Windows RegisterHotKey). Parsed from the settings
+            // Native global hotkeys. Parsed from the settings
             // defaults and re-registered whenever the user changes a shortcut.
             GlobalHotkeyManager hotkeys;
             app.installNativeEventFilter(&hotkeys);
 
             auto registerGlobalHotkeys = [&]() {
                 hotkeys.unregisterAll();
+                QStringList registrationErrors;
                 if (qaTestMode) {
                     return;
                 }
+
+                const auto registerOne = [&](const QString& combo,
+                                             GlobalHotkeyManager::Action action) {
+                    if (!hotkeys.registerShortcut(combo, action)) {
+                        registrationErrors.append(combo + QStringLiteral(": ")
+                            + (hotkeys.lastError().isEmpty()
+                                ? QCoreApplication::translate("Main", "Shortcut is unavailable")
+                                : hotkeys.lastError()));
+                    }
+                };
 
                 const auto registerCombo = [&](const QString& combo,
                                                GlobalHotkeyManager::Action action) {
                     const QStringList parts = combo.split('/', Qt::SkipEmptyParts);
                     for (const QString& part : parts) {
-                        hotkeys.registerShortcut(part.trimmed(), action);
+                        registerOne(part.trimmed(), action);
                     }
                 };
 
@@ -1959,10 +2036,10 @@ int main(int argc, char* argv[])
                                               GlobalHotkeyManager::Action second) {
                     const QStringList parts = combo.split('/', Qt::SkipEmptyParts);
                     if (parts.size() >= 1) {
-                        hotkeys.registerShortcut(parts[0].trimmed(), first);
+                        registerOne(parts[0].trimmed(), first);
                     }
                     if (parts.size() >= 2) {
-                        hotkeys.registerShortcut(parts[1].trimmed(), second);
+                        registerOne(parts[1].trimmed(), second);
                     }
                 };
 
@@ -1973,6 +2050,8 @@ int main(int argc, char* argv[])
                              GlobalHotkeyManager::Action::VolumeDown);
                 registerCombo(settings.hkToggleMiniPlayer(),
                               GlobalHotkeyManager::Action::ToggleMiniPlayer);
+                registrationErrors.removeDuplicates();
+                settings.setGlobalHotkeyError(registrationErrors.join(QLatin1Char('\n')));
             };
 
             registerGlobalHotkeys();
@@ -2345,6 +2424,7 @@ int main(int argc, char* argv[])
                     QTimer::singleShot(50, *pollFunc);
                 }
             }
+            app.enableFileOpenDelivery();
             result = app.exec();
             savePlaybackState(true);
             if (!tagModel.flush()) {

@@ -7,6 +7,15 @@ Dialog {
 
     modal: true
     padding: Theme.spacingLg
+    // Measure natural content, not contentWidth (which follows the assigned
+    // width when text wraps). Include titles and actions before bounding it.
+    implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
+                            (contentItem ? contentItem.implicitWidth : 0)
+                                + leftPadding + rightPadding,
+                            dialogTitle.visible ? dialogTitle.implicitWidth : 0,
+                            dialogButtons.visible ? dialogButtons.implicitWidth : 0)
+    width: Math.min(implicitWidth, parent && parent.width > 0
+                    ? Math.max(0, parent.width - 2 * Theme.spacingLg) : implicitWidth)
     font.family: Theme.fontPrimary
     font.pixelSize: Theme.fontSizeBody
     palette.window: Theme.surfaceElevated
@@ -16,6 +25,16 @@ Dialog {
     palette.buttonText: Theme.textPrimary
     palette.highlight: Theme.accent
     palette.highlightedText: Theme.accentText
+
+    header: Label {
+        id: dialogTitle
+        visible: text.length > 0
+        text: control.title
+        color: Theme.textPrimary
+        font.bold: true
+        padding: control.padding
+        elide: Text.ElideRight
+    }
 
     // Qt's standard labels use the Qt translation catalog, while AgPlayer's
     // language setting retranslates its own catalog. Keep labels in that catalog.
@@ -36,6 +55,15 @@ Dialog {
     onStandardButtonsChanged: Qt.callLater(updateStandardButtonLabels)
 
     footer: DialogButtonBox {
+        id: dialogButtons
+        implicitWidth: {
+            var buttonsWidth = 0
+            for (var index = 0; index < count; ++index) {
+                var button = itemAt(index)
+                if (button) buttonsWidth += button.implicitWidth
+            }
+            return buttonsWidth + Math.max(0, count - 1) * spacing + leftPadding + rightPadding
+        }
         alignment: Qt.AlignRight
         visible: count > 0
         standardButtons: control.standardButtons

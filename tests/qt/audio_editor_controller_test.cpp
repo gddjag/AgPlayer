@@ -2237,6 +2237,65 @@ private slots:
         QCOMPARE(exported.read(4), QByteArray("RIFF", 4));
     }
 
+    void configuredDirectoryExportPreservesFileCreatedAfterNameSelection()
+    {
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString source = temporary.filePath(QStringLiteral("source.wav"));
+        const QString target = temporary.filePath(QStringLiteral("source_edited.wav"));
+        QVERIFY(QFile::copy(fixture, source));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
+        agplayer::editor::ProjectExportSettings settings;
+        settings.codecName = QStringLiteral("wav");
+        settings.outputDirectory = temporary.path();
+        QVERIFY(controller.setProjectExportSettings(settings));
+
+        bool competitorCreated = false;
+        connect(&controller, &AudioEditorController::stateChanged, &controller, [&] {
+            if (controller.state() != EditorSessionState::Saving || competitorCreated)
+                return;
+            QFile competitor(target);
+            QVERIFY(competitor.open(QIODevice::WriteOnly | QIODevice::NewOnly));
+            QCOMPARE(competitor.write("foreign-owner"), qint64{13});
+            competitorCreated = true;
+        }, Qt::DirectConnection);
+        QSignalSpy succeeded(&controller, &AudioEditorController::exportSucceeded);
+        QVERIFY(controller.exportToConfiguredDirectory());
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 10'000);
+        QVERIFY(competitorCreated);
+        QFile competitor(target);
+        QVERIFY(competitor.open(QIODevice::ReadOnly));
+        QCOMPARE(competitor.readAll(), QByteArrayLiteral("foreign-owner"));
+        QCOMPARE(controller.state(), EditorSessionState::Error);
+        QCOMPARE(succeeded.count(), 0);
+        QVERIFY(controller.lastExportPath().isEmpty());
+        QVERIFY(QDir(temporary.path()).entryList(
+            {QStringLiteral("*.agplayer-*")}, QDir::Files).isEmpty());
+    }
+
+    void explicitAudioSaveAsOverwritesConfirmedTarget()
+    {
+        const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
+        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString target = temporary.filePath(QStringLiteral("saved.wav"));
+        QFile previous(target);
+        QVERIFY(previous.open(QIODevice::WriteOnly));
+        QCOMPARE(previous.write("previous-output"), qint64{15});
+        previous.close();
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
+        QVERIFY(controller.saveAs(QUrl::fromLocalFile(target)));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 10'000);
+        QCOMPARE(controller.state(), EditorSessionState::Ready);
+        const auto decoded = decodeProbe(target);
+        QCOMPARE(decoded.frames, controller.totalFrames());
+    }
+
     void configuredDirectoryExportSupportsFullAndNonzeroSelectionRanges()
     {
         using agplayer::editor::ProjectExportSettings;

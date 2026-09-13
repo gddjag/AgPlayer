@@ -72,7 +72,8 @@ Item {
     implicitHeight: lyricStack.implicitHeight + (spatialMode ? 0 : 16)
 
     visible: service && service.enabled
-    opacity: lyricOpacity / 100.0
+    // The immersive opacity control must not fade ordinary reading panels.
+    opacity: spatialMode ? lyricOpacity / 100.0 : 1
     clip: false
 
     function statusText() {
@@ -242,7 +243,7 @@ Item {
             text: root.service ? root.service.previousLine : ""
             color: root.lightBackground ? "#293D40" : root.spatialMode // theme-color-allow: immersive ink material foreground
                    ? Theme.onBrandGradientText
-                   : Theme.textSecondary
+                   : Theme.lyricContextText
             font.family: Theme.fontPrimary
             font.pixelSize: Math.max(Theme.fontSizeCaption,
                                      Math.round(Theme.fontSizeBody * root.sizeScale))
@@ -283,7 +284,7 @@ Item {
             width: parent.width
             text: root.service && root.service.currentLine.length > 0
                   ? root.service.currentLine : root.statusText()
-            color: Theme.accent
+            color: root.spatialMode ? Theme.accent : Theme.lyricCurrentText
             font.family: Theme.fontPrimary
             font.pixelSize: Math.max(Theme.fontSizeSection,
                                      Math.round(Theme.fontSizePageTitle * root.sizeScale))
@@ -323,7 +324,7 @@ Item {
             text: root.service ? root.service.nextLine : ""
             color: root.lightBackground ? "#293D40" : root.spatialMode // theme-color-allow: immersive ink material foreground
                    ? Theme.onBrandGradientText
-                   : Theme.textSecondary
+                   : Theme.lyricContextText
             font.family: Theme.fontPrimary
             font.pixelSize: Math.max(Theme.fontSizeCaption,
                                      Math.round(Theme.fontSizeBody * root.sizeScale))
@@ -396,8 +397,8 @@ Item {
                 anchors.rightMargin: 4
                 text: parent.text
                 color: parent.index === timelineList.currentIndex
-                       ? Theme.accent : Theme.textSecondary
-                opacity: parent.index === timelineList.currentIndex ? 1 : 0.64
+                       ? Theme.lyricCurrentText : Theme.lyricContextText
+                opacity: 1
                 font.family: Theme.fontPrimary
                 font.pixelSize: Math.max(
                     Theme.fontSizeBody,
@@ -634,6 +635,7 @@ Item {
             objectName: "lyricsRetryButton"
             icon.source: Theme.icon("restore-line")
             Accessible.name: qsTr("刷新歌词")
+            enabled: !!root.service && root.service.status !== LyricsService.Loading
             onClicked: if (root.service) root.service.retry()
         }
         LyricsActionButton {

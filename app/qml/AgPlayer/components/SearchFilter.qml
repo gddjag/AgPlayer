@@ -75,11 +75,14 @@ Rectangle {
                                 maximumBpmField.text = Math.round(pendingMaxBpm).toString()
 
     RowLayout {
-        anchors.fill: parent
-        anchors.leftMargin: Theme.spacingSm
-        anchors.rightMargin: Theme.spacingSm
-        anchors.topMargin: root.contentTopMargin
-        anchors.bottomMargin: root.contentBottomMargin
+        // Keep all modules, including Clear, reachable when the center column
+        // is narrower than the row's natural width. Scale the complete group.
+        width: Math.max(implicitWidth, root.width - 2 * Theme.spacingSm)
+        height: Math.max(0, root.height - root.contentTopMargin - root.contentBottomMargin)
+        x: Theme.spacingSm
+        y: root.contentTopMargin + height * (1 - scale) / 2
+        scale: Math.min(1, Math.max(0, root.width - 2 * Theme.spacingSm) / Math.max(1, width))
+        transformOrigin: Item.TopLeft
         spacing: Theme.spacingSm
 
         Rectangle {

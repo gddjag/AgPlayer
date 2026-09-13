@@ -292,7 +292,11 @@ public:
     ag_result read(agplayer::DecodedAudioBlock& block) noexcept
     {
         try {
-            block = {};
+            block.samples.clear();
+            block.frames = 0;
+            block.timestamp_frame = 0;
+            block.timestamp_ms = 0;
+            block.end_of_stream = false;
             if (!processor_ready) return AG_INVALID_ARGUMENT;
             if (!processing) {
                 const ag_result result = readRaw(block.samples, kReadFrames);
@@ -314,13 +318,12 @@ public:
                                                        kReadFrames);
             if (processor->failed()) return AG_INTERNAL_ERROR;
             while (received == 0 && !flushed) {
-                std::vector<float> raw;
-                const ag_result result = readRaw(raw, kReadFrames);
+                const ag_result result = readRaw(raw_samples, kReadFrames);
                 if (result != AG_OK) return result;
-                const std::size_t frames = raw.size()
+                const std::size_t frames = raw_samples.size()
                     / static_cast<std::size_t>(metadata_value.channels);
                 if (frames > 0) {
-                    processor->put(raw.data(), frames);
+                    processor->put(raw_samples.data(), frames);
                     if (processor->failed()) return AG_INTERNAL_ERROR;
                 }
                 if (raw_eof) {
@@ -378,6 +381,7 @@ public:
     agplayer::MediaMetadata metadata_value;
     agplayer::Decoder decoder;
     agplayer::DecodedAudioBlock decoded;
+    std::vector<float> raw_samples;
     std::size_t decoded_offset{};
     SampleFrame decoded_discard{};
     std::size_t event_index{};

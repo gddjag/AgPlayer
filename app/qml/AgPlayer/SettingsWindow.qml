@@ -7,10 +7,14 @@ Window {
     id: settingsWindow
     objectName: "settingsWindow"
     visible: false
-    width: 860
-    height: Math.min(900, Math.max(640, Screen.desktopAvailableHeight - 40))
-    minimumWidth: 840
-    minimumHeight: 640
+    readonly property rect defaultWindowBounds:
+        WindowController.startupGeometryForAvailableArea(
+            Qt.rect(0, 0, 860, 700),
+            WindowController.availableGeometryForWindow(settingsWindow), true)
+    width: defaultWindowBounds.width
+    height: defaultWindowBounds.height
+    minimumWidth: Math.min(720, defaultWindowBounds.width)
+    minimumHeight: Math.min(420, defaultWindowBounds.height)
     flags: Qt.FramelessWindowHint
     color: "transparent"
     title: qsTr("AgPlayer · 设置")

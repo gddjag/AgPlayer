@@ -27,6 +27,8 @@
 
 #ifdef Q_OS_WIN
 #  include <windows.h>
+#elif defined(Q_OS_MACOS)
+#  include <stdio.h>
 #endif
 #include <QVector>
 #include <QtConcurrent>
@@ -289,6 +291,14 @@ bool format_converter_detail::commit_staged_output(
         flags |= MOVEFILE_REPLACE_EXISTING;
     }
     return MoveFileExW(staged.c_str(), final.c_str(), flags) != FALSE;
+#elif defined(Q_OS_MACOS)
+    const QByteArray staged = QFile::encodeName(stagedPath);
+    const QByteArray final = QFile::encodeName(finalPath);
+    // Unlike a hard-link commit this also works on writable volumes without
+    // hard-link support; RENAME_EXCL preserves an existing destination.
+    return ::renamex_np(staged.constData(), final.constData(),
+                        mode == OutputCommitMode::CreateNoReplace
+                            ? RENAME_EXCL : 0) == 0;
 #else
     std::error_code error;
     if (mode == OutputCommitMode::CreateNoReplace) {
@@ -412,17 +422,6 @@ QVariantList presets_for(const QString& format, bool lossy)
                    192000, QStringLiteral("cbr"), 44100, 70),
             preset(QStringLiteral("custom"), QStringLiteral("自定义"),
                    320000, QStringLiteral("cbr"), 0, 85)};
-}
-
-bool list_contains_string(const QVariantList& values, const QString& needle,
-                          const QString& valueKey = {})
-{
-    return std::any_of(values.cbegin(), values.cend(),
-                       [&needle, &valueKey](const QVariant& value) {
-        return (valueKey.isEmpty() ? value.toString()
-                                   : value.toMap().value(valueKey).toString())
-            == needle;
-    });
 }
 
 bool is_video_file(const QString& path)

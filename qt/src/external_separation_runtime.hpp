@@ -27,6 +27,7 @@ signals:
 private:
     friend class ExternalSeparationRuntimeTestDriver;
     bool markerMatchesVerificationContract() const;
+    bool pythonPathIsSafe() const;
     bool workerMatchesBundle() const;
     bool synchronizeWorker();
     bool clearVerificationMarker();

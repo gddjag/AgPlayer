@@ -25,29 +25,14 @@ Rectangle {
         anchors.rightMargin: Theme.spacingMd
         spacing: Theme.spacingXs
 
-        RowLayout {
-            objectName: "titleBrand"
-            visible: titleBar.showBrand
-            spacing: Theme.spacingXs
+        ThemedMacWindowControls {
+            targetWindow: titleBar.window
+            onCloseRequested: WindowController.requestClose()
+        }
 
-            Image {
-                source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                sourceSize.width: 24
-                sourceSize.height: 24
-                Layout.preferredWidth: 24
-                Layout.preferredHeight: 24
-                fillMode: Image.PreserveAspectFit
-            }
-
-            Text {
-                objectName: "titleBrandText"
-                text: "AgPlayer"
-                color: Theme.primaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: Theme.fontSizeBody
-                font.weight: Font.DemiBold
-                font.italic: false
-            }
+        Item {
+            visible: titleBar.showBrand && Qt.platform.os !== "osx"
+            Layout.preferredWidth: brandRow.implicitWidth
         }
 
         Item { Layout.fillWidth: true }
@@ -82,6 +67,7 @@ Rectangle {
 
         ToolButton {
             objectName: "minimizeButton"
+            visible: Qt.platform.os !== "osx"
             text: qsTr("最小化")
             display: AbstractButton.IconOnly
             Layout.preferredWidth: Theme.controlHeightCompact
@@ -110,6 +96,7 @@ Rectangle {
 
         ToolButton {
             objectName: "maximizeButton"
+            visible: Qt.platform.os !== "osx"
             text: window.visibility === Window.Maximized ? qsTr("还原") : qsTr("最大化")
             display: AbstractButton.IconOnly
             Layout.preferredWidth: Theme.controlHeightCompact
@@ -145,6 +132,7 @@ Rectangle {
 
         ToolButton {
             objectName: "closeButton"
+            visible: Qt.platform.os !== "osx"
             text: qsTr("关闭")
             display: AbstractButton.IconOnly
             Layout.preferredWidth: Theme.controlHeightCompact
@@ -171,6 +159,34 @@ Rectangle {
             }
         }
     }
+
+    RowLayout {
+        id: brandRow
+        x: Qt.platform.os === "osx" ? (titleBar.width - width) / 2 : Theme.spacingLg
+        anchors.verticalCenter: parent.verticalCenter
+            objectName: "titleBrand"
+            visible: titleBar.showBrand
+            spacing: Theme.spacingXs
+
+            Image {
+                source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                sourceSize.width: 24
+                sourceSize.height: 24
+                Layout.preferredWidth: 24
+                Layout.preferredHeight: 24
+                fillMode: Image.PreserveAspectFit
+            }
+
+            Text {
+                objectName: "titleBrandText"
+                text: "AgPlayer"
+                color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: Theme.fontSizeBody
+                font.weight: Font.DemiBold
+                font.italic: false
+            }
+        }
 
     // Drag the window from any empty area of the title bar. `z: -1` keeps
     // this MouseArea below the RowLayout so ToolButtons receive presses first;

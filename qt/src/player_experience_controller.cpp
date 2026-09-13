@@ -106,6 +106,10 @@ PlayerExperienceController::PlayerExperienceController(SettingsController* setti
 int PlayerExperienceController::immersiveMode() const noexcept { return immersiveMode_; }
 int PlayerExperienceController::hostMode() const noexcept { return hostMode_; }
 bool PlayerExperienceController::lyricsVisible() const noexcept { return lyricsVisible_; }
+int PlayerExperienceController::integratedSidePanelPage() const noexcept { return integratedSidePanelPage_; }
+bool PlayerExperienceController::integratedSidePanelExpanded() const noexcept { return integratedSidePanelExpanded_; }
+int PlayerExperienceController::rollingSidePanelPage() const noexcept { return rollingSidePanelPage_; }
+bool PlayerExperienceController::rollingSidePanelExpanded() const noexcept { return rollingSidePanelExpanded_; }
 bool PlayerExperienceController::panelVisible() const noexcept { return panelVisible_; }
 bool PlayerExperienceController::desktopMousePassthrough() const noexcept
 {
@@ -367,6 +371,7 @@ void PlayerExperienceController::setImmersiveMode(int value)
     value = value == TerrainReactor ? TerrainReactor : Off;
     if (immersiveMode_ == value) return;
     immersiveMode_ = value;
+    persist(QStringLiteral("immersiveMode"), value);
     emit immersiveModeChanged();
 }
 
@@ -385,6 +390,40 @@ void PlayerExperienceController::setLyricsVisible(bool value)
     lyricsVisible_ = value;
     persist(QStringLiteral("lyricsVisible"), value);
     emit lyricsVisibleChanged();
+}
+
+void PlayerExperienceController::setIntegratedSidePanelPage(int value)
+{
+    value = enumOrDefault(value, 0, 1, 0);
+    if (integratedSidePanelPage_ == value) return;
+    integratedSidePanelPage_ = value;
+    persist(QStringLiteral("integratedSidePanelPage"), value);
+    emit integratedSidePanelPageChanged();
+}
+
+void PlayerExperienceController::setIntegratedSidePanelExpanded(bool value)
+{
+    if (integratedSidePanelExpanded_ == value) return;
+    integratedSidePanelExpanded_ = value;
+    persist(QStringLiteral("integratedSidePanelExpanded"), value);
+    emit integratedSidePanelExpandedChanged();
+}
+
+void PlayerExperienceController::setRollingSidePanelPage(int value)
+{
+    value = enumOrDefault(value, 0, 1, 0);
+    if (rollingSidePanelPage_ == value) return;
+    rollingSidePanelPage_ = value;
+    persist(QStringLiteral("rollingSidePanelPage"), value);
+    emit rollingSidePanelPageChanged();
+}
+
+void PlayerExperienceController::setRollingSidePanelExpanded(bool value)
+{
+    if (rollingSidePanelExpanded_ == value) return;
+    rollingSidePanelExpanded_ = value;
+    persist(QStringLiteral("rollingSidePanelExpanded"), value);
+    emit rollingSidePanelExpandedChanged();
 }
 
 void PlayerExperienceController::setPanelVisible(bool value)
@@ -1038,14 +1077,24 @@ void PlayerExperienceController::load()
         return storedDouble(settings_.value(key)).value_or(fallback);
     };
 
-    // Presentation is session state. Never reopen a GPU-heavy immersive
-    // window on launch, including after an abnormal process termination.
-    immersiveMode_ = Off;
+    // Missing preferences keep the first launch quiet. The old "mode" key was
+    // retired; only new, explicit choices use the persistent immersiveMode key.
+    immersiveMode_ = enumOrDefault(integer(QStringLiteral("immersiveMode"), Off),
+                                    Off, TerrainReactor, Off);
     hostMode_ = enumOrDefault(integer(QStringLiteral("hostMode"), Windowed),
                               Windowed, Desktop, Windowed);
-    // Lyrics are presentation state: every application launch starts clean and
-    // lets the listener opt in explicitly instead of reopening the last panel.
-    lyricsVisible_ = false;
+    lyricsVisible_ = boolean(QStringLiteral("lyricsVisible"), false);
+    // Migrate existing lyrics users once, without overriding independently
+    // selected or collapsed side panels on subsequent launches.
+    const int initialSidePanelPage = lyricsVisible_ ? 1 : 0;
+    integratedSidePanelPage_ = enumOrDefault(
+        integer(QStringLiteral("integratedSidePanelPage"), initialSidePanelPage),
+        0, 1, initialSidePanelPage);
+    integratedSidePanelExpanded_ = boolean(QStringLiteral("integratedSidePanelExpanded"), true);
+    rollingSidePanelPage_ = enumOrDefault(
+        integer(QStringLiteral("rollingSidePanelPage"), initialSidePanelPage),
+        0, 1, initialSidePanelPage);
+    rollingSidePanelExpanded_ = boolean(QStringLiteral("rollingSidePanelExpanded"), true);
     panelVisible_ = boolean(QStringLiteral("panelVisible"), true);
     desktopMousePassthrough_ = boolean(
         QStringLiteral("desktopMousePassthrough"), false);
@@ -1150,8 +1199,13 @@ void PlayerExperienceController::load()
     rhythmSensitivity_ = clampPercent(integer(QStringLiteral("rhythmSensitivity"), 100));
 
     settings_.remove(QStringLiteral("mode"));
+    settings_.setValue(QStringLiteral("immersiveMode"), immersiveMode_);
     settings_.setValue(QStringLiteral("hostMode"), hostMode_);
     settings_.setValue(QStringLiteral("lyricsVisible"), lyricsVisible_);
+    settings_.setValue(QStringLiteral("integratedSidePanelPage"), integratedSidePanelPage_);
+    settings_.setValue(QStringLiteral("integratedSidePanelExpanded"), integratedSidePanelExpanded_);
+    settings_.setValue(QStringLiteral("rollingSidePanelPage"), rollingSidePanelPage_);
+    settings_.setValue(QStringLiteral("rollingSidePanelExpanded"), rollingSidePanelExpanded_);
     settings_.setValue(QStringLiteral("panelVisible"), panelVisible_);
     settings_.setValue(QStringLiteral("desktopMousePassthrough"), desktopMousePassthrough_);
     settings_.setValue(QStringLiteral("qualityPreset"), qualityPreset_);

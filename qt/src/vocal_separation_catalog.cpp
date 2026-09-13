@@ -158,6 +158,25 @@ VocalRuntimePackage VocalSeparationCatalog::directMlRuntime()
             QStringLiteral("57e9f11b73437bef7a309496135d4c1f96b1a8e9ddba60013fa27bfc1d788681")};
 }
 
+VocalRuntimePackage VocalSeparationCatalog::nativeRuntime()
+{
+#ifdef Q_OS_MACOS
+    // 1.20+ macOS release binaries require 13.3 or newer. Both native slices
+    // in this pinned Microsoft package declare macOS 11.0 in LC_BUILD_VERSION.
+#ifdef Q_PROCESSOR_ARM_64
+    const QString id = QStringLiteral("onnxruntime-macos-arm64-1.18.1");
+#else
+    const QString id = QStringLiteral("onnxruntime-macos-x86_64-1.18.1");
+#endif
+    return {id,
+            QUrl(QStringLiteral("https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/1.18.1/microsoft.ml.onnxruntime.1.18.1.nupkg")),
+            103'790'494,
+            QStringLiteral("e1fdeb5359407c948569905b4eb76af50b8bdb38b2bd3f2ad6516fe4a7186d6a")};
+#else
+    return directMlRuntime();
+#endif
+}
+
 CustomManifestValidationResult validateCustomModelManifest(const QJsonObject& manifest)
 {
     static const QSet<QString> manifestKeys{

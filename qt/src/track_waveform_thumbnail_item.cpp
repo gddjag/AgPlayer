@@ -293,7 +293,7 @@ void TrackWaveformThumbnailItem::rebuildGeometry(QSGNode* sceneNode)
         return;
     }
 
-    const auto interpolatedEndpoint = [this, &byteAt, pixelColumns](
+    const auto interpolatedEndpoint = [&byteAt, pixelColumns](
                                            const int column,
                                            const int endpoint) {
         const qreal position = static_cast<qreal>(column)

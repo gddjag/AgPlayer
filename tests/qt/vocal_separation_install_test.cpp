@@ -122,10 +122,10 @@ public:
         connect(&m_server, &QTcpServer::newConnection, this, [this] {
             while (QTcpSocket* socket = m_server.nextPendingConnection()) {
                 ++m_connections;
-                connect(socket, &QTcpSocket::readyRead, socket, [this, socket] {
-                    const QByteArray request = socket->readAll();
+                connect(socket, &QTcpSocket::readyRead, socket, [this, socket, request = QByteArray{}]() mutable {
+                    request += socket->readAll();
                     if (!request.contains("\r\n\r\n")) return;
-                    const int at = request.indexOf("Range: bytes=");
+                    const int at = request.toLower().indexOf("range: bytes=");
                     qint64 offset = 0;
                     if (at >= 0) {
                         const int begin = at + 13;
@@ -201,9 +201,15 @@ void VocalSeparationInstallTest::installerOwnsCanonicalRuntimePaths()
     const QString root = QDir::cleanPath(QStringLiteral("C:/portable/runtime"));
     const QString version = VocalSeparationInstaller::runtimeVersionDirectory(root);
     QCOMPARE(version, QDir(root).filePath(
-        VocalSeparationCatalog::directMlRuntime().id));
+        VocalSeparationCatalog::nativeRuntime().id));
+#ifdef Q_OS_MACOS
+    QCOMPARE(VocalSeparationInstaller::runtimeLibraryPath(root),
+             QDir(version).filePath(QStringLiteral("libonnxruntime.dylib")));
+    QCOMPARE(VocalSeparationCatalog::nativeRuntime().bytes, qint64{103'790'494});
+#else
     QCOMPARE(VocalSeparationInstaller::runtimeLibraryPath(root),
              QDir(version).filePath(QStringLiteral("onnxruntime.dll")));
+#endif
 }
 
 void VocalSeparationInstallTest::rejectsUnsafeCustomManifests()
@@ -556,7 +562,7 @@ void VocalSeparationInstallTest::runtimeVerificationRejectsChangedNativeFile()
     const QString packagePath = QDir(QStandardPaths::writableLocation(
         QStandardPaths::TempLocation)).filePath(QStringLiteral("agplayer-ort-1.24.4.nupkg"));
     if (!QFileInfo(packagePath).isFile()) {
-        QSKIP("Pinned DirectML archive fixture is unavailable");
+        QSKIP("Pinned DirectML archive fixture is unavailable", "");
     }
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
@@ -584,7 +590,7 @@ void VocalSeparationInstallTest::cancelledRuntimeExtractionStopsAndCleansKnownSt
     const QString packagePath = QDir(QStandardPaths::writableLocation(
         QStandardPaths::TempLocation)).filePath(QStringLiteral("agplayer-ort-1.24.4.nupkg"));
     if (!QFileInfo(packagePath).isFile()) {
-        QSKIP("Pinned DirectML archive fixture is unavailable");
+        QSKIP("Pinned DirectML archive fixture is unavailable", "");
     }
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
@@ -620,7 +626,7 @@ void VocalSeparationInstallTest::runtimeExtractionRefusesUnsafePreexistingStagin
     const QString packagePath = QDir(QStandardPaths::writableLocation(
         QStandardPaths::TempLocation)).filePath(QStringLiteral("agplayer-ort-1.24.4.nupkg"));
     if (!QFileInfo(packagePath).isFile()) {
-        QSKIP("Pinned DirectML archive fixture is unavailable");
+        QSKIP("Pinned DirectML archive fixture is unavailable", "");
     }
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
@@ -651,7 +657,7 @@ void VocalSeparationInstallTest::downloaderRefusesUnsafePartialFile()
     const QString destination = holder.filePath(QStringLiteral("model.onnx"));
     const QString partial = VocalSeparationInstaller::partPath(destination);
     if (!createDirectoryLink(partial, external.path())) {
-        QSKIP("directory symlink or junction creation is unavailable");
+        QSKIP("directory symlink or junction creation is unavailable", "");
     }
     DirectoryLinkGuard linkGuard(partial);
 
@@ -749,7 +755,8 @@ void VocalSeparationInstallTest::httpResumeValidatesRangeAndFallback()
         disableProxyForLocalTests(); QNetworkAccessManager network; network.setProxy(QNetworkProxy(QNetworkProxy::NoProxy));
         VocalSeparationDownloader downloader(&network); QSignalSpy finished(&downloader, &VocalSeparationDownloader::finished);
         downloader.start(downloadFileFor(payload, server.url()), destination);
-        QVERIFY(finished.wait(3'000)); QCOMPARE(server.range(), QByteArray("Range: bytes=5-"));
+        QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 3'000);
+        QCOMPARE(server.range().toLower(), QByteArray("range: bytes=5-"));
         QCOMPARE(QFileInfo::exists(destination), expectSuccess);
         if (expectSuccess) { QFile installed(destination); QVERIFY(installed.open(QIODevice::ReadOnly)); QCOMPARE(installed.readAll(), payload); }
         else QVERIFY(QFileInfo::exists(VocalSeparationInstaller::partPath(destination)));
@@ -777,7 +784,7 @@ void VocalSeparationInstallTest::pauseAndCancelPreventBackoffReconnect()
         QCOMPARE(VocalSeparationInstaller::resumeOffset(destination), qint64{4});
         QFile partial(VocalSeparationInstaller::partPath(destination)); QVERIFY(partial.open(QIODevice::ReadOnly));
         QCOMPARE(partial.readAll(), payload.left(4));
-        if (pause) { downloader.resume(); QTRY_VERIFY_WITH_TIMEOUT(server.connections() > 1, 1'000); QCOMPARE(server.range(), QByteArray("Range: bytes=4-")); downloader.cancel(); }
+        if (pause) { downloader.resume(); QTRY_VERIFY_WITH_TIMEOUT(server.connections() > 1, 1'000); QCOMPARE(server.range().toLower(), QByteArray("range: bytes=4-")); downloader.cancel(); }
     };
     verify(false); verify(true);
 }

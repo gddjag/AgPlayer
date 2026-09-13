@@ -15,6 +15,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -37,6 +38,18 @@ public:
                                 void* context) noexcept
     {
         engine.set_timeline_test_hook(hook, context);
+    }
+
+    static void setSeekWaitHook(AudioEngine& engine,
+                                void (*hook)(void*, int) noexcept,
+                                void* context) noexcept
+    {
+        engine.set_seek_wait_test_hook(hook, context);
+    }
+
+    static void stopDecode(AudioEngine& engine) noexcept
+    {
+        engine.stop_decode_thread_for_testing();
     }
 };
 
@@ -157,6 +170,118 @@ private:
 };
 
 constexpr double kMeterFloorDb = -120.0;
+
+// Hold the actual CV predicate after it observed false, while seek_mutex_
+// is still owned. The publisher is then deliberately allowed to run.
+class SeekWaitBarrier final {
+public:
+    explicit SeekWaitBarrier(const int target) : target_(target) {}
+
+    static void hook(void* context, const int phase) noexcept
+    {
+        static_cast<SeekWaitBarrier*>(context)->arrive(phase);
+    }
+
+    void releaseAfterPublisherAttempt()
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        assert(cv_.wait_for(lock, std::chrono::seconds(2),
+                            [this] { return entered_; }));
+        // Old code reaches phase 2 (notification sent) inside the vulnerable
+        // window. Correct code cannot pass the waiter's mutex until release.
+        (void)cv_.wait_for(lock, std::chrono::milliseconds(100),
+                           [this] { return notified_; });
+        released_ = true;
+        cv_.notify_all();
+    }
+
+    void waitUntilEntered()
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        assert(cv_.wait_for(lock, std::chrono::seconds(2),
+                            [this] { return entered_; }));
+    }
+
+private:
+    void arrive(const int phase) noexcept
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (phase == 3 && target_ == 0) {
+            cv_.wait(lock, [this] { return entered_; });
+        } else if (phase == target_ && !entered_) {
+            entered_ = true;
+            cv_.notify_all();
+            cv_.wait(lock, [this] { return released_; });
+        } else if (phase == 2 && entered_) {
+            notified_ = true;
+            cv_.notify_all();
+        }
+    }
+
+    const int target_;
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    bool entered_{};
+    bool released_{};
+    bool notified_{};
+};
+
+void seekWaitCannotLoseCompletion()
+{
+    auto stream = std::make_shared<ObservedRampStream>();
+    agplayer::AudioEngine engine(agplayer::AudioBackend::Manual, 4'096U);
+    assert(engine.load_stream(stream) == AG_OK);
+    SeekWaitBarrier barrier(0);
+    agplayer::AudioEngineTestAccess::setSeekWaitHook(
+        engine, &SeekWaitBarrier::hook, &barrier);
+    std::atomic<bool> completed{false};
+    std::thread seeker([&] {
+        assert(engine.seek(1'000) == AG_OK);
+        completed.store(true, std::memory_order_release);
+    });
+    barrier.releaseAfterPublisherAttempt();
+    const auto deadline = std::chrono::steady_clock::now()
+        + std::chrono::milliseconds(500);
+    while (!completed.load(std::memory_order_acquire)
+           && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
+    if (!completed.load(std::memory_order_acquire)) {
+        std::fprintf(stderr, "seek completion notification was lost at the wait boundary\n");
+        std::exit(1);
+    }
+    seeker.join();
+    agplayer::AudioEngineTestAccess::setSeekWaitHook(engine, nullptr, nullptr);
+}
+
+void eofWaitCannotLoseStop()
+{
+    auto stream = std::make_shared<ObservedRampStream>();
+    agplayer::AudioEngine engine(agplayer::AudioBackend::Manual, 262'144U);
+    SeekWaitBarrier barrier(1);
+    agplayer::AudioEngineTestAccess::setSeekWaitHook(
+        engine, &SeekWaitBarrier::hook, &barrier);
+    assert(engine.load_stream(stream) == AG_OK);
+    barrier.waitUntilEntered();
+    std::atomic<bool> completed{false};
+    std::thread stopper([&] {
+        agplayer::AudioEngineTestAccess::stopDecode(engine);
+        completed.store(true, std::memory_order_release);
+    });
+    barrier.releaseAfterPublisherAttempt();
+    const auto deadline = std::chrono::steady_clock::now()
+        + std::chrono::milliseconds(500);
+    while (!completed.load(std::memory_order_acquire)
+           && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
+    if (!completed.load(std::memory_order_acquire)) {
+        std::fprintf(stderr, "stop notification was lost at the EOF wait boundary\n");
+        std::exit(1);
+    }
+    stopper.join();
+    agplayer::AudioEngineTestAccess::setSeekWaitHook(engine, nullptr, nullptr);
+}
 
 bool waitForBufferedFrames(agplayer::AudioEngine& engine,
                            const std::size_t minimumFrames,
@@ -713,7 +838,17 @@ int main(const int argc, char** argv)
     _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
 #endif
+    if (argc == 2 && std::string(argv[1]) == "--seek-wakeup-regression") {
+        seekWaitCannotLoseCompletion();
+        return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--stop-wakeup-regression") {
+        eofWaitCannotLoseStop();
+        return 0;
+    }
     assert(argc == 3);
+    seekWaitCannotLoseCompletion();
+    eofWaitCannotLoseStop();
 
     ag_player_config config{};
     config.backend = AG_AUDIO_BACKEND_NULL;
@@ -810,9 +945,19 @@ int main(const int argc, char** argv)
     assert(snapshot.duration_ms > 0);
     const long long video_seek_target = snapshot.duration_ms / 2;
     assert(video_seek_target > 0);
+    const auto video_play_started = std::chrono::steady_clock::now();
     assert(ag_player_play(player) == AG_OK);
     assert(ag_player_seek(player, video_seek_target) == AG_OK);
     assert(ag_player_snapshot(player, &snapshot) == AG_OK);
+    if (snapshot.state != AG_PLAYING) {
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - video_play_started).count();
+        std::fprintf(stderr,
+            "video seek state=%d position=%lld duration=%lld target=%lld elapsed=%lld ms\n",
+            static_cast<int>(snapshot.state), static_cast<long long>(snapshot.position_ms),
+            static_cast<long long>(snapshot.duration_ms), video_seek_target,
+            static_cast<long long>(elapsed));
+    }
     assert(snapshot.state == AG_PLAYING);
     assert(snapshot.position_ms >= video_seek_target);
     assert(snapshot.position_ms <= snapshot.duration_ms);

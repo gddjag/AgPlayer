@@ -5,6 +5,11 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <cstddef>
+#ifdef __APPLE__
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -121,7 +126,11 @@ OrtApi api{};
 
 const OrtApi* ORT_API_CALL getApi(uint32_t version) noexcept
 {
+#ifdef __APPLE__
+    if (version != 18) return nullptr;
+#else
     if (version != ORT_API_VERSION) return nullptr;
+#endif
     api.CreateEnv = createEnv;
     api.CreateSessionOptions = createSessionOptions;
     api.SetSessionExecutionMode = okExecutionMode;
@@ -137,7 +146,22 @@ const OrtApi* ORT_API_CALL getApi(uint32_t version) noexcept
     api.ReleaseEnv = releaseEnv;
     api.ReleaseSession = releaseSession;
     api.ReleaseSessionOptions = releaseSessionOptions;
+#ifdef __APPLE__
+    // The real 1.18 table ends here. Put its end against an unreadable page:
+    // any accidental access to the v24 cancellation tail fails this test.
+    constexpr size_t prefixBytes = offsetof(OrtApi, AddExternalInitializersFromFilesInMemory)
+        + sizeof(api.AddExternalInitializersFromFilesInMemory);
+    const size_t pageBytes = static_cast<size_t>(::sysconf(_SC_PAGESIZE));
+    static void* pages = ::mmap(nullptr, pageBytes * 2, PROT_READ | PROT_WRITE,
+                               MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (pages == MAP_FAILED || prefixBytes > pageBytes) return nullptr;
+    ::mprotect(static_cast<char*>(pages) + pageBytes, pageBytes, PROT_NONE);
+    void* prefix = static_cast<char*>(pages) + pageBytes - prefixBytes;
+    std::memcpy(prefix, &api, prefixBytes);
+    return static_cast<const OrtApi*>(prefix);
+#else
     return &api;
+#endif
 }
 
 const char* ORT_API_CALL getVersion() noexcept { return "1.24.4-test"; }

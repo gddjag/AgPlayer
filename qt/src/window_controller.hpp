@@ -42,6 +42,8 @@ class WindowController final : public QObject, public QAbstractNativeEventFilter
                    listWindowWidthChanged)
     Q_PROPERTY(int listWindowHeight READ listWindowHeight WRITE setListWindowHeight NOTIFY
                    listWindowHeightChanged)
+    Q_PROPERTY(QRect mainWindowAvailableGeometry READ mainWindowAvailableGeometry
+                   NOTIFY mainWindowGeometryChanged)
 
 public:
     struct ShutdownActions {
@@ -105,7 +107,13 @@ public:
 
     Q_INVOKABLE void showMini();
     Q_INVOKABLE void showMain();
+    void restoreApplicationWindows();
     Q_INVOKABLE QRect availableGeometryForWindow(QWindow* window) const;
+    QRect mainWindowAvailableGeometry() const;
+    Q_INVOKABLE QRect startupGeometryForAvailableArea(
+        const QRect& requested, const QRect& available, bool firstRun) const;
+    Q_INVOKABLE bool restoreImmersiveWindowGeometry(QWindow* window);
+    Q_INVOKABLE void persistImmersiveWindowGeometry(QWindow* window);
     Q_INVOKABLE void toggleMainWindowGroup();
     Q_INVOKABLE void enterImmersivePresentation();
     Q_INVOKABLE void leaveImmersivePresentation();
@@ -180,6 +188,7 @@ private:
                                    bool applyClassicDefault = false);
     static QString edgeForPreference(int edge);
     void updateListWindowPosition();
+    void fitStartupDockedWindows(bool firstRun);
     QPoint computeSnappedPosition(int x, int y) const;
     QPoint computeSnapForEdge(const QString& direction) const;
     void applyPlatformWindowStyle(QWindow* window) const;

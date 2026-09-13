@@ -13,7 +13,7 @@ bool DynamicOrtRuntime::load(const QString& libraryPath)
     unload();
     if (!QFileInfo(libraryPath).isFile()) {
         errorCode_ = QStringLiteral("runtime_missing");
-        errorMessage_ = QStringLiteral("onnxruntime.dll does not exist");
+        errorMessage_ = QStringLiteral("ONNX Runtime library does not exist");
         return false;
     }
     library_.setFileName(libraryPath);
@@ -36,7 +36,7 @@ bool DynamicOrtRuntime::load(const QString& libraryPath)
     getApiBase_ = library_.resolve("OrtGetApiBase");
     if (getApiBase_ == nullptr) {
         errorCode_ = QStringLiteral("runtime_symbol_missing");
-        errorMessage_ = QStringLiteral("onnxruntime.dll does not export OrtGetApiBase");
+        errorMessage_ = QStringLiteral("ONNX Runtime library does not export OrtGetApiBase");
         library_.unload();
         return false;
     }

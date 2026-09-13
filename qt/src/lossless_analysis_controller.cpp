@@ -15,6 +15,7 @@
 #include <QPointer>
 #include <QSet>
 #include <QThreadPool>
+#include <QTimeZone>
 #include <QtConcurrentRun>
 
 #include <algorithm>
@@ -630,7 +631,8 @@ public:
                 break;
             }
             QUrl url = value.toUrl();
-            if (!url.isValid() || url.isEmpty()) {
+            if (!url.isValid() || url.isEmpty() || url.scheme().isEmpty()
+                || QDir::isAbsolutePath(value.toString())) {
                 const QString path = value.toString();
                 if (!path.trimmed().isEmpty()) url = QUrl::fromLocalFile(path);
             }
@@ -1347,7 +1349,7 @@ public:
              fromUtf8(result.parameterVersion)},
             {QStringLiteral("analysisStartedAt"), result.analysisStartedUnixMs > 0
                  ? QVariant(QDateTime::fromMSecsSinceEpoch(
-                       result.analysisStartedUnixMs, Qt::UTC).toString(Qt::ISODateWithMs))
+                       result.analysisStartedUnixMs, QTimeZone::utc()).toString(Qt::ISODateWithMs))
                  : QVariant{}},
             {QStringLiteral("taskId"),
              task.value(QStringLiteral("taskId"))},

@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <iterator>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -88,6 +89,85 @@ int main(const int argc, char** argv)
             "unsupported encoder was accepted");
     require(read_bytes(protected_output) == before,
             "failed validation changed original");
+
+    const auto require_no_temporary_files = [&] {
+        for (const auto& entry : fs::directory_iterator(input.parent_path())) {
+            require(entry.path().filename().u8string().find("writer-cancelled.wav.agplayer-")
+                        == std::string::npos,
+                    "cancelled export left a temporary file");
+        }
+    };
+    for (const auto cancellation_case : {
+             std::pair{false, 0.95F}, std::pair{true, 0.95F},
+             std::pair{false, 0.97F}, std::pair{true, 0.97F},
+             std::pair{false, 0.989F}, std::pair{true, 0.989F}}) {
+        const bool existing_target = cancellation_case.first;
+        const fs::path output = input.parent_path() / "writer-cancelled.wav";
+        fs::remove(output);
+        if (existing_target) {
+            std::ofstream stream(output, std::ios::binary);
+            stream << "original-output";
+        }
+        const auto original = read_bytes(output);
+        WriteRequest cancellation;
+        cancellation.snapshot = document.timelineSnapshot();
+        cancellation.output_path = output;
+        cancellation.range = Selection{0, 44'100};
+        cancellation.commit_mode = existing_target
+            ? OutputCommitMode::Overwrite : OutputCommitMode::CreateNoReplace;
+        std::atomic_bool cancelled{false};
+        bool rendering_complete = false;
+        bool cancellation_requested = false;
+        int progress_after_cancellation = 0;
+        const WriteResult result = writer.write(cancellation, &cancelled,
+            [&](const float progress) {
+                if (cancellation_requested) ++progress_after_cancellation;
+                // The renderer reports 1 before the encoder's 0.65..0.95 phase.
+                if (progress >= 1.0F) rendering_complete = true;
+                if (rendering_complete && progress >= cancellation_case.second
+                    && progress < 1.0F) {
+                    cancellation_requested = true;
+                    cancelled.store(true, std::memory_order_release);
+                }
+            });
+        require(cancellation_requested, "late cancellation barrier was not reached");
+        require(result.error == WriteError::Cancelled,
+                "cancellation at encoding completion still published the output");
+        require(progress_after_cancellation == 0,
+                "verification continued decoding after cancellation");
+        require(fs::exists(output) == existing_target,
+                "late cancellation changed output existence");
+        require(read_bytes(output) == original,
+                "late cancellation modified the original output");
+        require_no_temporary_files();
+        fs::remove(output);
+    }
+
+    const fs::path racing_output = input.parent_path() / "writer-racing.wav";
+    fs::remove(racing_output);
+    WriteRequest racing;
+    racing.snapshot = document.timelineSnapshot();
+    racing.output_path = racing_output;
+    racing.range = Selection{0, 44'100};
+    bool competitor_created = false;
+    const WriteResult conflict = writer.write(racing, nullptr,
+        [&](const float progress) {
+            if (competitor_created || progress <= 0.0F) return;
+            std::ofstream stream(racing_output, std::ios::binary);
+            stream << "foreign-owner";
+            competitor_created = true;
+        });
+    require(competitor_created, "competing output was not created");
+    require(conflict.error == WriteError::CommitFailed,
+            "new-file export replaced a competing destination");
+    const auto competing_bytes = read_bytes(racing_output);
+    require(std::string(competing_bytes.begin(), competing_bytes.end()) == "foreign-owner",
+            "new-file export changed the competing destination");
+    racing.commit_mode = OutputCommitMode::Overwrite;
+    require(writer.write(racing).ok(), "explicit overwrite failed");
+    require(decoded_frames(racing_output, metadata.sample_rate, metadata.channels)
+                == 44'100, "explicit overwrite did not publish the requested audio");
+    fs::remove(racing_output);
 
     const fs::path selection_output = input.parent_path() / "writer-selection.wav";
     fs::remove(selection_output);

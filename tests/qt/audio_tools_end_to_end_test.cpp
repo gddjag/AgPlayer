@@ -33,6 +33,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 namespace {
 
@@ -93,6 +94,8 @@ private slots:
     void formatConverterConfirmedPlanUsesAutoNumberOutputPath();
     void formatConverterConfirmedPlanDoesNotRenumberAfterPreview();
     void formatConverterCreateCommitNeverReplacesExistingFile();
+    void formatConverterCreateCommitPublishesCompleteOutput();
+    void formatConverterCreateCommitWorksWithoutHardLinks();
     void formatConverterCreateActionRejectsPublishRace();
     void formatConverterConfirmedPlanPreservesSkipAction();
     void formatConverterConfirmedPlanUsesFrozenQuality();
@@ -1010,6 +1013,61 @@ void AudioToolsEndToEndTest::
     QFile foreign(target);
     QVERIFY(foreign.open(QIODevice::ReadOnly));
     QCOMPARE(foreign.readAll(), QByteArrayLiteral("foreign-owner"));
+}
+
+void AudioToolsEndToEndTest::formatConverterCreateCommitPublishesCompleteOutput()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString staged = temp.filePath(QStringLiteral("staged.flac"));
+    const QString target = temp.filePath(QStringLiteral("target.flac"));
+    QFile stagedFile(staged);
+    QVERIFY(stagedFile.open(QIODevice::WriteOnly));
+    QCOMPARE(stagedFile.write("converted-output"), qint64{16});
+    stagedFile.close();
+    QVERIFY(format_converter_detail::commit_staged_output(
+        staged, target, format_converter_detail::OutputCommitMode::CreateNoReplace));
+    QVERIFY(!QFileInfo::exists(staged));
+    QFile output(target);
+    QVERIFY(output.open(QIODevice::ReadOnly));
+    QCOMPARE(output.readAll(), QByteArrayLiteral("converted-output"));
+}
+
+void AudioToolsEndToEndTest::formatConverterCreateCommitWorksWithoutHardLinks()
+{
+    // Point this at a writable exFAT/FAT32 volume for the real filesystem check.
+    const QString root = qEnvironmentVariable("AGPLAYER_TEST_NO_HARDLINK_DIR");
+    if (root.isEmpty()) QSKIP("no filesystem without hard-link support configured");
+    QTemporaryDir temp(QDir(root).filePath(QStringLiteral("agplayer-commit-XXXXXX")));
+    QVERIFY(temp.isValid());
+    const QString staged = temp.filePath(QStringLiteral("staged.flac"));
+    const QString target = temp.filePath(QStringLiteral("target.flac"));
+    QFile stagedFile(staged);
+    QVERIFY(stagedFile.open(QIODevice::WriteOnly));
+    QCOMPARE(stagedFile.write("converted-output"), qint64{16});
+    stagedFile.close();
+    std::error_code linkError;
+    std::filesystem::create_hard_link(
+        std::filesystem::u8path(staged.toUtf8().constData()),
+        std::filesystem::u8path(temp.filePath(QStringLiteral("link-probe"))
+                                   .toUtf8().constData()), linkError);
+    QVERIFY2(bool(linkError), "configured volume supports hard links");
+    QVERIFY(format_converter_detail::commit_staged_output(
+        staged, target, format_converter_detail::OutputCommitMode::CreateNoReplace));
+    QVERIFY(!QFileInfo::exists(staged));
+    QFile output(target);
+    QVERIFY(output.open(QIODevice::ReadOnly));
+    QCOMPARE(output.readAll(), QByteArrayLiteral("converted-output"));
+    output.close();
+
+    QVERIFY(stagedFile.open(QIODevice::WriteOnly));
+    QCOMPARE(stagedFile.write("competing-output"), qint64{16});
+    stagedFile.close();
+    QVERIFY(!format_converter_detail::commit_staged_output(
+        staged, target, format_converter_detail::OutputCommitMode::CreateNoReplace));
+    QVERIFY(QFileInfo::exists(staged));
+    QVERIFY(output.open(QIODevice::ReadOnly));
+    QCOMPARE(output.readAll(), QByteArrayLiteral("converted-output"));
 }
 
 void AudioToolsEndToEndTest::formatConverterConfirmedPlanPreservesSkipAction()

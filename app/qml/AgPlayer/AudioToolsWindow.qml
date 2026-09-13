@@ -7,11 +7,13 @@ Window {
     id: window
     objectName: "audioToolsWindow"
     visible: false
-    // Reference workbench baseline. Layouts still contract below this size.
-    width: 1672
-    height: 941
-    minimumWidth: 880
-    minimumHeight: 560
+    readonly property rect availableWorkArea: WindowController.availableGeometryForWindow(window)
+    readonly property rect initialGeometry: WindowController.startupGeometryForAvailableArea(
+        Qt.rect(0, 0, 1672, 941), availableWorkArea, true)
+    width: initialGeometry.width
+    height: initialGeometry.height
+    minimumWidth: Math.min(760, initialGeometry.width)
+    minimumHeight: Math.min(420, initialGeometry.height)
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
     title: qsTr("AgPlayer · 音频工具")
@@ -117,8 +119,7 @@ Window {
         onAccepted: {
             WindowController.hideAudioTools()
         }
-        Label {
-            width: Math.min(420, window.width - 2 * Theme.spacing2Xl)
+        contentItem: Label {
             text: qsTr("当前音频尚未保存。关闭窗口将舍弃这些更改。")
             color: Theme.primaryText
             font.family: Theme.fontPrimary
@@ -147,6 +148,26 @@ Window {
                 Layout.maximumHeight: Layout.minimumHeight
                 color: Theme.titleBarSurface
 
+                Row {
+                    visible: Qt.platform.os === "osx"
+                    anchors.centerIn: parent
+                    spacing: Theme.spacingSm
+                    Image {
+                        width: Theme.controlHeightCompact
+                        height: width
+                        source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                        fillMode: Image.PreserveAspectFit
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: qsTr("AgPlayer · 音频工具")
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeSection
+                        font.weight: Font.Medium
+                    }
+                }
+
                 RowLayout {
                     z: 1
                     anchors.fill: parent
@@ -154,8 +175,15 @@ Window {
                     anchors.rightMargin: Theme.spacingSm
                     spacing: Theme.spacingMd
 
+                    ThemedMacWindowControls {
+                        id: macWindowControls
+                        targetWindow: window
+                        onCloseRequested: window.requestHide()
+                    }
+
                     Item {
                         objectName: "audioToolsLogo"
+                        visible: Qt.platform.os !== "osx"
                         Layout.preferredWidth: Theme.controlHeightCompact
                         Layout.preferredHeight: Theme.controlHeightCompact
                         Image {
@@ -168,6 +196,7 @@ Window {
                     }
                     Text {
                         objectName: "audioToolsWindowTitle"
+                        visible: Qt.platform.os !== "osx"
                         text: qsTr("AgPlayer · 音频工具")
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary
@@ -179,6 +208,7 @@ Window {
 
                     ThemedIconButton {
                         objectName: "audioToolsMinimizeButton"
+                        visible: Qt.platform.os !== "osx"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: Theme.navigationActionExtent
@@ -190,6 +220,7 @@ Window {
                     }
                     ThemedIconButton {
                         objectName: "audioToolsMaximizeButton"
+                        visible: Qt.platform.os !== "osx"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: Theme.navigationActionExtent
@@ -205,6 +236,7 @@ Window {
                     }
                     ThemedIconButton {
                         objectName: "audioToolsCloseButton"
+                        visible: Qt.platform.os !== "osx"
                         focusPolicy: Qt.NoFocus
                         Keys.onSpacePressed: function(event) { event.accepted = true }
                         Layout.preferredWidth: Theme.navigationActionExtent
@@ -226,8 +258,10 @@ Window {
                     // Leave the complete three-button hit region to the
                     // controls: 3 button extents, 2 RowLayout gaps, and the
                     // title row's trailing margin.
-                    anchors.rightMargin: 3 * Theme.navigationActionExtent
-                        + 2 * Theme.spacingMd + Theme.spacingSm
+                    anchors.leftMargin: Qt.platform.os === "osx"
+                        ? Theme.spacingXl + macWindowControls.width : 0
+                    anchors.rightMargin: Qt.platform.os === "osx" ? 0
+                        : 3 * Theme.navigationActionExtent + 2 * Theme.spacingMd + Theme.spacingSm
                     z: 2
                     acceptedButtons: Qt.LeftButton
                     onPressed: function(mouse) {
@@ -318,5 +352,7 @@ Window {
     WindowResizeHandles {
         objectName: "audioToolsResizeHandles"
         targetWindow: window
+        enabled: window.visibility !== Window.Maximized
+                 && window.visibility !== Window.FullScreen
     }
 }

@@ -2,6 +2,7 @@
 #include "metadata_text.hpp"
 
 #include <QRegularExpression>
+#include <QStringConverter>
 
 #include <algorithm>
 
@@ -62,12 +63,11 @@ void LyricsLineModel::clear() { setLines({}); }
 int LyricsLineModel::activeIndex(const qint64 positionMs, const qint64 offsetMs) const
 {
     const qint64 effectivePosition = positionMs - offsetMs;
-    int result = -1;
-    for (int index = 0; index < lines_.size(); ++index) {
-        if (lines_.at(index).timeMs > effectivePosition) break;
-        result = index;
-    }
-    return result;
+    const auto next = std::upper_bound(lines_.cbegin(), lines_.cend(),
+        effectivePosition, [](qint64 position, const LyricsLine& line) {
+            return position < line.timeMs;
+        });
+    return static_cast<int>(std::distance(lines_.cbegin(), next)) - 1;
 }
 
 QString LyricsLineModel::lineAt(const qint64 positionMs, const qint64 offsetMs) const
@@ -92,7 +92,14 @@ QString LyricsLineModel::nextLine(const qint64 positionMs, const qint64 offsetMs
 LyricsDocument LyricsLineModel::parseLrc(const QByteArray& contents)
 {
     LyricsDocument document;
-    QString text = agplayer::qt::decodeMetadataText(contents.constData());
+    // A metadata C string stops at UTF-16/32's first zero byte. Detect the
+    // Unicode BOM and decode the complete byte array before the legacy fallback.
+    const auto encoding = QStringConverter::encodingForData(contents);
+    QStringDecoder decoder(encoding.value_or(QStringConverter::Utf8),
+                           QStringConverter::Flag::Stateless);
+    QString text = decoder.decode(contents);
+    if (!encoding && decoder.hasError())
+        text = agplayer::qt::decodeMetadataText(contents.constData());
     if (!text.isEmpty() && text.front() == QChar::ByteOrderMark) text.remove(0, 1);
 
     QStringList untimed;

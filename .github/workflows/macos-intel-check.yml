@@ -1,0 +1,67 @@
+name: macOS existing-package Intel check
+
+# Recheck the immutable candidate without rebuilding the application.
+on:
+  push:
+    branches: [codex/macos-universal]
+    paths: ['.github/workflows/macos-intel-check.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  intel-launch:
+    runs-on: macos-14
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-universal-development
+          path: package
+          repository: ${{ github.repository }}
+          run-id: 34715503391 # source 15a3259997bacca5e5a07ca8184390cde443fe26
+          github-token: ${{ github.token }}
+      - name: Validate and launch the existing Universal package on Intel
+        shell: bash
+        run: |
+          uname -a
+          dmg_path="$(find package -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$dmg_path"
+          mount_path="$RUNNER_TEMP/agplayer-dmg"
+          mkdir -p "$mount_path"
+          hdiutil attach "$dmg_path" -readonly -nobrowse -mountpoint "$mount_path"
+          trap 'hdiutil detach "$mount_path"' EXIT
+          app_path="$mount_path/AgPlayer.app"
+          signature_log="$RUNNER_TEMP/agplayer-signatures.log"
+          {
+            echo "App signature"
+            codesign --display --verbose=4 "$app_path"
+            echo "Main executable entitlements"
+            codesign --display --entitlements :- "$app_path/Contents/MacOS/AgPlayer"
+            echo "Nested native code signatures"
+            find "$app_path/Contents" -type f -print0 | while IFS= read -r -d '' candidate; do
+              if file -b "$candidate" | grep -q 'Mach-O'; then
+                echo "TARGET=${candidate#"$app_path"/}"
+                codesign --display --verbose=4 "$candidate"
+              fi
+            done
+          } >"$signature_log" 2>&1
+          cat "$signature_log"
+          lipo "$app_path/Contents/MacOS/AgPlayer" -verify_arch x86_64 arm64
+          codesign --verify --deep --strict "$app_path"
+          rm -rf /Applications/AgPlayer.app
+          ditto "$app_path" /Applications/AgPlayer.app
+          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+            /Applications/AgPlayer.app/Contents/MacOS/AgPlayer --qa-test-mode \
+            --qa-log "$RUNNER_TEMP/agplayer-intel.log" --qa-exit-after-ms 3000
+      - name: Save Intel launch evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel-launch-log
+          path: |
+            ${{ runner.temp }}/agplayer-intel.log
+            ${{ runner.temp }}/agplayer-signatures.log
+          retention-days: 7

@@ -12,10 +12,15 @@ ApplicationWindow {
     visible: true
     width: 863
     height: 266
-    minimumWidth: WindowController.mainWindowShellMode === 1
-                  || WindowController.mainWindowShellMode === 2 ? 1180 : 612
-    minimumHeight: WindowController.mainWindowShellMode === 1 ? 720
-                   : WindowController.mainWindowShellMode === 2 ? 720 : 232
+    readonly property rect defaultWindowBounds:
+        WindowController.startupGeometryForAvailableArea(
+            WindowController.mainWindowAvailableGeometry,
+            WindowController.mainWindowAvailableGeometry, true)
+    minimumWidth: Math.min(defaultWindowBounds.width,
+        WindowController.mainWindowShellMode === 1
+        || WindowController.mainWindowShellMode === 2 ? 1180 : 612)
+    minimumHeight: Math.min(defaultWindowBounds.height,
+        WindowController.mainWindowShellMode === 0 ? 232 : 720)
     onClosing: function(close) {
         close.accepted = false
         WindowController.requestClose()
@@ -43,10 +48,14 @@ ApplicationWindow {
     property int positionMs: playback ? playback.positionMs : 0
     property bool playFirstDroppedTrack: false
     property string tagSearchText: ""
-    property int integratedSidePanelPage: 0
-    property bool integratedSidePanelExpanded: true
-    property int rollingSidePanelPage: 0
-    property bool rollingSidePanelExpanded: true
+    property int integratedSidePanelPage: PlayerExperienceController.integratedSidePanelPage
+    property bool integratedSidePanelExpanded: PlayerExperienceController.integratedSidePanelExpanded
+    property int rollingSidePanelPage: PlayerExperienceController.rollingSidePanelPage
+    property bool rollingSidePanelExpanded: PlayerExperienceController.rollingSidePanelExpanded
+    onIntegratedSidePanelPageChanged: PlayerExperienceController.integratedSidePanelPage = integratedSidePanelPage
+    onIntegratedSidePanelExpandedChanged: PlayerExperienceController.integratedSidePanelExpanded = integratedSidePanelExpanded
+    onRollingSidePanelPageChanged: PlayerExperienceController.rollingSidePanelPage = rollingSidePanelPage
+    onRollingSidePanelExpandedChanged: PlayerExperienceController.rollingSidePanelExpanded = rollingSidePanelExpanded
     property bool immersiveRenderingEnabled: true
     property string themeRotationTrackId: ""
     property int previousShellMode: SettingsController.playerShellMode
@@ -422,12 +431,6 @@ ApplicationWindow {
         onLoaded: {
             if (item && item.tagSearchText !== undefined)
                 item.tagSearchText = mainWindow.tagSearchText
-            if (PlayerExperienceController.lyricsVisible) {
-                if (mainWindow.rollingShell)
-                    mainWindow.showRollingLyricsPanel()
-                else if (mainWindow.integratedShell)
-                    mainWindow.showIntegratedLyricsPanel()
-            }
         }
     }
 
@@ -884,19 +887,32 @@ ApplicationWindow {
     }
 
     Shortcut {
-        sequence: SettingsController.hkSearch
+        objectName: "searchShortcut"
+        sequence: SettingsController.hkSearch.replace(/\s*\+\s*/g, "+").trim()
         context: Qt.ApplicationShortcut
         onActivated: WindowController.activateSearch()
     }
 
+    Connections {
+        target: WindowController
+        enabled: mainWindow.integratedShell || mainWindow.rollingShell
+        function onSearchRequested() {
+            if (shellLoader.item)
+                shellLoader.item.focusSearch()
+        }
+    }
+
     Shortcut {
-        sequence: SettingsController.hkWaveformMode
+        objectName: "waveformModeShortcut"
+        sequence: SettingsController.hkWaveformMode.replace(/\s*\+\s*/g, "+").trim()
         context: Qt.ApplicationShortcut
+        enabled: !mainWindow.editingText() && !WindowController.audioToolsVisible
         onActivated: SettingsController.cycleWaveformMode()
     }
 
     Shortcut {
-        sequence: SettingsController.hkAudioTools
+        objectName: "audioToolsShortcut"
+        sequence: SettingsController.hkAudioTools.replace(/\s*\+\s*/g, "+").trim()
         context: Qt.ApplicationShortcut
         onActivated: WindowController.showAudioTools()
     }

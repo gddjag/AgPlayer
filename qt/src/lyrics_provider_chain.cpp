@@ -96,7 +96,8 @@ void LyricsProviderChain::advance(const quint64 requestId)
 
         RouteHealth& health = health_[routeIndex];
         const qint64 now = clockMs();
-        if (health.blockedUntilMs > now) {
+        if (health.blockedUntilMs > now
+            && (!pending.track.forceRefresh || health.rateLimitedUntilMs > now)) {
             appendAttempt(pending, route, QStringLiteral("circuit-open"), 0,
                           health.blockedUntilMs - now);
             pending.encounteredUnavailableRoute = true;
@@ -156,6 +157,7 @@ void LyricsProviderChain::handleProviderFinished(const quint64 internalId, const
     const auto resetHealth = [&health] {
         health.consecutiveTechnicalFailures = 0;
         health.blockedUntilMs = 0;
+        health.rateLimitedUntilMs = 0;
     };
 
     if (result.kind == Result::Found) {
@@ -208,8 +210,9 @@ void LyricsProviderChain::handleProviderFinished(const quint64 internalId, const
         const RouteAttempt failedAttempt = pending.attempts.constLast();
         appendProviderAttempts();
         pending.encounteredUnavailableRoute = true;
+        health.rateLimitedUntilMs = clockMs() + std::max<qint64>(0, result.retryAfterMs);
         health.blockedUntilMs = std::max(health.blockedUntilMs,
-                                         clockMs() + std::max<qint64>(0, result.retryAfterMs));
+                                         health.rateLimitedUntilMs);
         emit routeFailed(requestId, failedAttempt);
         if (pending_.contains(requestId)) advance(requestId);
         return;
