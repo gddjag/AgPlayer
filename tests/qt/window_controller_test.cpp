@@ -514,10 +514,11 @@ void WindowControllerTest::immersivePresentationFirstRunGeometryPersistsAfterLat
     QVERIFY(!settings.contains(QStringLiteral("windows/integratedMainGeometry")));
 
     mainWindow.setGeometry(userGeometry);
-    QTest::qWait(300);
-    settings.sync();
-    QCOMPARE(settings.value(QStringLiteral("windows/integratedMainGeometry")).toRect(),
-             userGeometry);
+    // Persisting is debounced; wait for the exact saved rectangle rather than
+    // assuming the host dispatches the 250 ms timer within a fixed 300 ms sleep.
+    QTRY_COMPARE_WITH_TIMEOUT(
+        (settings.sync(), settings.value(QStringLiteral("windows/integratedMainGeometry")).toRect()),
+        userGeometry, 3000);
 }
 
 void WindowControllerTest::immersivePresentationDefersClassicShellRequestWithoutOverwritingIntegratedGeometry()
@@ -554,10 +555,9 @@ void WindowControllerTest::immersivePresentationDefersClassicShellRequestWithout
                  activeIntegratedGeometry);
 
         mainWindow.setGeometry(userClassicGeometry);
-        QTest::qWait(300);
-        settings.sync();
-        QCOMPARE(settings.value(QStringLiteral("windows/mainGeometry")).toRect(),
-                 userClassicGeometry);
+        QTRY_COMPARE_WITH_TIMEOUT(
+            (settings.sync(), settings.value(QStringLiteral("windows/mainGeometry")).toRect()),
+            userClassicGeometry, 3000);
         QCOMPARE(settings.value(
                      QStringLiteral("windows/integratedMainGeometry")).toRect(),
                  activeIntegratedGeometry);
