@@ -29,15 +29,34 @@ jobs:
           test "$(uname -m)" = x86_64
           ditto -x -k package/AgPlayer-universal-test.zip "$RUNNER_TEMP/agplayer-test"
           app_path="$RUNNER_TEMP/agplayer-test/AgPlayer.app"
+          signature_log="$RUNNER_TEMP/agplayer-signatures.log"
+          {
+            echo "App signature"
+            codesign --display --verbose=4 "$app_path"
+            echo "Main executable entitlements"
+            codesign --display --entitlements :- "$app_path/Contents/MacOS/AgPlayer"
+            echo "Nested native code signatures"
+            find "$app_path/Contents" -type f -print0 | while IFS= read -r -d '' candidate; do
+              if file -b "$candidate" | grep -q 'Mach-O'; then
+                echo "TARGET=${candidate#"$app_path"/}"
+                codesign --display --verbose=4 "$candidate"
+              fi
+            done
+          } >"$signature_log" 2>&1
+          cat "$signature_log"
           lipo "$app_path/Contents/MacOS/AgPlayer" -verify_arch x86_64 arm64
           codesign --verify --deep --strict "$app_path"
+          rm -rf /Applications/AgPlayer.app
+          ditto "$app_path" /Applications/AgPlayer.app
           QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
-            "$app_path/Contents/MacOS/AgPlayer" --qa-test-mode \
+            /Applications/AgPlayer.app/Contents/MacOS/AgPlayer --qa-test-mode \
             --qa-log "$RUNNER_TEMP/agplayer-intel.log" --qa-exit-after-ms 3000
       - name: Save Intel launch evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: macos-intel-launch-log
-          path: ${{ runner.temp }}/agplayer-intel.log
+          path: |
+            ${{ runner.temp }}/agplayer-intel.log
+            ${{ runner.temp }}/agplayer-signatures.log
           retention-days: 7
