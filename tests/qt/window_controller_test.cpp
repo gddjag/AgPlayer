@@ -622,7 +622,10 @@ void WindowControllerTest::shellSwitchKeepsSecondaryScreenAndUserSizes()
             if (screen->geometry().x() < 0 || screen->geometry().y() < 0) break;
         }
     }
-    if (secondary == nullptr) QSKIP("requires a secondary screen");
+    if (secondary == nullptr) {
+        QTest::qSkip("requires a secondary screen", __FILE__, __LINE__);
+        return;
+    }
     const QRect area = secondary->availableGeometry();
     const QPoint anchor = area.topLeft() + QPoint(20, 20);
     const QSize classicSize = QSize(700, 320).boundedTo(area.size() - QSize(40, 40));

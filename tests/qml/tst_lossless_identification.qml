@@ -153,7 +153,7 @@ TestCase {
         locateSpy.clear()
     }
 
-    function test_nativeFileSelectionSurvivesDialogDestruction() {
+    function test_selectedFileSnapshotSurvivesSourceMutation() {
         const selected = [testAudioUrl]
         page.importSelectedFiles(selected)
         selected.length = 0
