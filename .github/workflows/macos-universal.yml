@@ -1,4 +1,4 @@
-name: macOS Universal development build
+name: macOS Universal internal test build
 
 # Development artifacts only. Formal publication is separately authorized
 # after the user's manual acceptance, via the requested release branch.
