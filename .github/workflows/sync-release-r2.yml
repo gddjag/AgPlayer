@@ -1,13 +1,12 @@
-name: Sync release Windows and macOS installer to R2
+name: Repair legacy macOS update manifest v1.0.3
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Published release tag, for example v1.0.0'
+        description: 'Only the already published v1.0.3 manifest is accepted'
         required: true
+        default: v1.0.3
         type: string
 
 permissions:
@@ -18,25 +17,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  sync:
+  repair:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Validate release sync logic
-        run: node --test scripts/sync-release-r2.test.mjs
-      - name: Download and verify published Windows and macOS installer assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
-        run: node scripts/sync-release-r2.mjs download
-      - name: Upload Windows and macOS installer assets, checksums, and latest metadata
+      - name: Validate manifest-only repair
+        run: node --test scripts/repair-macos-update-endpoint.test.mjs
+      - name: Copy and verify the already published manifest
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -44,7 +38,5 @@ jobs:
           AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
           AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
           AWS_EC2_METADATA_DISABLED: 'true'
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
-        run: |
-          aws --version
-          node scripts/sync-release-r2.mjs upload
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: node scripts/repair-macos-update-endpoint.mjs
