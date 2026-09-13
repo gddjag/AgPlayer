@@ -90,7 +90,10 @@ void NativeDropRouterTest::receivesQtUrlDropEvents()
 
     QSignalSpy dropped(&router, &NativeDropRouter::pathsDropped);
     QMimeData mime;
-    mime.setUrls({QUrl::fromLocalFile(QStringLiteral("C:/音乐/Qt 拖放.flac"))});
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("音乐 Qt 拖放.flac"));
+    mime.setUrls({QUrl::fromLocalFile(path)});
     QDragEnterEvent enter(QPoint(100, 60), Qt::CopyAction, &mime,
                           Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(&window, &enter);
@@ -107,7 +110,7 @@ void NativeDropRouterTest::receivesQtUrlDropEvents()
     QCOMPARE(dropped.front().at(0).value<NativeDropRouter::Target>(),
              target);
     QCOMPARE(dropped.front().at(1).toStringList(),
-             QStringList({QStringLiteral("C:/音乐/Qt 拖放.flac")}));
+             QStringList({path}));
 }
 
 void NativeDropRouterTest::leavesQtDirectoryDropsForQmlHitTesting()
@@ -148,7 +151,10 @@ void NativeDropRouterTest::routesQtAudioDropsToResourceHitTarget()
 
     QSignalSpy dropped(&router, &NativeDropRouter::pathsDropped);
     QMimeData mime;
-    mime.setUrls({QUrl::fromLocalFile(QStringLiteral("C:/音乐/资源区音频.flac"))});
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("音乐 资源区音频.flac"));
+    mime.setUrls({QUrl::fromLocalFile(path)});
     QDragEnterEvent enter(QPoint(40, 40), Qt::CopyAction, &mime,
                           Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(&window, &enter);
@@ -162,7 +168,7 @@ void NativeDropRouterTest::routesQtAudioDropsToResourceHitTarget()
     QCOMPARE(dropped.front().at(0).value<NativeDropRouter::Target>(),
              NativeDropRouter::Target::ResourceFolder);
     QCOMPARE(dropped.front().at(1).toStringList(),
-             QStringList({QStringLiteral("C:/音乐/资源区音频.flac")}));
+             QStringList({path}));
 }
 
 #ifdef Q_OS_WIN
