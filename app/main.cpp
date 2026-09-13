@@ -1018,6 +1018,12 @@ int main(int argc, char* argv[])
             autoReadBpmFlag->store(settings.autoReadBpm(), std::memory_order_relaxed);
         });
         WindowController windows;
+#ifdef Q_OS_MACOS
+        QObject::connect(&app, &QGuiApplication::applicationStateChanged,
+                         &windows, [&windows](Qt::ApplicationState state) {
+            if (state == Qt::ApplicationActive) windows.restoreApplicationWindows();
+        });
+#endif
         NativeDropRouter nativeDrops;
         windows.setMagneticSnapEnabled(settings.windowMagneticSnap());
         windows.setPreferredDockEdge(settings.listWindowPosition());

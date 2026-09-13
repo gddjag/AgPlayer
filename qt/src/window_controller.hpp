@@ -105,6 +105,7 @@ public:
 
     Q_INVOKABLE void showMini();
     Q_INVOKABLE void showMain();
+    void restoreApplicationWindows();
     Q_INVOKABLE QRect availableGeometryForWindow(QWindow* window) const;
     Q_INVOKABLE void toggleMainWindowGroup();
     Q_INVOKABLE void enterImmersivePresentation();

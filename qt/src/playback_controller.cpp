@@ -15,6 +15,10 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
+#ifdef Q_OS_MACOS
+#include <QGuiApplication>
+#include <QWindow>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -2067,6 +2071,17 @@ void PlaybackController::pollSpectrum()
     if (player_ == nullptr) {
         return;
     }
+#ifdef Q_OS_MACOS
+    if (qobject_cast<QGuiApplication*>(QCoreApplication::instance())) {
+        const auto windows = QGuiApplication::allWindows();
+        // Minimized/hidden players still play audio; no spectrum consumer needs
+        // a fresh QVariantList until a window is exposed again.
+        if (!windows.isEmpty() && std::none_of(windows.cbegin(), windows.cend(),
+                [](const QWindow* window) { return window->isExposed(); })) {
+            return;
+        }
+    }
+#endif
     std::array<float, 128U> bins{};
     if (ag_player_spectrum(player_, bins.data(), bins.size()) != AG_OK) {
         return;

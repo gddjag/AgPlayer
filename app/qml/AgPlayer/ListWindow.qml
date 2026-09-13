@@ -21,7 +21,10 @@ Window {
     width: 960
     height: defaultListHeight
     readonly property int pageMinimumWidth: 956
-    minimumWidth: pageMinimumWidth
+    // Cocoa enforces minimumWidth even on controller-driven resize().
+    minimumWidth: Qt.platform.os === "osx" && !WindowController.listWindowDetached
+                  ? Math.min(pageMinimumWidth, WindowController.mainWindowGeometry.width)
+                  : pageMinimumWidth
     minimumHeight: 320
     flags: Qt.FramelessWindowHint
     color: "transparent"

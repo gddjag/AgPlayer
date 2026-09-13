@@ -262,6 +262,16 @@ class LosslessAnalysisControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void importsNativeDialogUrlStringsAndLocalPaths()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString path = writeFile(directory, QString::fromUtf8("中文 空格 #100%.wav"));
+        LosslessAnalysisController controller;
+        controller.loadFiles({QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded), path});
+        QTRY_COMPARE_WITH_TIMEOUT(controller.totalCount(), 1, 3000);
+        QVERIFY2(controller.error().isEmpty(), qPrintable(controller.error()));
+    }
     void taskModelExposesTheUiContractRoles();
     void controllerExposesCompleteEmptyResultContract();
     void discoversRecursivelyDeduplicatesAndHonorsPendingStart();

@@ -230,16 +230,16 @@ public:
         return enter.isAccepted() && drop.isAccepted();
     }
 
-    Q_INVOKABLE bool sendKey(QObject* target, int key)
+    Q_INVOKABLE bool sendKey(QObject* target, int key, int modifiers = Qt::NoModifier)
     {
         auto* item = qobject_cast<QQuickItem*>(target);
         QWindow* window = item == nullptr ? qobject_cast<QWindow*>(target)
                                            : item->window();
         if (window == nullptr) return false;
 
-        QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier);
+        QKeyEvent press(QEvent::KeyPress, key, Qt::KeyboardModifiers(modifiers));
         QCoreApplication::sendEvent(window, &press);
-        QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+        QKeyEvent release(QEvent::KeyRelease, key, Qt::KeyboardModifiers(modifiers));
         QCoreApplication::sendEvent(window, &release);
         return true;
     }

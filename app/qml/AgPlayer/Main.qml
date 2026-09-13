@@ -884,19 +884,23 @@ ApplicationWindow {
     }
 
     Shortcut {
-        sequence: SettingsController.hkSearch
+        objectName: "searchShortcut"
+        sequence: SettingsController.hkSearch.replace(/\s*\+\s*/g, "+").trim()
         context: Qt.ApplicationShortcut
         onActivated: WindowController.activateSearch()
     }
 
     Shortcut {
-        sequence: SettingsController.hkWaveformMode
+        objectName: "waveformModeShortcut"
+        sequence: SettingsController.hkWaveformMode.replace(/\s*\+\s*/g, "+").trim()
         context: Qt.ApplicationShortcut
+        enabled: !mainWindow.editingText() && !WindowController.audioToolsVisible
         onActivated: SettingsController.cycleWaveformMode()
     }
 
     Shortcut {
-        sequence: SettingsController.hkAudioTools
+        objectName: "audioToolsShortcut"
+        sequence: SettingsController.hkAudioTools.replace(/\s*\+\s*/g, "+").trim()
         context: Qt.ApplicationShortcut
         onActivated: WindowController.showAudioTools()
     }

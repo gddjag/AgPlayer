@@ -1,4 +1,4 @@
-﻿#include "window_controller.hpp"
+#include "window_controller.hpp"
 
 #include <QCoreApplication>
 #include <QEvent>
@@ -38,6 +38,11 @@ bool isMinimized(const QWindow* window)
 bool isMaximized(const QWindow* window)
 {
     return window != nullptr && window->windowState() == Qt::WindowMaximized;
+}
+
+bool isFullScreen(const QWindow* window)
+{
+    return window != nullptr && window->windowState() == Qt::WindowFullScreen;
 }
 
 bool supportsWindowStacking()
@@ -172,12 +177,10 @@ void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
         mainWindow_->installEventFilter(this);
         connect(mainWindow_, &QWindow::windowStateChanged, this,
                 [this](const Qt::WindowState state) {
-                    const bool visible = listWindowPanelAllowed_
-                        && listWindowRequestedVisible_ && mainVisible_
-                        && state != Qt::WindowMinimized
-                        && (listWindowDetached_
-                            || state != Qt::WindowMaximized);
-                    applyListWindowVisible(visible);
+                    Q_UNUSED(state);
+                    applyListWindowVisible(shouldShowListWindow());
+                    // Cocoa finishes restoring normal geometry after the state signal.
+                    QTimer::singleShot(0, this, [this] { repositionDockedListWindow(); });
                 });
         applyPlatformWindowStyle(mainWindow_);
         mainWindow_->setVisible(mainVisible_);
@@ -698,6 +701,20 @@ void WindowController::showMain()
     pendingView_ = PendingView::None;
 }
 
+void WindowController::restoreApplicationWindows()
+{
+    // Qt Cocoa repeats ApplicationActive for Dock reopen requests.
+    if (miniVisible_ && miniWindow_ != nullptr) {
+        if (isMinimized(miniWindow_) || !miniWindow_->isVisible()) {
+            miniWindow_->showNormal();
+            miniWindow_->requestActivate();
+        }
+    } else if (!immersivePresentationActive_ && mainWindow_ != nullptr
+               && (isMinimized(mainWindow_) || !mainWindow_->isVisible())) {
+        showMain();
+    }
+}
+
 void WindowController::enterImmersivePresentation()
 {
     if (immersivePresentationActive_) {
@@ -813,7 +830,7 @@ bool WindowController::shouldShowListWindow() const
     return mainWindowShellMode_ == 0
         && listWindowPanelAllowed_ && listWindowRequestedVisible_ && mainVisible_
         && !isMinimized(mainWindow_)
-        && (listWindowDetached_ || !isMaximized(mainWindow_));
+        && (listWindowDetached_ || (!isMaximized(mainWindow_) && !isFullScreen(mainWindow_)));
 }
 
 void WindowController::setAlwaysOnTop(bool alwaysOnTop)
@@ -986,7 +1003,7 @@ void WindowController::applyListWindowVisible(bool visible)
         return;
     }
     if (listWindow_ != nullptr) {
-        if (visible && !listWindowGeometryInitialized_) {
+        if (visible) {
             if (!listWindowDetached_) {
                 repositionDockedListWindow();
             }
@@ -1017,7 +1034,7 @@ void WindowController::repositionDockedListWindow()
     if (listWindow_ == nullptr || mainWindow_ == nullptr || listWindowDetached_) {
         return;
     }
-    if (isMaximized(mainWindow_)) {
+    if (isMaximized(mainWindow_) || isFullScreen(mainWindow_)) {
         applyListWindowVisible(false);
         return;
     }
@@ -1476,8 +1493,9 @@ void WindowController::flushWindowState()
 {
     windowStateSyncTimer_.stop();
     if (!immersivePresentationActive_) {
-        if (immersiveRestoreMainGeometryWasPersisted_
-            || mainWindowGeometryKey() != immersiveRestoreMainGeometryKey_) {
+        if (!isMinimized(mainWindow_) && !isMaximized(mainWindow_)
+            && !isFullScreen(mainWindow_) && (immersiveRestoreMainGeometryWasPersisted_
+            || mainWindowGeometryKey() != immersiveRestoreMainGeometryKey_)) {
             persistGeometry(mainWindow_, mainWindowGeometryKey());
         }
         if (immersiveRestoreMiniGeometryWasPersisted_) {
@@ -1772,12 +1790,7 @@ bool WindowController::eventFilter(QObject* watched, QEvent* event)
             emit mainWindowGeometryChanged();
         } else if (event->type() == QEvent::WindowStateChange) {
             applyPlatformWindowStyle(mainWindow_);
-            const Qt::WindowState state = mainWindow_->windowState();
-            const bool visible = listWindowPanelAllowed_
-                && listWindowRequestedVisible_ && mainVisible_
-                && state != Qt::WindowMinimized
-                && (listWindowDetached_ || state != Qt::WindowMaximized);
-            applyListWindowVisible(visible);
+            applyListWindowVisible(shouldShowListWindow());
         } else if (event->type() == QEvent::WindowActivate
                    && !updatingWindowZOrder_ && !listWindowDetached_) {
             updatingWindowZOrder_ = true;

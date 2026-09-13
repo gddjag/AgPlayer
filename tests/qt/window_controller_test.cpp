@@ -1,4 +1,4 @@
-﻿#include "window_controller.hpp"
+#include "window_controller.hpp"
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -21,6 +21,26 @@ class WindowControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void applicationReactivationRestoresMinimizedPlayer()
+    {
+        QWindow mainWindow;
+        QWindow miniWindow;
+        WindowController windows;
+        windows.setWindows(&mainWindow, &miniWindow);
+        windows.setMainReady(true);
+        windows.setMiniReady(true);
+        windows.showMain();
+        mainWindow.showMinimized();
+        windows.restoreApplicationWindows();
+        QVERIFY(mainWindow.isVisible());
+        QCOMPARE(mainWindow.windowState(), Qt::WindowNoState);
+        windows.showMini();
+        miniWindow.showMinimized();
+        windows.restoreApplicationWindows();
+        QVERIFY(miniWindow.isVisible());
+        QCOMPARE(miniWindow.windowState(), Qt::WindowNoState);
+        QVERIFY(!mainWindow.isVisible());
+    }
     void initTestCase();
     void init();
     void glassBackdropContractIsAbsent();
@@ -80,6 +100,7 @@ private slots:
     void mainMinimizeRestoresOnlyRequestedList();
     void showMainRestoresAndRaisesTheExistingWindowGroup();
     void mainMaximizeHidesOnlyDockedList();
+    void mainFullscreenPreservesDockedListGeometry();
     void geometryDockAndPinStatePersist();
     void legacyMiniGeometryMigratesToReferenceDefault();
     void persistedClassicGeometrySurvivesReferenceDefaultChange();
@@ -1861,6 +1882,31 @@ void WindowControllerTest::mainMaximizeHidesOnlyDockedList()
     mainWindow.setWindowState(Qt::WindowMaximized);
     QCoreApplication::processEvents();
     QVERIFY(listWindow.isVisible());
+}
+
+void WindowControllerTest::mainFullscreenPreservesDockedListGeometry()
+{
+    QWindow mainWindow;
+    mainWindow.setGeometry(80, 80, 700, 260);
+    QWindow listWindow;
+    listWindow.setGeometry(0, 0, 700, 320);
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setListWindow(&listWindow);
+    windows.showListWindow();
+    windows.snapListWindow(QStringLiteral("bottom"));
+    const QRect normal = mainWindow.geometry();
+    const int listHeight = listWindow.height();
+    mainWindow.setWindowState(Qt::WindowFullScreen);
+    QCoreApplication::processEvents();
+    QVERIFY(!listWindow.isVisible());
+    mainWindow.setWindowState(Qt::WindowNoState);
+    mainWindow.setGeometry(normal);
+    QCoreApplication::processEvents();
+    QVERIFY(listWindow.isVisible());
+    QCOMPARE(listWindow.width(), mainWindow.width());
+    QCOMPARE(listWindow.x(), mainWindow.x());
+    QCOMPARE(listWindow.height(), listHeight);
 }
 
 void WindowControllerTest::geometryDockAndPinStatePersist()

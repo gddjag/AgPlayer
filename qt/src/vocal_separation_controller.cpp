@@ -115,7 +115,11 @@ VocalSeparationControllerOptions normalizeOptions(
     }
     if (options.workerProgram.isEmpty()) {
         options.workerProgram = QDir(QCoreApplication::applicationDirPath())
+#ifdef Q_OS_WIN
             .filePath(QStringLiteral("AgSeparationWorker.exe"));
+#else
+            .filePath(QStringLiteral("AgSeparationWorker"));
+#endif
     }
     if (options.runtimeLibraryPath.isEmpty()) {
         options.runtimeLibraryPath = VocalSeparationInstaller::runtimeLibraryPath(

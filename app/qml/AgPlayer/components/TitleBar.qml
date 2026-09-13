@@ -30,29 +30,9 @@ Rectangle {
             onCloseRequested: WindowController.requestClose()
         }
 
-        RowLayout {
-            objectName: "titleBrand"
-            visible: titleBar.showBrand
-            spacing: Theme.spacingXs
-
-            Image {
-                source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                sourceSize.width: 24
-                sourceSize.height: 24
-                Layout.preferredWidth: 24
-                Layout.preferredHeight: 24
-                fillMode: Image.PreserveAspectFit
-            }
-
-            Text {
-                objectName: "titleBrandText"
-                text: "AgPlayer"
-                color: Theme.primaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: Theme.fontSizeBody
-                font.weight: Font.DemiBold
-                font.italic: false
-            }
+        Item {
+            visible: titleBar.showBrand && Qt.platform.os !== "osx"
+            Layout.preferredWidth: brandRow.implicitWidth
         }
 
         Item { Layout.fillWidth: true }
@@ -179,6 +159,34 @@ Rectangle {
             }
         }
     }
+
+    RowLayout {
+        id: brandRow
+        x: Qt.platform.os === "osx" ? (titleBar.width - width) / 2 : Theme.spacingLg
+        anchors.verticalCenter: parent.verticalCenter
+            objectName: "titleBrand"
+            visible: titleBar.showBrand
+            spacing: Theme.spacingXs
+
+            Image {
+                source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                sourceSize.width: 24
+                sourceSize.height: 24
+                Layout.preferredWidth: 24
+                Layout.preferredHeight: 24
+                fillMode: Image.PreserveAspectFit
+            }
+
+            Text {
+                objectName: "titleBrandText"
+                text: "AgPlayer"
+                color: Theme.primaryText
+                font.family: Theme.fontPrimary
+                font.pixelSize: Theme.fontSizeBody
+                font.weight: Font.DemiBold
+                font.italic: false
+            }
+        }
 
     // Drag the window from any empty area of the title bar. `z: -1` keeps
     // this MouseArea below the RowLayout so ToolButtons receive presses first;

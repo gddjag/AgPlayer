@@ -50,7 +50,8 @@ TestCase {
         property int reportCalls: 0
         property int spectrogramCalls: 0
 
-        function loadFiles(urls) {}
+        property var receivedFiles: []
+        function loadFiles(urls) { receivedFiles = urls }
         function addFolder(url) {}
         function start() { startCalls += 1 }
         function cancel() { cancelCalls += 1 }
@@ -150,6 +151,16 @@ TestCase {
         mockController.searchText = ""
         playlistSpy.clear()
         locateSpy.clear()
+    }
+
+    function test_nativeFileSelectionSurvivesDialogDestruction() {
+        const selected = [testAudioUrl]
+        page.importSelectedFiles(selected)
+        selected.length = 0
+        wait(0)
+        compare(mockController.receivedFiles.length, 1)
+        verify(Array.isArray(mockController.receivedFiles))
+        compare(mockController.receivedFiles[0], String(testAudioUrl))
     }
 
     function test_emptyStateAndRequiredRegions() {

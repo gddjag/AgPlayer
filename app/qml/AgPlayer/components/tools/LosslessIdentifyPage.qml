@@ -69,6 +69,14 @@ Rectangle {
             dialog.open()
     }
 
+    function importSelectedFiles(urls) {
+        // Materialize the dialog-owned URL sequence before the async discovery job.
+        const files = []
+        for (let i = 0; i < urls.length; ++i)
+            files.push(String(urls[i]))
+        controller.loadFiles(files)
+    }
+
     function openFolderDialog() {
         const dialog = folderDialogComponent.createObject(page)
         if (dialog)
@@ -89,6 +97,8 @@ Rectangle {
     Component {
         id: fileDialogComponent
         FileDialog {
+            objectName: "losslessFileDialog"
+            parentWindow: page.Window.window
             title: qsTr("添加待鉴别文件")
             fileMode: FileDialog.OpenFiles
             nameFilters: [
@@ -96,7 +106,7 @@ Rectangle {
                 qsTr("所有文件 (*)")
             ]
             onAccepted: {
-                page.controller.loadFiles(selectedFiles)
+                page.importSelectedFiles(selectedFiles)
                 destroy()
             }
             onRejected: destroy()

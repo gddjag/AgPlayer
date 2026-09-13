@@ -147,6 +147,26 @@ Window {
                 Layout.maximumHeight: Layout.minimumHeight
                 color: Theme.titleBarSurface
 
+                Row {
+                    visible: Qt.platform.os === "osx"
+                    anchors.centerIn: parent
+                    spacing: Theme.spacingSm
+                    Image {
+                        width: Theme.controlHeightCompact
+                        height: width
+                        source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                        fillMode: Image.PreserveAspectFit
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: qsTr("AgPlayer · 音频工具")
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeSection
+                        font.weight: Font.Medium
+                    }
+                }
+
                 RowLayout {
                     z: 1
                     anchors.fill: parent
@@ -162,6 +182,7 @@ Window {
 
                     Item {
                         objectName: "audioToolsLogo"
+                        visible: Qt.platform.os !== "osx"
                         Layout.preferredWidth: Theme.controlHeightCompact
                         Layout.preferredHeight: Theme.controlHeightCompact
                         Image {
@@ -174,6 +195,7 @@ Window {
                     }
                     Text {
                         objectName: "audioToolsWindowTitle"
+                        visible: Qt.platform.os !== "osx"
                         text: qsTr("AgPlayer · 音频工具")
                         color: Theme.primaryText
                         font.family: Theme.fontPrimary

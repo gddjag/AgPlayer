@@ -130,6 +130,9 @@ public:
 
 class VocalSeparationControllerTestDriver {
 public:
+    static QString workerProgram(const VocalSeparationController& controller) {
+        return controller.options_.workerProgram;
+    }
     static void publishPythonConfigurationProgress(VocalSeparationController& controller) {
         emit controller.externalRuntime_->progress(0.42, QStringLiteral("python-only-phase"));
         emit controller.cudaRuntime_->progress(0.81, QStringLiteral("cuda-only-phase"));
@@ -321,6 +324,23 @@ class VocalSeparationControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void defaultWorkerProgramMatchesPlatform()
+    {
+        QTemporaryDir temporary;
+        VocalSeparationControllerOptions options;
+        options.dataRoot = temporary.path();
+        AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+        WaveformProvider waveforms;
+        VocalSeparationController controller(
+            &preview, &waveforms, nullptr, nullptr, nullptr, options);
+#ifdef Q_OS_WIN
+        const QString name = QStringLiteral("AgSeparationWorker.exe");
+#else
+        const QString name = QStringLiteral("AgSeparationWorker");
+#endif
+        QCOMPARE(VocalSeparationControllerTestDriver::workerProgram(controller),
+                 QDir(QCoreApplication::applicationDirPath()).filePath(name));
+    }
     void macosPythonInterpreterLinksMustStayInThePrivateRuntime();
     void lateRuntimeVerificationCannotOverwriteInstalledState();
     void sharedRuntimeIsDeduplicatedAndIndependentOfModelCancellation();

@@ -631,7 +631,8 @@ public:
                 break;
             }
             QUrl url = value.toUrl();
-            if (!url.isValid() || url.isEmpty()) {
+            if (!url.isValid() || url.isEmpty() || url.scheme().isEmpty()
+                || QDir::isAbsolutePath(value.toString())) {
                 const QString path = value.toString();
                 if (!path.trimmed().isEmpty()) url = QUrl::fromLocalFile(path);
             }
