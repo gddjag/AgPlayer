@@ -57,6 +57,8 @@ async function runDownloadScript(response, timers = {}) {
   const macPrimary = fakeElement();
   const macGithub = fakeElement();
   const macChecksum = fakeElement();
+  const macChecksumCopy = fakeElement();
+  macChecksum.textContent = '2D2BB542B5BC6927EF91745DE6CA71F5A55E5D71E9BFA6ADB7ECE24684AA99AB';
   checksum.setAttribute('hidden', '');
   const documentListeners = new Map();
   const calls = [];
@@ -71,7 +73,8 @@ async function runDownloadScript(response, timers = {}) {
     ['#windows-sha256-copy', checksumCopy],
     ['#macos .download-macos-primary', macPrimary],
     ['#macos .download-macos-github', macGithub],
-    ['#macos-sha256', macChecksum]
+    ['#macos-sha256', macChecksum],
+    ['#macos-sha256-copy', macChecksumCopy]
   ]);
   const context = {
     document: {
@@ -95,7 +98,7 @@ async function runDownloadScript(response, timers = {}) {
   };
   runInNewContext(await readFile(scriptPath, 'utf8'), context, { filename: scriptPath });
   await new Promise(resolve => setTimeout(resolve, 0));
-  return { primary, github, status, checksum, checksumValue, checksumCopy, macPrimary, macGithub, macChecksum, calls, navigations, clipboardWrites, documentListeners };
+  return { primary, github, status, checksum, checksumValue, checksumCopy, macPrimary, macGithub, macChecksum, macChecksumCopy, calls, navigations, clipboardWrites, documentListeners };
 }
 
 function manifest(overrides = {}) {
@@ -143,6 +146,16 @@ test('macOS HTML fallback links the accepted package and official opening guide'
   assert.match(html, /尚未经过 Apple 公证/);
   assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.0\.3\/AgPlayer-1\.0\.3-macOS-universal\.dmg"/);
   assert.match(html, /2D2BB542B5BC6927EF91745DE6CA71F5A55E5D71E9BFA6ADB7ECE24684AA99AB/);
+  assert.match(html, /id="macos-sha256-copy"[^>]*data-i18n="downloadPage.checksum.copy"/);
+});
+
+test('macOS copy uses the displayed checksum for fallback and live metadata', async () => {
+  const fallback = await runDownloadScript({ok:false});
+  fallback.macChecksumCopy.click();
+  assert.deepEqual(fallback.clipboardWrites, ['2D2BB542B5BC6927EF91745DE6CA71F5A55E5D71E9BFA6ADB7ECE24684AA99AB']);
+  const live = await runDownloadScript(streamedResponse(JSON.stringify(manifest())));
+  live.macChecksumCopy.click();
+  assert.deepEqual(live.clipboardWrites, ['B'.repeat(64)]);
 });
 
 test('valid official manifest enables both trusted Windows download routes', async () => {

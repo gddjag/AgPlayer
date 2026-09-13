@@ -113,6 +113,13 @@
 
   async function hydrateDownloads() {
     ensureDownloadDetails();
+    const macChecksumCopy = document.querySelector('#macos-sha256-copy');
+    const macChecksumValue = document.querySelector('#macos-sha256');
+    if (macChecksumCopy && macChecksumValue) {
+      macChecksumCopy.addEventListener('click', () => {
+        void navigator.clipboard?.writeText(macChecksumValue.textContent).catch(() => {});
+      });
+    }
     const primary = document.querySelector('.download-primary');
     const github = document.querySelector('.download-github');
     const status = document.querySelector('#windows-download-status');
@@ -167,4 +174,3 @@
 
   if (document.body?.dataset.page === 'download') void hydrateDownloads();
 })();
-
