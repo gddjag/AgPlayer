@@ -58,7 +58,7 @@ async function runDownloadScript(response, timers = {}) {
   const macGithub = fakeElement();
   const macChecksum = fakeElement();
   const macChecksumCopy = fakeElement();
-  macChecksum.textContent = '2D2BB542B5BC6927EF91745DE6CA71F5A55E5D71E9BFA6ADB7ECE24684AA99AB';
+  macChecksum.textContent = '230299790F91A8F768A4587006B3E78D7ECD42F0267AA2F8A91252034BC205F5';
   checksum.setAttribute('hidden', '');
   const documentListeners = new Map();
   const calls = [];
@@ -102,7 +102,7 @@ async function runDownloadScript(response, timers = {}) {
 }
 
 function manifest(overrides = {}) {
-  const version = '1.0.3';
+  const version = '1.0.4';
   const name = `AgPlayer-Setup-${version}-x64.exe`;
   return {
     schemaVersion: 1,
@@ -121,9 +121,9 @@ function manifest(overrides = {}) {
   };
 }
 
-function macFile(version = '1.0.3') {
+function macFile(version = '1.0.4') {
   const name = `AgPlayer-${version}-macOS-universal.dmg`;
-  return { name, size: 89616142, sha256: 'b'.repeat(64),
+  return { name, size: 89747916, sha256: 'b'.repeat(64),
     githubUrl: `https://github.com/gddjag/AgPlayer/releases/download/v${version}/${name}`,
     r2Url: `https://download.agplayer.com/releases/v${version}/${name}` };
 }
@@ -137,22 +137,22 @@ test('one verified manifest updates both platforms and rejects a forged macOS ro
   bad.files[1].r2Url = 'https://example.com/forged.dmg';
   const rejected = await runDownloadScript(streamedResponse(JSON.stringify(bad)));
   assert.equal(rejected.macPrimary.href, undefined);
-  assert.equal(rejected.checksumValue.textContent, '44247C0FFA169E19AA6B5E23D62D47F1B57AFFBC95AE738C0E184E81C8D28BED');
+  assert.equal(rejected.checksumValue.textContent, 'C3E05C887D6DC0161ADBB6E2E8340792A5BD7212D738BE035D120B5E4918238A');
 });
 
 test('macOS HTML fallback links the accepted package and official opening guide', async () => {
   const html = await readFile(downloadPagePath, 'utf8');
   assert.match(html, /href="https:\/\/support\.apple\.com\/zh-cn\/102445"/);
   assert.match(html, /尚未经过 Apple 公证/);
-  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.0\.3\/AgPlayer-1\.0\.3-macOS-universal\.dmg"/);
-  assert.match(html, /2D2BB542B5BC6927EF91745DE6CA71F5A55E5D71E9BFA6ADB7ECE24684AA99AB/);
+  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.0\.4\/AgPlayer-1\.0\.4-macOS-universal\.dmg"/);
+  assert.match(html, /230299790F91A8F768A4587006B3E78D7ECD42F0267AA2F8A91252034BC205F5/);
   assert.match(html, /id="macos-sha256-copy"[^>]*data-i18n="downloadPage.checksum.copy"/);
 });
 
 test('macOS copy uses the displayed checksum for fallback and live metadata', async () => {
   const fallback = await runDownloadScript({ok:false});
   fallback.macChecksumCopy.click();
-  assert.deepEqual(fallback.clipboardWrites, ['2D2BB542B5BC6927EF91745DE6CA71F5A55E5D71E9BFA6ADB7ECE24684AA99AB']);
+  assert.deepEqual(fallback.clipboardWrites, ['230299790F91A8F768A4587006B3E78D7ECD42F0267AA2F8A91252034BC205F5']);
   const live = await runDownloadScript(streamedResponse(JSON.stringify(manifest())));
   live.macChecksumCopy.click();
   assert.deepEqual(live.clipboardWrites, ['B'.repeat(64)]);
@@ -173,14 +173,14 @@ test('valid official manifest enables both trusted Windows download routes', asy
   result.primary.click();
   result.github.click();
   assert.deepEqual(result.navigations, [
-    'https://download.agplayer.com/releases/v1.0.3/AgPlayer-Setup-1.0.3-x64.exe',
-    'https://github.com/gddjag/AgPlayer/releases/download/v1.0.3/AgPlayer-Setup-1.0.3-x64.exe'
+    'https://download.agplayer.com/releases/v1.0.4/AgPlayer-Setup-1.0.4-x64.exe',
+    'https://github.com/gddjag/AgPlayer/releases/download/v1.0.4/AgPlayer-Setup-1.0.4-x64.exe'
   ]);
   assert.equal(result.status.hidden, true);
 });
 
 test('published Windows release exposes the real uppercase SHA-256 and copies it', async () => {
-  const expected = '44247C0FFA169E19AA6B5E23D62D47F1B57AFFBC95AE738C0E184E81C8D28BED';
+  const expected = 'C3E05C887D6DC0161ADBB6E2E8340792A5BD7212D738BE035D120B5E4918238A';
   const payload = manifest({ files: [{
     ...manifest().files[0],
     sha256: expected.toLowerCase()
@@ -195,7 +195,7 @@ test('published Windows release exposes the real uppercase SHA-256 and copies it
   assert.deepEqual(result.clipboardWrites, [expected]);
 });
 
-test('published 1.0.3 remains available when the live manifest cannot be read', async () => {
+test('published 1.0.4 remains available when the live manifest cannot be read', async () => {
   const cases = [
     { ok: false },
     streamedResponse('x'.repeat(65537)),
@@ -207,12 +207,12 @@ test('published 1.0.3 remains available when the live manifest cannot be read', 
     assert.equal(result.primary.disabled, false);
     assert.equal(result.github.disabled, false);
     assert.equal(result.checksum.hasAttribute('hidden'), false);
-    assert.equal(result.checksumValue.textContent, '44247C0FFA169E19AA6B5E23D62D47F1B57AFFBC95AE738C0E184E81C8D28BED');
+    assert.equal(result.checksumValue.textContent, 'C3E05C887D6DC0161ADBB6E2E8340792A5BD7212D738BE035D120B5E4918238A');
     result.primary.click();
     result.github.click();
     assert.deepEqual(result.navigations, [
-      'https://download.agplayer.com/releases/v1.0.3/AgPlayer-Setup-1.0.3-x64.exe',
-      'https://github.com/gddjag/AgPlayer/releases/download/v1.0.3/AgPlayer-Setup-1.0.3-x64.exe'
+      'https://download.agplayer.com/releases/v1.0.4/AgPlayer-Setup-1.0.4-x64.exe',
+      'https://github.com/gddjag/AgPlayer/releases/download/v1.0.4/AgPlayer-Setup-1.0.4-x64.exe'
     ]);
   }
 });
@@ -221,7 +221,7 @@ test('download page hides the removed pre-download FAQ section and divider', asy
   const html = await readFile(downloadPagePath, 'utf8');
   const css = await readFile(siteCssPath, 'utf8');
   assert.match(css, /\.download-faq\s*\{\s*display:\s*none\s*\}/);
-  assert.match(html, /downloads\.js\?v=20260913-release-103-macos/);
+  assert.match(html, /downloads\.js\?v=20260914-release-104-dual/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
