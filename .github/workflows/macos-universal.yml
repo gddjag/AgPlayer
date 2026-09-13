@@ -159,30 +159,61 @@ jobs:
             ${{ runner.temp }}/queue-gapless-sample.txt
           retention-days: 7
 
-  intel-launch:
+  installed-package-launch:
     needs: build
-    runs-on: macos-15-intel
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-14, macos-15, macos-26, macos-15-intel, macos-26-intel, xcode-27]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: macos-universal-development
           path: package
-      - name: Run the same packaged app on Intel without Qt or vcpkg installed
+      - name: Audit the mounted DMG and launch the installed app
         shell: bash
         run: |
-          test "$(uname -m)" = x86_64
-          ditto -x -k package/AgPlayer-universal-test.zip "$RUNNER_TEMP/agplayer-test"
-          app_path="$RUNNER_TEMP/agplayer-test/AgPlayer.app"
+          sw_vers
+          uname -m
+          dmg_path="$(find package -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$dmg_path"
+          mount_path="$RUNNER_TEMP/agplayer-dmg"
+          mkdir -p "$mount_path"
+          hdiutil attach "$dmg_path" -readonly -nobrowse -mountpoint "$mount_path"
+          trap 'launchctl unsetenv QT_QPA_PLATFORM; launchctl unsetenv QT_QUICK_BACKEND; hdiutil detach "$mount_path"' EXIT
+          app_path="$mount_path/AgPlayer.app"
           lipo "$app_path/Contents/MacOS/AgPlayer" -verify_arch x86_64 arm64
-          codesign --verify --deep --strict "$app_path"
-          QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
-            "$app_path/Contents/MacOS/AgPlayer" --qa-test-mode \
-            --qa-log "$RUNNER_TEMP/agplayer-intel.log" --qa-exit-after-ms 3000
-      - name: Save Intel launch evidence
+          codesign --verify --deep --strict --all-architectures "$app_path"
+          signature_log="$RUNNER_TEMP/agplayer-signatures.log"
+          : >"$signature_log"
+          native_count=0
+          while IFS= read -r -d '' candidate; do
+            if file -b "$candidate" | grep -q 'Mach-O'; then
+              native_count=$((native_count + 1))
+              details="$(codesign --display --verbose=4 "$candidate" 2>&1)"
+              printf 'TARGET=%s\n%s\n' "${candidate#"$app_path"/}" "$details" >>"$signature_log"
+              printf '%s\n' "$details" | grep -q '^Signature=adhoc$'
+              printf '%s\n' "$details" | grep -q '^TeamIdentifier=not set$'
+              code_directory="$(printf '%s\n' "$details" | grep '^CodeDirectory ')"
+              case "$code_directory" in *runtime*) exit 1;; esac
+            fi
+          done < <(find "$app_path/Contents" -type f -print0)
+          test "$native_count" -gt 0
+          rm -rf /Applications/AgPlayer.app
+          ditto "$app_path" /Applications/AgPlayer.app
+          launchctl setenv QT_QPA_PLATFORM offscreen
+          launchctl setenv QT_QUICK_BACKEND software
+          open -W -n /Applications/AgPlayer.app --args --qa-test-mode \
+            --qa-log "$RUNNER_TEMP/agplayer-installed.log" --qa-exit-after-ms 3000
+          test -s "$RUNNER_TEMP/agplayer-installed.log"
+      - name: Save installed launch evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: macos-intel-launch-log
-          path: ${{ runner.temp }}/agplayer-intel.log
+          name: macos-${{ matrix.runner }}-installed-launch-log
+          path: |
+            ${{ runner.temp }}/agplayer-installed.log
+            ${{ runner.temp }}/agplayer-signatures.log
           retention-days: 7

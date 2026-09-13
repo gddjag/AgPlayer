@@ -241,7 +241,16 @@ class PackageFlowTests(BundleFixture):
         elif tool == "iconutil":
             Path(args[args.index("-o") + 1]).write_bytes(b"icns")
         elif tool == "codesign" and "--display" in args:
-            output = "Signature=adhoc\n" if "--sign" not in " ".join(sum(self.commands, [])) else "Executable=fixture\n"
+            developer_id = any("Developer ID Application:" in item for command in self.commands for item in command)
+            if developer_id:
+                output = ("Executable=fixture\nIdentifier=fixture\n"
+                          "CodeDirectory flags=0x10000(runtime)\n"
+                          "Authority=Developer ID Application: Example (1234567890)\n"
+                          "TeamIdentifier=1234567890\n")
+            else:
+                output = ("Executable=fixture\nIdentifier=fixture\n"
+                          "CodeDirectory flags=0x2(adhoc)\n"
+                          "Signature=adhoc\nTeamIdentifier=not set\n")
         elif tool == "hdiutil":
             self.assertTrue((self.staged / "Contents/Resources/AgPlayer.icns").is_file())
             self.assertTrue((self.staged / "Contents/Resources/THIRD-PARTY-NOTICES.md").is_file())
@@ -260,7 +269,7 @@ class PackageFlowTests(BundleFixture):
     def test_development_package_uses_staging_and_never_uploads(self):
         original = self.main.read_bytes()
         result = self.package()
-        self.assertIn("development", result["artifact"])
+        self.assertIn("internal-adhoc-test", result["artifact"])
         self.assertEqual(result["signing"]["mode"], "ad-hoc")
         self.assertEqual(result["notarization"]["status"], "not-requested")
         self.assertFalse(result["functional_acceptance"]["complete"])
@@ -275,6 +284,33 @@ class PackageFlowTests(BundleFixture):
         self.assertEqual(Path(signing[-1][-1]).suffix, ".app")
         report = json.loads(Path(result["report"]).read_text(encoding="utf-8"))
         self.assertEqual(report["required_architectures"], ["arm64", "x86_64"])
+
+    def test_adhoc_internal_package_does_not_enable_hardened_runtime(self):
+        result = self.package()
+        native_signing = [args for args in self.commands
+                          if Path(args[0]).name == "codesign" and "--sign" in args
+                          and not args[-1].endswith(".dmg")]
+        self.assertTrue(native_signing)
+        self.assertTrue(all("--options" not in args for args in native_signing))
+        self.assertFalse(result["signing"]["hardened_runtime"])
+
+    def test_package_rejects_a_mismatched_nested_team_identifier(self):
+        original_run = self.fake_run
+
+        def mismatched(argv, **kwargs):
+            result = original_run(argv, **kwargs)
+            args = [str(value) for value in argv]
+            if (Path(args[0]).name == "codesign" and "--display" in args
+                    and args[-1].endswith("AgSeparationWorker")):
+                result.stdout = ("Executable=fixture\nIdentifier=fixture\n"
+                                 "CodeDirectory flags=0x10000(runtime)\n"
+                                 "Authority=Developer ID Application: Other (ABCDEFGHIJ)\n"
+                                 "TeamIdentifier=ABCDEFGHIJ\n")
+            return result
+
+        self.fake_run = mismatched
+        with self.assertRaisesRegex(packaging.PackageError, "Team ID|signature identity"):
+            self.package(sign_identity="Developer ID Application: Example (1234567890)")
 
     def test_runtime_plugins_preserve_sqlite_without_mutating_sdk(self):
         result = self.package()

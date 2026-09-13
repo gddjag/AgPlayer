@@ -432,8 +432,11 @@ def sign_bundle(app, inventory, identity, temporary):
                   and path.suffix in (".framework", ".app", ".bundle", ".xpc", ".appex"))
     targets = sorted(nested, key=lambda path: (-len(path.parts), str(path))) + [app]
     for path in targets:
-        args = ["codesign", "--force", "--sign", identity, "--options", "runtime"]
-        args.append("--timestamp" if identity != "-" else "--timestamp=none")
+        args = ["codesign", "--force", "--sign", identity]
+        if identity != "-":
+            args += ["--options", "runtime", "--timestamp"]
+        else:
+            args.append("--timestamp=none")
         if path == app:
             args += ["--entitlements", main_entitlements]
         elif path == app / "Contents/MacOS/AgSeparationWorker":
@@ -442,8 +445,27 @@ def sign_bundle(app, inventory, identity, temporary):
     # --deep is verification-only; never use it to force-sign nested code.
     run(["codesign", "--verify", "--deep", "--strict", "--all-architectures", "--verbose=2", app])
     details = run(["codesign", "--display", "--verbose=4", app])
+    expected_team = None if identity == "-" else re.search(r"\(([A-Z0-9]{10})\)$", identity).group(1)
+    signatures = []
+    for record in inventory["mach_o"]:
+        path = app / record["path"]
+        run(["codesign", "--verify", "--strict", "--all-architectures", path])
+        item_details = run(["codesign", "--display", "--verbose=4", path])
+        team_match = re.search(r"(?m)^TeamIdentifier=(.+)$", item_details)
+        team = None if not team_match or team_match.group(1).strip() == "not set" else team_match.group(1).strip()
+        is_adhoc = bool(re.search(r"(?m)^Signature=adhoc$", item_details))
+        has_runtime = bool(re.search(r"(?m)^CodeDirectory .*flags=.*\bruntime\b", item_details))
+        relative = path.relative_to(app).as_posix()
+        if identity == "-":
+            if team is not None or not is_adhoc or has_runtime:
+                raise PackageError(f"Ad-hoc signature identity mismatch: {relative}")
+        elif team != expected_team or is_adhoc or not has_runtime:
+            raise PackageError(f"Developer ID Team ID/signature identity mismatch: {relative}")
+        signatures.append({"path": relative, "team_id": team, "ad_hoc": is_adhoc,
+                           "hardened_runtime": has_runtime})
     return {"mode": "ad-hoc" if identity == "-" else "Developer ID Application", "identity": identity,
-            "verified": True, "hardened_runtime": True, "details": details.strip(),
+            "verified": True, "hardened_runtime": identity != "-", "details": details.strip(),
+            "expected_team_id": expected_team, "native_code": signatures,
             "qml_entitlements": {"com.apple.security.cs.allow-jit": True},
             "worker_entitlements": {"com.apple.security.cs.disable-library-validation": True}}
 
@@ -470,7 +492,7 @@ def package_app(app, qt_root, output_dir, *, sign_identity=None, notary_profile=
         version = plistlib.load(stream).get("CFBundleShortVersionString", "")
     if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise PackageError("CFBundleShortVersionString must contain an explicit major.minor.patch version")
-    mode = "development" if identity == "-" else (
+    mode = "internal-adhoc-test" if identity == "-" else (
         "developer-id-notarized-development" if notary_profile else "developer-id-unnotarized-development")
     stem = f"AgPlayer-{version}-macOS-universal-{mode}"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -489,7 +511,8 @@ def package_app(app, qt_root, output_dir, *, sign_identity=None, notary_profile=
         clean_development_rpaths(staged_app)
         add_resources(staged_app, repo_root, temporary)
         report = validate_bundle(staged_app)
-        report.update({"status": "validated-development-package", "version": version,
+        report.update({"status": ("validated-internal-adhoc-test-package" if identity == "-"
+                                  else "validated-development-package"), "version": version,
                        "functional_acceptance": {"complete": False, "required": [
                            "macOS 13.0 Intel and Apple Silicon launch, playback and hardware QA",
                            "all Windows 1.0.3 features, including the external separation runtime"]},
