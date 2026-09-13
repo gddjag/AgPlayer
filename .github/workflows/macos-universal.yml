@@ -184,7 +184,10 @@ jobs:
           hdiutil attach "$dmg_path" -readonly -nobrowse -mountpoint "$mount_path"
           trap 'launchctl unsetenv QT_QPA_PLATFORM; launchctl unsetenv QT_QUICK_BACKEND; hdiutil detach "$mount_path"' EXIT
           app_path="$mount_path/AgPlayer.app"
-          lipo "$app_path/Contents/MacOS/AgPlayer" -verify_arch x86_64 arm64
+          architectures="$(lipo -archs "$app_path/Contents/MacOS/AgPlayer")"
+          for required_arch in x86_64 arm64; do
+            printf '%s\n' "$architectures" | tr ' ' '\n' | grep -qx "$required_arch"
+          done
           codesign --verify --deep --strict --all-architectures "$app_path"
           signature_log="$RUNNER_TEMP/agplayer-signatures.log"
           : >"$signature_log"
