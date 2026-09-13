@@ -24,7 +24,7 @@
 
 ## 2026-09-13 本地实施结果
 
-- 已实现 Universal CMake preset/triplet、`.app` 文档声明和图标、打包与逐文件 Mach-O/依赖/最低系统版本检查。脚本默认 ad-hoc development DMG；无证书时不宣称已公证或正式可分发。
+- 已实现 Universal CMake preset/triplet、`.app` 文档声明和图标、打包与逐文件 Mach-O/依赖/最低系统版本检查。无证书时只生成明确标记的 internal ad-hoc test DMG，不宣称已公证或正式可分发。
 - 已实现 Finder 启动期间文件事件排队、Carbon/媒体键输入监控、Command 修饰键映射、SMAppService 登录项、文件关联及准确错误提示。保留现有 UI 布局；Mac Dock/多窗口/全屏习惯及视觉细节仍需实机验收。
 - ONNX 采用官方 ORT 1.18.1 NuGet，两个架构原生库最低 macOS 11.0，使用 API18；Windows 保持 API24。1.20.1 官方 Universal 包最低 13.3，因此不能用于本项目 13.0 基线。
 - 外置 VR：Mac Python 3.10.18；Intel 为 separator 0.24.1 / torch 2.2.2，ARM 为 separator 0.30.2 / torch 2.5.1。两架构纯 wheel 依赖解析通过，uv 官方文件已下载复核哈希。ARM VR 使用上游已有 polyphase 重采样路径，避开 samplerate wheel 中仅 Intel 的动态库；真实音质仍需验收。
@@ -76,8 +76,22 @@ Apple HIG is the standing platform rule in `UI_DESIGN_SYSTEM.md`, section 9.
 - 构建/打包及 ARM 启动：GitHub run `34715503391` 的 build job 成功；26 组重点测试通过，播放引擎和队列各额外连续通过 3 次。
 - Intel：首个检查因 `lipo` 参数顺序错误而未启动程序；修正后，run `34716248310` 复用上述同一个 Artifact，双架构、签名和 Intel 离屏启动检查全部通过。未重新编译应用。后续分支提交只涉及 CI 或验收记录。
 - 打包检查：105 个 Mach-O 文件，每个均包含 `arm64` 和 `x86_64`；最低系统声明不高于 13.0，依赖与符号链接均通过包内检查。Qt 运行时插件保留原生平台、图像、网络等组件和 SQLite；不部署项目未使用的外部数据库驱动。移除重定位后指向包外的 Qt SDK 搜索路径。
-- 文件：`C:\Users\Administrator\Desktop\AgPlayer-1.0.3-macOS-universal-development.dmg`，89,598,909 字节。
+- 已撤回的失败文件：`C:\Users\Administrator\Desktop\AgPlayer-1.0.3-macOS-universal-development.dmg`，89,598,909 字节；不得继续用于验收或发布。
 - SHA-256：`7bbbb418311adde3426d779d365a41d42f4f374bdec0d9a3f09d93525da0fda2`。下载的 Artifact ZIP、内部 DMG 及桌面副本校验均通过。
 - 桌面同时提供同名 `.sha256` 和 `AgPlayer-macOS-安装测试说明.txt`。完整机器校验报告保留在 `build/macos-delivery/candidate-15a3259/`。
 - 当前为 ad-hoc 签名、未经 Apple 公证的开发测试包；自动启动检查采用 macOS 15 离屏模式，不代表 macOS 13 实机、原生桌面交互、全模型推理或听音验收。Intel 离屏字体别名提示需在实际 Cocoa 窗口中复核，本次不据此改动字体策略。
 - 未执行官网、R2、GitHub Release 或“版本发布”分支上线操作；等待用户人工测试后由其他任务负责发布。
+
+## 2026-09-13 启动闪退诊断与签名规则
+
+- 用户在 macOS 14.8.5 ARM64 从 `/Applications` 启动后，`dyld` 拒绝加载 `QtQuickControls2.framework`，原因为主进程与映射文件的 Team ID 不一致；日志中的 `Library missing` 不是文件缺失。
+- 对上述失败 DMG 挂载后的最终 App 做逐文件核对：105 个 Mach-O（主程序、Worker、Qt Frameworks、QML/Qt 插件、FFmpeg 及其他随包动态库）全部为 ad-hoc，全部 `TeamIdentifier=not set`，且全部启用了 Hardened Runtime。没有发现 Qt 官方正式签名残留；问题是没有共同 Team ID 的 ad-hoc 组件被放进了要求同 Team ID 的 Library Validation 关系。
+- 内部测试包：所有随包原生代码仍由内到外统一 ad-hoc 签名，但不启用 Hardened Runtime，也不给主程序增加 Disable Library Validation 权限；文件名必须包含 `internal-adhoc-test`。它未经 Apple 公证，不能标为正式发布就绪。
+- 正式发布包：完成部署、Universal 合并、strip、`install_name_tool` 和资源写入后，再用同一个 `Developer ID Application` 身份由内到外签署全部随包非系统原生代码，App 最后签名；逐文件验证 Team ID 和 Hardened Runtime，随后签署 DMG、提交公证并验证 stapling。`--deep` 只用于最终验证。
+- 最终安装验收必须挂载生成的 DMG、复制到 `/Applications`，再通过 LaunchServices 启动；不能只运行打包目录或 ZIP 中间产物。
+
+## macOS 13 至 27 兼容目标
+
+- 部署目标固定为 macOS 13.0，单个 DMG 内的全部 Mach-O 都必须同时包含 `arm64` 与 `x86_64`，且任何 slice 的最低系统版本不得高于 13.0。
+- 云端安装启动矩阵覆盖 GitHub 当前提供的 macOS 14、15、26（Apple Silicon）、macOS 15/26 Intel，以及 `xcode-27` 预览环境。每个环境都挂载最终 DMG、检查签名、安装到 `/Applications` 并通过 LaunchServices 启动。
+- macOS 13 以及真正运行 macOS 27 的机器当前没有标准 GitHub 托管运行器；这两项必须在可用实机或云主机上补测后才可声明通过。`xcode-27` 只能证明 Xcode 27/新 SDK 环境兼容，不能替代 macOS 27 系统实机验收。
