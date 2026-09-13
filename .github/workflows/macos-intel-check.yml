@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   intel-launch:
-    runs-on: macos-15-intel
+    runs-on: macos-14
     timeout-minutes: 10
     steps:
       - uses: actions/download-artifact@v4
@@ -27,8 +27,13 @@ jobs:
         shell: bash
         run: |
           test "$(uname -m)" = x86_64
-          ditto -x -k package/AgPlayer-universal-test.zip "$RUNNER_TEMP/agplayer-test"
-          app_path="$RUNNER_TEMP/agplayer-test/AgPlayer.app"
+          dmg_path="$(find package -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$dmg_path"
+          mount_path="$RUNNER_TEMP/agplayer-dmg"
+          mkdir -p "$mount_path"
+          hdiutil attach "$dmg_path" -readonly -nobrowse -mountpoint "$mount_path"
+          trap 'hdiutil detach "$mount_path"' EXIT
+          app_path="$mount_path/AgPlayer.app"
           signature_log="$RUNNER_TEMP/agplayer-signatures.log"
           {
             echo "App signature"
