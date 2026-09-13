@@ -86,12 +86,12 @@ jobs:
         id: native-build
         run: |
           cmake --build --preset macos-universal-release --parallel 3 -- -k 0
-          cmake --build build/macos-universal --parallel 3 --target dependency_smoke_test c_api_lifecycle_test decoder_test audio_engine_test queue_gapless_test metadata_writer_test transcoder_test pitch_shifter_test waveform_cache_test project_document_test rename_transaction_test lyrics_provider_chain_test equalizer_controller_test separation_output_transaction_test lossless_analysis_controller_test qml_main_window_test window_controller_test application_file_open_test global_hotkey_manager_test settings_controller_test file_association_controller_test separation_runtime_test separation_native_backend_test separation_process_client_test vocal_separation_controller_test vocal_separation_install_test -- -k 0
+          cmake --build build/macos-universal --parallel 3 --target dependency_smoke_test c_api_lifecycle_test decoder_test audio_engine_test queue_gapless_test metadata_writer_test transcoder_test pitch_shifter_test waveform_cache_test project_document_test rename_transaction_test lyrics_provider_chain_test equalizer_controller_test separation_output_transaction_test lossless_analysis_controller_test qml_main_window_test window_controller_test native_drop_router_test application_file_open_test global_hotkey_manager_test settings_controller_test file_association_controller_test separation_runtime_test separation_native_backend_test separation_process_client_test vocal_separation_controller_test vocal_separation_install_test -- -k 0
       - name: Run focused native tests
         run: |
           ctest --test-dir build/macos-universal --output-on-failure \
           --output-junit macos-native-tests.xml \
-          -R '^(dependency_smoke_test|c_api_lifecycle_test|decoder_test|audio_engine_test|queue_gapless_test|metadata_writer_test|transcoder_test|pitch_shifter_test|waveform_cache_test|project_document_test|rename_transaction_test|lyrics_provider_chain_test|equalizer_controller_test|separation_output_transaction_test|lossless_analysis_controller_test|qml_main_window_test|qml_macos_window_controls_test|qml_mac14_regressions_test|window_controller_test|application_file_open_test|global_hotkey_manager_test|settings_controller_test|file_association_controller_test|separation_runtime_test|separation_native_backend_test|separation_process_client_test|vocal_separation_controller_test|vocal_separation_install_test)$' &
+          -R '^(dependency_smoke_test|c_api_lifecycle_test|decoder_test|audio_engine_test|queue_gapless_test|metadata_writer_test|transcoder_test|pitch_shifter_test|waveform_cache_test|project_document_test|rename_transaction_test|lyrics_provider_chain_test|equalizer_controller_test|separation_output_transaction_test|lossless_analysis_controller_test|qml_main_window_test|qml_macos_window_controls_test|qml_mac14_regressions_test|qml_lossless_file_import_test|window_controller_test|native_drop_router_test|application_file_open_test|global_hotkey_manager_test|settings_controller_test|file_association_controller_test|separation_runtime_test|separation_native_backend_test|separation_process_client_test|vocal_separation_controller_test|vocal_separation_install_test)$' &
           tests_pid=$!
           (
             for attempt in $(seq 1 45); do
@@ -129,7 +129,9 @@ jobs:
           QT_QUICK_BACKEND: software
           AGPLAYER_TEST_AUDIO: ${{ github.workspace }}/build/macos-universal/tests/fixtures/sine-440hz.wav
           AGPLAYER_VISUAL_FIXTURE_OUTPUT: ${{ github.workspace }}/build/macos-ui-titlebar-mac14-fix.png
-        run: build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_mac14_regressions.qml
+        run: |
+          build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_mac14_regressions.qml
+          build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_lossless_file_import.qml
       - name: Deploy and audit a single Universal internal test package
         run: >-
           python scripts/package-macos.py

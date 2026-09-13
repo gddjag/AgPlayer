@@ -25,6 +25,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDragEnterEvent>
+#include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QDir>
 #include <QFile>
@@ -199,10 +200,13 @@ public:
         QDragEnterEvent enter(scenePosition.toPoint(), Qt::CopyAction, &mime,
                               Qt::LeftButton, Qt::NoModifier);
         QCoreApplication::sendEvent(window, &enter);
+        QDragMoveEvent move(scenePosition.toPoint(), Qt::CopyAction, &mime,
+                           Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &move);
         QDropEvent drop(scenePosition, Qt::CopyAction, &mime,
                         Qt::LeftButton, Qt::NoModifier);
         QCoreApplication::sendEvent(window, &drop);
-        return enter.isAccepted() && drop.isAccepted();
+        return enter.isAccepted() && move.isAccepted() && drop.isAccepted();
     }
 
     Q_INVOKABLE bool sendTrackIds(QObject* target, const QStringList& trackIds)

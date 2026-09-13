@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QDropEvent>
 #include <QDragEnterEvent>
+#include <QDragMoveEvent>
 #include <QFileInfo>
 #include <QMimeData>
 #include <QSet>
@@ -109,8 +110,10 @@ bool NativeDropRouter::eventFilter(QObject* watched, QEvent* event)
         return resolvedTarget;
     };
 
-    if (event->type() == QEvent::DragEnter) {
-        auto* drag = static_cast<QDragEnterEvent*>(event);
+    if (event->type() == QEvent::DragEnter || event->type() == QEvent::DragMove) {
+        // Keep the accepted action alive while Cocoa moves over a Quick window.
+        // QML never received DragEnter when this router consumed it above.
+        auto* drag = static_cast<QDragMoveEvent*>(event);
         if (drag->mimeData() != nullptr && drag->mimeData()->hasUrls()) {
             if (*target == Target::List
                 && containsLocalDirectory(drag->mimeData())) {

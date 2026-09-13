@@ -70,11 +70,21 @@ Rectangle {
     }
 
     function importSelectedFiles(urls) {
+        if (!urls || urls.length === 0) {
+            controller.notifyError(qsTr("未收到选中的文件，请重新选择或拖入音频。"))
+            return
+        }
         // Materialize the dialog-owned URL sequence before the async discovery job.
         const files = []
         for (let i = 0; i < urls.length; ++i)
             files.push(String(urls[i]))
         controller.loadFiles(files)
+    }
+
+    FileDropArea {
+        objectName: "losslessFileDropArea"
+        anchors.fill: parent
+        onUrlsDropped: function(urls) { page.importSelectedFiles(urls) }
     }
 
     function openFolderDialog() {
@@ -150,8 +160,10 @@ Rectangle {
         Text {
             objectName: "losslessExperimentalNotice"
             Layout.fillWidth: true
-            text: qsTr("实验性，仅供参考；鉴别结果不代表专业认证。")
-            color: Theme.textSecondary
+            text: page.controller && page.controller.error
+                  ? page.controller.error
+                  : qsTr("实验性，仅供参考；鉴别结果不代表专业认证。")
+            color: page.controller && page.controller.error ? Theme.error : Theme.textSecondary
             font.family: Theme.fontPrimary
             font.pixelSize: Theme.losslessFontSizeBody
             wrapMode: Text.Wrap
@@ -406,11 +418,12 @@ Rectangle {
                 }
 
                 Text {
+                    objectName: "losslessImportStatus"
                     visible: !page.compactLayout
                     Layout.fillWidth: true
                     Layout.minimumWidth: 180
-                    text: page.controller && page.controller.statusText
-                          ? page.controller.statusText
+                    text: page.controller && (page.controller.error || page.controller.statusText)
+                          ? (page.controller.error || page.controller.statusText)
                           : qsTr("等待开始分析")
                     elide: Text.ElideMiddle
                     color: page.controller && page.controller.error

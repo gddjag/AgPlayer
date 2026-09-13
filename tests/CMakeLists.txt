@@ -1601,7 +1601,9 @@ add_test(NAME qml_macos_window_controls_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_macos_window_controls.qml)
 add_test(NAME qml_mac14_regressions_test
     COMMAND qml_main_window_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_mac14_regressions.qml)
-set_tests_properties(qml_mac14_regressions_test PROPERTIES
+add_test(NAME qml_lossless_file_import_test
+    COMMAND qml_main_window_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_lossless_file_import.qml)
+set_tests_properties(qml_mac14_regressions_test qml_lossless_file_import_test PROPERTIES
     TIMEOUT 60
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
