@@ -13,7 +13,7 @@
     sha256: '44247C0FFA169E19AA6B5E23D62D47F1B57AFFBC95AE738C0E184E81C8D28BED'
   });
 
-  function selectWindowsRelease(manifest) {
+  function selectWindowsRelease(manifest, platform = 'windows') {
     if (!manifest || manifest.schemaVersion !== 1 || typeof manifest.version !== 'string' || !stableVersion.test(manifest.version)) return null;
     const tag = `v${manifest.version}`;
     if (manifest.tag !== tag
@@ -21,7 +21,7 @@
       || !Number.isFinite(Date.parse(manifest.publishedAt))
       || manifest.releaseNotesUrl !== `https://github.com/gddjag/AgPlayer/releases/tag/${tag}`
       || !Array.isArray(manifest.files)) return null;
-    const name = `AgPlayer-Setup-${manifest.version}-x64.exe`;
+    const name = platform === 'macos' ? `AgPlayer-${manifest.version}-macOS-universal.dmg` : `AgPlayer-Setup-${manifest.version}-x64.exe`;
     const file = manifest.files.find(item => item?.name === name);
     if (!file || !Number.isSafeInteger(file.size) || file.size <= 0 || !/^[a-f0-9]{64}$/.test(file.sha256)) return null;
     const encodedName = encodeURIComponent(name);
@@ -53,7 +53,7 @@
       return list;
     };
     if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.3-x64.exe', '34.5 MB'));
-    if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), AG.t('downloadPage.meta.pending'), '—'));
+    if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), 'AgPlayer-1.0.3-macOS-universal.dmg', '85.5 MB'));
     const platforms = windows.closest('.platforms');
     let checksum = document.querySelector('#windows-checksum');
     if (!checksum) {
@@ -97,6 +97,20 @@
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   }
 
+  function renderMacRelease(release) {
+    const primary = document.querySelector('#macos .download-macos-primary');
+    const github = document.querySelector('#macos .download-macos-github');
+    if (!primary || !github) return;
+    primary.href = release.r2Url;
+    github.href = release.githubUrl;
+    const filename = document.querySelector('#macos [data-meta="filename"]');
+    const size = document.querySelector('#macos [data-meta="size"]');
+    const checksum = document.querySelector('#macos-sha256');
+    if (filename) filename.textContent = `AgPlayer-${release.version}-macOS-universal.dmg`;
+    if (size) size.textContent = `${(release.size / 1048576).toFixed(1)} MB`;
+    if (checksum) checksum.textContent = release.sha256;
+  }
+
   async function hydrateDownloads() {
     ensureDownloadDetails();
     const primary = document.querySelector('.download-primary');
@@ -138,11 +152,14 @@
       if (!response.ok) return;
       const text = await readManifest(response);
       if (text === null) return;
-      const release = selectWindowsRelease(JSON.parse(text));
-      if (!release) return;
+      const manifest = JSON.parse(text);
+      const release = selectWindowsRelease(manifest);
+      const macRelease = selectWindowsRelease(manifest, 'macos');
+      if (!release || !macRelease) return;
       renderRelease(release);
+      renderMacRelease(macRelease);
     } catch (_) {
-      // Keep the honest pre-release state for unavailable or malformed metadata.
+      // Keep the last published downloads when live metadata is unavailable.
     } finally {
       clearTimeout(timeout);
     }

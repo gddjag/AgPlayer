@@ -54,6 +54,9 @@ async function runDownloadScript(response, timers = {}) {
   const checksum = fakeElement();
   const checksumValue = fakeElement();
   const checksumCopy = fakeElement();
+  const macPrimary = fakeElement();
+  const macGithub = fakeElement();
+  const macChecksum = fakeElement();
   checksum.setAttribute('hidden', '');
   const documentListeners = new Map();
   const calls = [];
@@ -65,7 +68,10 @@ async function runDownloadScript(response, timers = {}) {
     ['#windows-download-status', status],
     ['#windows-checksum', checksum],
     ['#windows-sha256', checksumValue],
-    ['#windows-sha256-copy', checksumCopy]
+    ['#windows-sha256-copy', checksumCopy],
+    ['#macos .download-macos-primary', macPrimary],
+    ['#macos .download-macos-github', macGithub],
+    ['#macos-sha256', macChecksum]
   ]);
   const context = {
     document: {
@@ -89,7 +95,7 @@ async function runDownloadScript(response, timers = {}) {
   };
   runInNewContext(await readFile(scriptPath, 'utf8'), context, { filename: scriptPath });
   await new Promise(resolve => setTimeout(resolve, 0));
-  return { primary, github, status, checksum, checksumValue, checksumCopy, calls, navigations, clipboardWrites, documentListeners };
+  return { primary, github, status, checksum, checksumValue, checksumCopy, macPrimary, macGithub, macChecksum, calls, navigations, clipboardWrites, documentListeners };
 }
 
 function manifest(overrides = {}) {
@@ -107,10 +113,37 @@ function manifest(overrides = {}) {
       sha256: 'a'.repeat(64),
       githubUrl: `https://github.com/gddjag/AgPlayer/releases/download/v${version}/${name}`,
       r2Url: `https://download.agplayer.com/releases/v${version}/${name}`
-    }],
+    }, macFile(version)],
     ...overrides
   };
 }
+
+function macFile(version = '1.0.3') {
+  const name = `AgPlayer-${version}-macOS-universal.dmg`;
+  return { name, size: 89616142, sha256: 'b'.repeat(64),
+    githubUrl: `https://github.com/gddjag/AgPlayer/releases/download/v${version}/${name}`,
+    r2Url: `https://download.agplayer.com/releases/v${version}/${name}` };
+}
+
+test('one verified manifest updates both platforms and rejects a forged macOS route', async () => {
+  const result = await runDownloadScript(streamedResponse(JSON.stringify(manifest())));
+  assert.equal(result.macPrimary.href, macFile().r2Url);
+  assert.equal(result.macGithub.href, macFile().githubUrl);
+  assert.equal(result.macChecksum.textContent, 'B'.repeat(64));
+  const bad = manifest();
+  bad.files[1].r2Url = 'https://example.com/forged.dmg';
+  const rejected = await runDownloadScript(streamedResponse(JSON.stringify(bad)));
+  assert.equal(rejected.macPrimary.href, undefined);
+  assert.equal(rejected.checksumValue.textContent, '44247C0FFA169E19AA6B5E23D62D47F1B57AFFBC95AE738C0E184E81C8D28BED');
+});
+
+test('macOS HTML fallback links the accepted package and official opening guide', async () => {
+  const html = await readFile(downloadPagePath, 'utf8');
+  assert.match(html, /href="https:\/\/support\.apple\.com\/zh-cn\/102445"/);
+  assert.match(html, /尚未经过 Apple 公证/);
+  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.0\.3\/AgPlayer-1\.0\.3-macOS-universal\.dmg"/);
+  assert.match(html, /2D2BB542B5BC6927EF91745DE6CA71F5A55E5D71E9BFA6ADB7ECE24684AA99AB/);
+});
 
 test('valid official manifest enables both trusted Windows download routes', async () => {
   const result = await runDownloadScript(streamedResponse(JSON.stringify(manifest()), { chunkSize: 17 }));
@@ -175,7 +208,7 @@ test('download page hides the removed pre-download FAQ section and divider', asy
   const html = await readFile(downloadPagePath, 'utf8');
   const css = await readFile(siteCssPath, 'utf8');
   assert.match(css, /\.download-faq\s*\{\s*display:\s*none\s*\}/);
-  assert.match(html, /downloads\.js\?v=20260912-release-103/);
+  assert.match(html, /downloads\.js\?v=20260913-release-103-macos/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
