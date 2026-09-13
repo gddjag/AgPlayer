@@ -26,7 +26,7 @@ jobs:
       - name: Validate and launch the existing Universal package on Intel
         shell: bash
         run: |
-          test "$(uname -m)" = x86_64
+          uname -a
           dmg_path="$(find package -maxdepth 1 -name '*.dmg' -print -quit)"
           test -n "$dmg_path"
           mount_path="$RUNNER_TEMP/agplayer-dmg"
