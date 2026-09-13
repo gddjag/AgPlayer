@@ -907,7 +907,13 @@ void WindowControllerTest::listWindowExplicitSnapToEachEdge()
     windows.setListWindow(&listWindow);
 
     windows.snapListWindow("left");
+#ifdef Q_OS_WIN
+    // The native Win32 path includes the DWM frame coordinate adjustment.
     QCOMPARE(listWindow.geometry().right(), mainWindow.geometry().left() + 3);
+#else
+    // QRect::right() is inclusive: a two-pixel shared edge ends at left + 1.
+    QCOMPARE(listWindow.geometry().right(), mainWindow.geometry().left() + 1);
+#endif
     QCOMPARE(listWindow.size(), QSize(300, 150));
 
     windows.snapListWindow("right");
