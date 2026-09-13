@@ -93,5 +93,5 @@ Apple HIG is the standing platform rule in `UI_DESIGN_SYSTEM.md`, section 9.
 ## macOS 13 至 27 兼容目标
 
 - 部署目标固定为 macOS 13.0，单个 DMG 内的全部 Mach-O 都必须同时包含 `arm64` 与 `x86_64`，且任何 slice 的最低系统版本不得高于 13.0。
-- 云端安装启动矩阵覆盖 GitHub 当前提供的 macOS 14、15、26（Apple Silicon）、macOS 15/26 Intel，以及 `xcode-27` 预览环境。每个环境都挂载最终 DMG、检查签名、安装到 `/Applications` 并通过 LaunchServices 启动。
-- macOS 13 以及真正运行 macOS 27 的机器当前没有标准 GitHub 托管运行器；这两项必须在可用实机或云主机上补测后才可声明通过。`xcode-27` 只能证明 Xcode 27/新 SDK 环境兼容，不能替代 macOS 27 系统实机验收。
+- 云端安装启动矩阵覆盖 GitHub 当前提供的 macOS 14、15、26（Apple Silicon）、macOS 15/26 Intel，以及实际运行 macOS 27.0 ARM64 的 `xcode-27` 预览环境。每个环境都挂载最终 DMG、检查签名、安装到 `/Applications` 并通过 LaunchServices 启动。
+- macOS 13 当前没有标准免费 GitHub 托管运行器，必须在可用实机或专用云 Mac 上补测后才可声明通过。macOS 27 当前仍为预览系统，即使自动启动通过，正式版发布后仍需重跑签名、安装、播放和人工 UI 验收。

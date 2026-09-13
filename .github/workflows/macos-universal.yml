@@ -5,7 +5,7 @@ name: macOS Universal internal test build
 on:
   push:
     branches: [codex/macos-universal]
-    paths-ignore: ['.github/workflows/macos-intel-check.yml']
+    paths-ignore: ['.github/workflows/macos-intel-check.yml', 'docs/**']
   workflow_dispatch:
 
 permissions:
