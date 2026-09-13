@@ -190,6 +190,9 @@ export async function upload(tag, directory, run = execFileSync) {
   }
   const latestPath = join(directory, 'latest.json');
   await writeFile(latestPath, `${JSON.stringify(latest, null, 2)}\n`);
+  if (latest.files.some(file => file.name.endsWith('.dmg'))) {
+    aws(['s3', 'cp', latestPath, `s3://${bucket}/updates/macos/latest.json`, '--only-show-errors', '--content-type', 'application/json; charset=utf-8', '--cache-control', 'no-cache']);
+  }
   aws(['s3', 'cp', latestPath, `s3://${bucket}/updates/latest.json`, '--only-show-errors', '--content-type', 'application/json; charset=utf-8', '--cache-control', 'no-cache']);
   console.log(`Synced ${manifest.files.length} installer asset(s) and latest metadata for ${tag}`);
 }

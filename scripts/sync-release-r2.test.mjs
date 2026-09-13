@@ -135,6 +135,42 @@ test('upload checks all files before publishing checksum and latest metadata', a
   }
 });
 
+test('shared releases publish the same latest bytes to legacy macOS and shared endpoints', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'agplayer-legacy-alias-test-'));
+  process.env.AWS_ACCESS_KEY_ID = 'test-only';
+  process.env.AWS_SECRET_ACCESS_KEY = 'test-only';
+  try {
+    const bytes = Buffer.from('abc');
+    const hash = createHash('sha256').update(bytes).digest('hex');
+    const files = ['AgPlayer-Setup-1.0.4-x64.exe', 'AgPlayer-1.0.4-macOS-universal.dmg']
+      .map(name => ({ name, size: bytes.length, sha256: hash }));
+    for (const file of files) await writeFile(join(directory, file.name), bytes);
+    await writeFile(join(directory, 'manifest.json'), JSON.stringify({
+      tag: 'v1.0.4', publishedAt: '2026-09-14T00:00:00Z',
+      releaseNotesUrl: 'https://github.com/gddjag/AgPlayer/releases/tag/v1.0.4', files
+    }));
+    await writeFile(join(directory, 'SHA256SUMS'), files.map(file => `${hash}  ${file.name}\n`).join(''));
+    const publications = new Map();
+    await upload('v1.0.4', directory, (_, args) => {
+      if (args[1] === 'head-object') return JSON.stringify({ ContentLength: 3, Metadata: { sha256: hash } });
+      if (args[1] === 'get-object') throw new Error('NoSuchKey');
+      if (args[1] === 'cp' && args[3].includes('/updates/')) {
+        assert.ok(args.includes('no-cache'));
+        publications.set(args[3], args[2]);
+      }
+      return '';
+    });
+    assert.ok(publications.has('s3://agplayer-releases/updates/macos/latest.json'));
+    assert.equal(publications.get('s3://agplayer-releases/updates/macos/latest.json'),
+                 publications.get('s3://agplayer-releases/updates/latest.json'));
+    assert.equal([...publications.keys()].at(-1), 's3://agplayer-releases/updates/latest.json');
+  } finally {
+    delete process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_SECRET_ACCESS_KEY;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('upload publishes latest JSON last with no-cache and never downgrades it', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'agplayer-latest-test-'));
   process.env.AWS_ACCESS_KEY_ID = 'test-only';
