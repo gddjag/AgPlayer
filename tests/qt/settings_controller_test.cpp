@@ -1598,7 +1598,8 @@ void SettingsControllerTest::cacheActionsReportLockedFileFailure()
     QVERIFY(settings.property("cacheClearStatus").toString().contains(QStringLiteral("无法清理")));
     QVERIFY(QFile::exists(locked));
 #else
-    QSKIP("Windows file-sharing denial fixture");
+    QTest::qSkip("Windows file-sharing denial fixture", __FILE__, __LINE__);
+    return;
 #endif
 }
 
