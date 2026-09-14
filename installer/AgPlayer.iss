@@ -54,11 +54,12 @@ english.UninstallPersonalDataPrompt=Delete personal playlists, favorites, and ap
 Name: "associateaudio"; Description: "{cm:AssociateAudioTask}"; Flags: unchecked
 
 [Files]
+Source: "..\assets\brand\desktop-install-icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\package\AgPlayer\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; AppUserModelID: "AgPlayer.Desktop"; Flags: createonlyiffileexists
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; AppUserModelID: "AgPlayer.Desktop"; Flags: createonlyiffileexists
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\desktop-install-icon.ico"; AppUserModelID: "AgPlayer.Desktop"; Flags: createonlyiffileexists
 
 [Registry]
 Root: HKCU; Subkey: "Software\Classes\AppUserModelId\AgPlayer.Desktop"; ValueType: string; ValueName: "DisplayName"; ValueData: "{#AppName}"; Flags: uninsdeletekey

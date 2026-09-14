@@ -320,7 +320,7 @@ int main(int argc, char* argv[])
         QString::fromLatin1(agplayer::version::kVersion));
     app.setOrganizationName(QStringLiteral("AgPlayer"));
     const QIcon applicationIcon(QStringLiteral(
-        ":/qt/qml/AgPlayer/assets/brand/agplayer.ico"));
+        ":/qt/qml/AgPlayer/assets/brand/desktop-install-icon.ico"));
     app.setWindowIcon(applicationIcon);
 #ifdef Q_OS_WIN
     WindowsShellIdentityFilter shellIdentityFilter(

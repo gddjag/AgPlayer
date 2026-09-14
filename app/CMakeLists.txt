@@ -96,6 +96,7 @@ set(ICON_FILES
 
 set(BRAND_FILES
     ${CMAKE_SOURCE_DIR}/assets/brand/agplayer.ico
+    ${CMAKE_SOURCE_DIR}/assets/brand/desktop-install-icon.ico
     ${CMAKE_SOURCE_DIR}/assets/brand/logo-mark.png
 )
 

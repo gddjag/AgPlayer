@@ -208,7 +208,7 @@ class PackageFlowTests(BundleFixture):
         for relative in ["assets/licenses", "LICENSES/runtime", "app/qml", "assets/brand"]:
             (self.repo / relative).mkdir(parents=True)
         (self.repo / "THIRD-PARTY-NOTICES.md").write_text("Windows inventory\n", encoding="utf-8")
-        (self.repo / "assets/brand/agplayer-icon.png").write_bytes(b"source icon")
+        (self.repo / "assets/brand/desktop-install-icon.png").write_bytes(b"source icon")
         for relative in packaging.REQUIRED_LICENSES:
             (self.repo / relative).parent.mkdir(parents=True, exist_ok=True)
             (self.repo / relative).write_text("license", encoding="utf-8")
@@ -237,6 +237,7 @@ class PackageFlowTests(BundleFixture):
                 self.assertIn("-no-plugins", args)
                 self.assertIn("-executable=" + str(self.staged / "Contents/MacOS/AgSeparationWorker"), args)
         elif tool == "sips":
+            self.assertIn(str(self.repo / "assets/brand/desktop-install-icon.png"), args)
             Path(args[args.index("--out") + 1]).write_bytes(b"sized icon")
         elif tool == "iconutil":
             Path(args[args.index("-o") + 1]).write_bytes(b"icns")
