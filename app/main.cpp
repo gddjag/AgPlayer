@@ -1257,8 +1257,7 @@ int main(int argc, char* argv[])
             }
         });
 
-        QSystemTrayIcon tray(QIcon(
-            QStringLiteral(":/qt/qml/AgPlayer/assets/brand/logo-mark.png")), &app);
+        QSystemTrayIcon tray(applicationIcon, &app);
         QMenu trayMenu;
         QAction trayShowAction;
         QAction trayExitAction;
