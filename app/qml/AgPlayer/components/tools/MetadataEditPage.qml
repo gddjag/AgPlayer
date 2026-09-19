@@ -14,7 +14,6 @@ Rectangle {
     readonly property real desktopMinimumWidth: 1206
     readonly property bool compactLayout: width < desktopMinimumWidth
     readonly property bool macStackedLayout: Qt.platform.os === "osx" && compactLayout
-    readonly property real compactActionInset: macStackedLayout ? Math.max(0, 460 - height) : 0
     readonly property real inspectorRatio: 0.44
     readonly property color canvasColor: Theme.editorCanvas
     readonly property color panelColor: Theme.panel
@@ -1040,7 +1039,7 @@ Rectangle {
                         objectName: "metadataInspectorScroll"
                         anchors.fill: parent
                         anchors.margins: 14
-                        anchors.bottomMargin: metadataActionBar.height + 28 + page.compactActionInset
+                        anchors.bottomMargin: metadataActionBar.height + 28
                         clip: true
                         contentWidth: availableWidth
                         ScrollBar.vertical.policy: ScrollBar.AsNeeded
@@ -1478,7 +1477,6 @@ Rectangle {
                                 anchors.right: parent.right
                                 anchors.bottom: parent.bottom
                                 anchors.margins: 14
-                                anchors.bottomMargin: 14 + page.compactActionInset
                                 height: Theme.controlHeightProminent
                                 spacing: 12
                                 ProgressBar {

@@ -46,16 +46,14 @@ TestCase {
         }
     }
     function revealVertically(item) {
-        for (var pass = 0; pass < 2; ++pass) {
-            for (var ancestor = item.parent; ancestor; ancestor = ancestor.parent) {
-                if (ancestor.contentY !== undefined && ancestor.contentHeight !== undefined) {
-                    var local = item.mapToItem(ancestor, 0, 0)
-                    ancestor.contentY = Math.max(0, Math.min(ancestor.contentHeight - ancestor.height,
-                        ancestor.contentY + local.y - 2))
-                }
+        for (var ancestor = item.parent; ancestor; ancestor = ancestor.parent) {
+            if (ancestor.contentY !== undefined && ancestor.contentHeight !== undefined) {
+                var local = item.mapToItem(ancestor, 0, 0)
+                ancestor.contentY = Math.max(0, Math.min(ancestor.contentHeight - ancestor.height,
+                    ancestor.contentY + local.y - 2))
             }
-            if (pass === 0) wait(0)
         }
+        wait(0)
     }
     function snapshot(page, name) {
         if (typeof visualFixtureOutput !== "undefined" && visualFixtureOutput.length > 0)
@@ -93,26 +91,10 @@ TestCase {
             }
             snapshot(page, data.tag)
             var primaryAction = findChild(page, data.action)
-            revealVertically(primaryAction)
             if (data.name === "metadata" && page.macStackedLayout) {
                 var metadataScroller = findChild(page, "metadataWorkbenchScroller")
                 metadataScroller.contentY = Math.max(0, metadataScroller.contentHeight - metadataScroller.height)
-                if (data.h === 332) {
-                    var metadataActionBar = findChild(page, "metadataActionBar")
-                    var metadataInspector = findChild(page, "metadataInspectorPanel")
-                    console.log("METADATA_LAYOUT", JSON.stringify({
-                        pageHeight: page.height, inset: page.compactActionInset,
-                        scrollHeight: metadataScroller.height,
-                        scrollContentHeight: metadataScroller.contentHeight,
-                        scrollY: metadataScroller.contentY,
-                        inspectorY: metadataInspector.mapToItem(page, 0, 0).y,
-                        inspectorHeight: metadataInspector.height,
-                        actionBarY: metadataActionBar.mapToItem(page, 0, 0).y,
-                        actionBarBottomMargin: metadataActionBar.anchors.bottomMargin,
-                        actionY: primaryAction.mapToItem(page, 0, 0).y
-                    }))
-                }
-            }
+            } else revealVertically(primaryAction)
             inside(primaryAction, page)
             if (data.name === "editor") {
                 revealVertically(findChild(page, "editorPlaybackTransport"))
