@@ -725,7 +725,8 @@ Rectangle {
                 anchors.fill: parent
                 anchors.margins: 8
                 contentWidth: width
-                contentHeight: page.macStackedLayout ? Math.max(height, 960) : height
+                contentHeight: page.macStackedLayout
+                    ? Math.max(height, metadataWorkbenchLayout.implicitHeight) : height
                 interactive: page.macStackedLayout
                 flickableDirection: Flickable.VerticalFlick
                 clip: true
@@ -735,8 +736,10 @@ Rectangle {
                 }
 
             GridLayout {
+                id: metadataWorkbenchLayout
                 width: metadataWorkbenchScroller.contentWidth
-                height: metadataWorkbenchScroller.contentHeight
+                height: page.macStackedLayout ? implicitHeight
+                       : metadataWorkbenchScroller.contentHeight
                 columns: page.macStackedLayout ? 1 : 2
                 columnSpacing: 8
                 rowSpacing: 8
