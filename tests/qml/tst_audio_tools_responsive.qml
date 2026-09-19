@@ -46,14 +46,16 @@ TestCase {
         }
     }
     function revealVertically(item) {
-        for (var ancestor = item.parent; ancestor; ancestor = ancestor.parent) {
-            if (ancestor.contentY !== undefined && ancestor.contentHeight !== undefined) {
-                var local = item.mapToItem(ancestor, 0, 0)
-                ancestor.contentY = Math.max(0, Math.min(ancestor.contentHeight - ancestor.height,
-                    ancestor.contentY + local.y - 2))
+        for (var pass = 0; pass < 2; ++pass) {
+            for (var ancestor = item.parent; ancestor; ancestor = ancestor.parent) {
+                if (ancestor.contentY !== undefined && ancestor.contentHeight !== undefined) {
+                    var local = item.mapToItem(ancestor, 0, 0)
+                    ancestor.contentY = Math.max(0, Math.min(ancestor.contentHeight - ancestor.height,
+                        ancestor.contentY + local.y - 2))
+                }
             }
+            if (pass === 0) wait(0)
         }
-        wait(0)
     }
     function snapshot(page, name) {
         if (typeof visualFixtureOutput !== "undefined" && visualFixtureOutput.length > 0)
