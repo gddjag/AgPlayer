@@ -77,14 +77,18 @@ TestCase {
         wait(0) // Flush Column/Row positioners before measuring their children.
         const inspector = visualChild(page, "editorInspector")
         verify(inspector.visible)
-        compare(inspector.x, page.mainWidth)
+        const layoutOwner = page.macStackedLayout
+            ? visualChild(page, "editorMainColumn").parent : page
+        compare(inspector.x, page.macStackedLayout ? 0 : page.mainWidth)
+        if (page.macStackedLayout)
+            verify(inspector.y >= visualChild(page, "editorMainColumn").height)
         verify(inspector.width >= 300)
-        inside(inspector, page)
+        inside(inspector, layoutOwner)
         const device = visualChild(page, "editorInputDevice")
         const meter = visualChild(page, "editorRecordingLevel")
         const recordingGain = visualChild(page, "editorRecordingGain")
-        inside(meter, page)
-        inside(recordingGain, page)
+        inside(meter, layoutOwner)
+        inside(recordingGain, layoutOwner)
         compare(meter.width, device.width)
         verify(meter.mapToItem(page, 0, meter.height).y <= device.mapToItem(page, 0, 0).y)
         compare(device.palette.text, Theme.primaryText)
@@ -104,13 +108,13 @@ TestCase {
         compare(exportButton.background.color, Theme.accent)
         compare(exportButton.contentItem.color, Theme.accentText)
         for (const name of ["editorCommandBar", "editorRecordingTransport", "editorInputDevice", "editorRecordButton", "editorPauseRecordingButton", "editorPlaybackTransport", "editorCurrentTime"])
-            inside(visualChild(page, name), page)
+            inside(visualChild(page, name), layoutOwner)
         const scroller = visualChild(page, "editorTrackScroller")
         verify(scroller.height >= 82)
         const transport = visualChild(page, "editorRecordingTransport")
         verify(transport.y >= scroller.y + scroller.height,
                "Transport must remain below the timeline")
-        inside(scroller, page)
+        inside(scroller, layoutOwner)
         const first = AudioEditorController.timelineEventViews[0]
         const waveform = visualChild(page, "editorWaveformGeometry_" + first.id)
         verify(waveform)

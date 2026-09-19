@@ -164,6 +164,7 @@ jobs:
           path: |
             build/macos-universal/macos-native-tests.xml
             build/macos-universal/Testing/Temporary/LastTest.log
+            build/macos-universal/qml-*.txt
             build/macos-ui-titlebar-*.png
             build/macos-universal/CMakeFiles/CMakeConfigureLog.yaml
             ${{ runner.temp }}/agplayer-arm.log
