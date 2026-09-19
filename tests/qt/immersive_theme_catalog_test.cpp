@@ -110,6 +110,12 @@ void ImmersiveThemeCatalogTest::hexBackedThemesConvertFromTheirOriginalBytes()
     }
 }
 
-QTEST_APPLESS_MAIN(ImmersiveThemeCatalogTest)
+// Keep the app-less runner compatible with Qt 6.7/6.8 and strict C++17.
+int main(int argc, char* argv[])
+{
+    ImmersiveThemeCatalogTest test;
+    QTEST_SET_MAIN_SOURCE_PATH
+    return QTest::qExec(&test, argc, argv);
+}
 
 #include "immersive_theme_catalog_test.moc"
