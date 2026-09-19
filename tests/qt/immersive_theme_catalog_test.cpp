@@ -11,12 +11,12 @@ class ImmersiveThemeCatalogTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void violetHeartHasPurpleBodyAndBlueVioletBeatLight()
+    void violetHeartHasPurpleBodyAndPurpleBeatLight()
     {
         const auto* theme = findBuiltInTheme("violet-heart");
         QVERIFY(theme);
         const std::array<SrgbRgb, 8> expected{{{5,2,10},{107,57,155},{4,2,8},
-            {201,122,255},{165,90,218},{155,135,255},{126,150,255},{180,130,255}}};
+            {201,122,255},{165,90,218},{216,145,255},{190,100,246},{201,122,255}}};
         for (std::size_t i = 0; i < expected.size(); ++i) {
             const auto color = workingLinearToSrgb(toWorkingLinear(theme->colors[i]));
             QCOMPARE(int(std::round(color.red * 255)), int(expected[i].red));

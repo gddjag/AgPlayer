@@ -13,7 +13,7 @@ Window {
     }
     visible: false
     readonly property rect availableWorkArea: WindowController.availableGeometryForWindow(window)
-    readonly property rect initialGeometry: WindowController.startupGeometryForAvailableArea(
+    readonly property rect initialGeometry: WindowController.audioToolsStartupGeometryForAvailableArea(
         Qt.rect(0, 0, 1672, 941), availableWorkArea, true)
     width: initialGeometry.width
     height: initialGeometry.height

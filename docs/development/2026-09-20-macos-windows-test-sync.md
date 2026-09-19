@@ -7,3 +7,9 @@
 - Keep version 1.0.4, macOS minimum 13.0, one Universal arm64+x86_64 DMG. Preserve internal ad-hoc signing with no claim of Developer ID signing or notarization.
 - Extend cloud checks to six-track document, peak pyramid, controller, recording, waveform and QML workflows, plus mini title centering. Physical microphone permissions, hardware listening and Finder interaction require manual Mac acceptance.
 - Final build/package/installed verification results are recorded after completion; synchronization itself is not acceptance.
+
+## Resumed source snapshot
+
+- After the user paused for mainline fixes and requested packaging again, synchronized all 51 tracked Windows worktree changes. Nine files differ from the earlier snapshot, covering tools-window geometry, six-track responsive layout and the violet-heart palette.
+- These follow-up fixes postdate the 01:00 Windows installer; this Mac build uses the updated source snapshot, not a claim of byte-exact source provenance for that older installer. The source worktree remains untouched, and copied files were checked using before/after SHA-256 hashes.
+- Cloud coverage also includes audio-tools responsive layout and immersive-theme palette tests.

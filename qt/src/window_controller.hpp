@@ -112,6 +112,8 @@ public:
     QRect mainWindowAvailableGeometry() const;
     Q_INVOKABLE QRect startupGeometryForAvailableArea(
         const QRect& requested, const QRect& available, bool firstRun) const;
+    Q_INVOKABLE QRect audioToolsStartupGeometryForAvailableArea(
+        const QRect& requested, const QRect& available, bool firstRun) const;
     Q_INVOKABLE bool restoreImmersiveWindowGeometry(QWindow* window);
     Q_INVOKABLE void persistImmersiveWindowGeometry(QWindow* window);
     Q_INVOKABLE void toggleMainWindowGroup();

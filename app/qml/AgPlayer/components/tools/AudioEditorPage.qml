@@ -12,6 +12,7 @@ Rectangle {
     focus: true
 
     readonly property bool narrowLayout: width < 1100
+    readonly property bool compactHeight: height < 800
     readonly property real inspectorWidth: narrowLayout ? 300 : 380
     readonly property real mainWidth: width - inspectorWidth
     property bool pendingExportAfterDirectory: false
@@ -360,7 +361,7 @@ Rectangle {
                     objectName: "inspectorTempoGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 156
+                    height: collapsed ? 38 : page.compactHeight ? 124 : 156
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -507,7 +508,7 @@ Rectangle {
                     objectName: "inspectorPitchGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 105
+                    height: collapsed ? 38 : page.compactHeight ? 90 : 105
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -635,7 +636,7 @@ Rectangle {
                     objectName: "inspectorPreservePitchGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 130
+                    height: collapsed ? 38 : page.compactHeight ? 100 : 130
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -729,13 +730,13 @@ Rectangle {
                     property bool collapsed: false
                     property bool exportInProgress: false
                     property bool exportCompleted: false
-                    height: collapsed ? 38 : 388
+                    height: collapsed ? 38 : page.compactHeight ? 352 : 388
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
                     radius: 6
                     ColumnLayout {
-                        anchors.fill: parent; anchors.margins: exportGroup.collapsed ? 6 : 16; spacing: 7
+                        anchors.fill: parent; anchors.margins: exportGroup.collapsed ? 6 : page.compactHeight ? 8 : 16; spacing: page.compactHeight ? 4 : 7
                         RowLayout {
                             Layout.fillWidth: true
                             Label {
@@ -770,7 +771,7 @@ Rectangle {
                         GridLayout {
                             visible: !exportGroup.collapsed
                             Layout.fillWidth: true; columns: 2
-                            columnSpacing: 6; rowSpacing: 6
+                            columnSpacing: 6; rowSpacing: page.compactHeight ? 4 : 6
                             Label {
                                 Layout.preferredWidth: 58
                                 text: qsTr("输出格式")

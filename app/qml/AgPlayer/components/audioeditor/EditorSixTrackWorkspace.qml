@@ -15,7 +15,7 @@ Item {
     readonly property bool compactTransport: width < 1000
     readonly property bool tinyTransport: width < 620
     readonly property rect rulerGeometry: Qt.rect(ruler.x, ruler.y, ruler.width, ruler.height)
-    readonly property real trackHeight: 82
+    readonly property real trackHeight: height < 760 ? 72 : 82
     property int actionRevision: 0
 
     function dropAudio(urls, x, y) {
@@ -50,7 +50,7 @@ Item {
         id: commandBar
         objectName: "editorCommandBar"
         x: workspace.shortLayout ? 8 : 14; y: workspace.shortLayout ? 6 : 12
-        width: parent.width - x * 2; height: workspace.shortLayout ? 48 : workspace.height < 600 ? 64 : 82
+        width: parent.width - x * 2; height: workspace.shortLayout ? 48 : workspace.height < 760 ? 64 : 82
         spacing: workspace.width < 800 ? 6 : 12
         Repeater {
             model: [
@@ -220,7 +220,7 @@ Item {
                     }
                 }
                 Label {
-                    x: 66; y: 9; width: parent.width - 80; height: 25
+                    x: 66; y: parent.height < 82 ? 4 : 9; width: parent.width - 80; height: 23
                     text: trackHeader.track ? trackHeader.track.name : qsTr("音轨 %1").arg(trackHeader.index + 1)
                     elide: Text.ElideMiddle; color: Theme.textPrimary; font.pixelSize: 15
                     ToolTip.visible: headerHover.hovered; ToolTip.text: text
@@ -229,7 +229,7 @@ Item {
                 Button {
                     id: muteButton
                     objectName: "editorTrackMute" + trackHeader.index
-                    x: 66; y: 36; width: 30; height: 28
+                    x: 66; y: parent.height < 82 ? 26 : 34; width: 30; height: parent.height < 82 ? 22 : 24
                     text: "M"; checkable: true
                     checked: trackHeader.track ? trackHeader.track.muted : false
                     enabled: !AudioEditorController.busy && !workspace.recordingActive
@@ -246,7 +246,7 @@ Item {
                     contentItem: Label { text: "M"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 18; color: muteButton.checked ? "white" : Theme.textPrimary }
                 }
                 Label {
-                    x: 108; y: 39; width: parent.width - 142
+                    x: 108; y: parent.height < 82 ? 28 : 36; width: parent.width - 142
                     text: Math.round((trackHeader.track ? trackHeader.track.gain : 1) * 100) + "%"
                     color: trackHeader.track ? trackHeader.track.color : Theme.textPrimary
                     horizontalAlignment: Text.AlignRight; font.pixelSize: 15
@@ -254,7 +254,7 @@ Item {
                 EditorSlider {
                     id: trackGain
                     objectName: "editorTrackGain" + trackHeader.index
-                    x: 60; y: 60; width: parent.width - 76; height: 26
+                    x: 60; y: parent.height - height - 2; width: parent.width - 76; height: 22
                     from: 0; to: 2; stepSize: 0.01
                     value: trackHeader.track ? trackHeader.track.gain : 1
                     Binding {

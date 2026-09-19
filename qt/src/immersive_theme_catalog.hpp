@@ -139,7 +139,7 @@ inline const std::array<BuiltInTheme, 15>& builtInThemes()
         hexTheme("wine-signal", "Wine Signal", {58,36,48}, {47,32,42}, {131,197,190}, {217,93,115}, {240,203,211}, 1.06F),
         // Single-hue palettes retain the reference elevation/timbre response.
         {"violet-heart", "Violet Heart", {s(5,2,10),s(107,57,155),s(4,2,8),
-            s(201,122,255),s(165,90,218),s(155,135,255),s(126,150,255),s(180,130,255)}, 1.10F},
+            s(201,122,255),s(165,90,218),s(216,145,255),s(190,100,246),s(201,122,255)}, 1.10F},
         {"sakura-glow", "Sakura Glow", {s(10,2,7),s(150,48,102),s(8,2,6),
             s(255,118,194),s(222,80,164),s(255,158,212),s(246,125,210),s(255,142,210)}, 1.05F},
         {"abyss-blue", "Abyss Blue", {s(2,4,12),s(42,75,155),s(2,3,10),
