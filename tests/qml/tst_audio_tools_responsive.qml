@@ -97,6 +97,21 @@ TestCase {
             if (data.name === "metadata" && page.macStackedLayout) {
                 var metadataScroller = findChild(page, "metadataWorkbenchScroller")
                 metadataScroller.contentY = Math.max(0, metadataScroller.contentHeight - metadataScroller.height)
+                if (data.h === 332) {
+                    var metadataActionBar = findChild(page, "metadataActionBar")
+                    var metadataInspector = findChild(page, "metadataInspectorPanel")
+                    console.log("METADATA_LAYOUT", JSON.stringify({
+                        pageHeight: page.height, inset: page.compactActionInset,
+                        scrollHeight: metadataScroller.height,
+                        scrollContentHeight: metadataScroller.contentHeight,
+                        scrollY: metadataScroller.contentY,
+                        inspectorY: metadataInspector.mapToItem(page, 0, 0).y,
+                        inspectorHeight: metadataInspector.height,
+                        actionBarY: metadataActionBar.mapToItem(page, 0, 0).y,
+                        actionBarBottomMargin: metadataActionBar.anchors.bottomMargin,
+                        actionY: primaryAction.mapToItem(page, 0, 0).y
+                    }))
+                }
             }
             inside(primaryAction, page)
             if (data.name === "editor") {
