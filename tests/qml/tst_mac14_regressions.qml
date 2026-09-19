@@ -12,6 +12,21 @@ TestCase {
     Component { id: title; TitleBar { width: 860; height: Theme.titleBarHeight; showBrand: true } }
     Component { id: settingsPage; SettingsPage { width: 1040; height: 720 } }
     Component { id: listPage; ListWindow { width: 1000; height: 620 } }
+    Component { id: mini; MiniPlayerWindow {} }
+
+    function test_miniBrandStaysCenteredOnMac() {
+        if (Qt.platform.os !== "osx") skip("macOS title alignment")
+        const window = createTemporaryObject(mini, null, { visible: true })
+        verify(window)
+        const brand = findChild(window, "miniTitleBrand")
+        verify(brand)
+        for (const width of [480, 588, 900]) {
+            window.width = width
+            tryVerify(function() {
+                return brand.width > 0 && Math.abs(brand.x + brand.width / 2 - brand.parent.width / 2) < 1
+            })
+        }
+    }
 
     function init() {
         WindowController.hideAudioTools()
