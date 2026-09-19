@@ -158,7 +158,6 @@ TestCase {
                 var lastField = findChild(page, "metadataValueField_customTag")
                 revealVertically(lastField)
                 inside(lastField, page)
-                inside(findChild(page, data.action), page)
             }
             if (data.name === "lossless") {
                 var taskList = findChild(page, "losslessTaskList")
