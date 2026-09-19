@@ -409,7 +409,7 @@ def clean_development_rpaths(app):
 
 def add_resources(app, repo_root, temporary):
     required = [repo_root / value for value in REQUIRED_LICENSES]
-    required += [repo_root / "THIRD-PARTY-NOTICES.md", repo_root / "assets/brand/desktop-install-icon.png"]
+    required += [repo_root / "THIRD-PARTY-NOTICES.md", repo_root / "assets/brand/macos-app-icon.png"]
     for path in required:
         if not path.is_file():
             raise PackageError(f"Required packaging resource missing: {path}")
@@ -421,7 +421,7 @@ def add_resources(app, repo_root, temporary):
     shutil.copytree(repo_root / "LICENSES", licenses, dirs_exist_ok=True)
     iconset = temporary / "AgPlayer.iconset"
     iconset.mkdir()
-    source = repo_root / "assets/brand/desktop-install-icon.png"
+    source = repo_root / "assets/brand/macos-app-icon.png"
     for size in (16, 32, 128, 256, 512):
         for scale in (1, 2):
             name = f"icon_{size}x{size}{'@2x' if scale == 2 else ''}.png"
