@@ -105,6 +105,10 @@ TestCase {
     }
 
     function test_nativeDropImportsBatchIntoSeparateTracks() {
+        destroyCurrentHost()
+        host = createTemporaryObject(shellComponent, testCase)
+        verify(nativeDropHelper.prepareItem(host))
+        page = findChild(host, "audioEditorPage")
         const dropArea = findChild(page, "editorAudioDropArea")
         verify(dropArea && testAudioUrl && testAudioUrl.toString().length > 0)
         const second = nativeDropHelper.copyForNativeDrop(testAudioUrl)
@@ -120,5 +124,14 @@ TestCase {
         compare(events[1].trackIndex, 1)
         compare(events[2].trackIndex, 2)
         for (const event of events) compare(Number(event.timelineStart), 0)
+        const canvas = findChild(page, "editorWaveformCanvas")
+        verify(canvas)
+        const dropPosition = canvas.mapToItem(host.contentItem, canvas.width / 3, canvas.rowHeight * 4.5)
+        const expectedFrame = canvas.frameAtCanvasPixel(canvas.width / 3)
+        verify(nativeDropHelper.sendUrls(host, [testAudioUrl], dropPosition.x, dropPosition.y))
+        tryVerify(function() { return !AudioEditorController.busy && AudioEditorController.timelineEventViews.length === 4 }, 10000)
+        const dropped = AudioEditorController.timelineEventViews.filter(function(clip) { return clip.trackIndex === 4 })[0]
+        verify(dropped)
+        verify(Math.abs(Number(dropped.timelineStart) - expectedFrame) <= 2)
     }
 }

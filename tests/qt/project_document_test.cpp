@@ -131,7 +131,7 @@ class ProjectDocumentTest final : public QObject {
         AudioDocument document = AudioDocument::fromEvents({first, second});
         document.addMarker({u8"前奏", 1'000});
         document.addMarker({u8"尾声", 39'000});
-        document.setSelection({500, 4'500});
+        document.setSelection({500, 4'500, 0});
 
         ProjectExportSettings settings;
         settings.codecName = QStringLiteral("flac");

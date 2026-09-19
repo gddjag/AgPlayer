@@ -140,12 +140,13 @@ QString PlayerExperienceController::baseColor() const { return baseColor_; }
 QString PlayerExperienceController::themeId() const { return themeId_; }
 QVariantList PlayerExperienceController::builtInThemeChoices() const
 {
-    static const std::array<QString, 13> titles = {
+    static const std::array<QString, 15> titles = {
         QStringLiteral("水墨"), QStringLiteral("夜色"), QStringLiteral("东京霓虹"),
         QStringLiteral("赛博森林"), QStringLiteral("极简黑白"), QStringLiteral("冰川白昼"),
         QStringLiteral("锦鲤池"), QStringLiteral("珊瑚礁"), QStringLiteral("苔藓玻璃"),
         QStringLiteral("蓝调时刻"), QStringLiteral("青瓷"), QStringLiteral("绯红信号"),
         QStringLiteral("紫夜霓心"),
+        QStringLiteral("绯樱流光"), QStringLiteral("深海蓝曜"),
     };
     QVariantList choices;
     choices.reserve(static_cast<qsizetype>(agplayer::immersive::builtInThemes().size()));

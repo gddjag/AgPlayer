@@ -63,8 +63,8 @@ TestCase {
         ]
         var cases = []
         for (var i = 0; i < pages.length; ++i) {
-            for (var size of [[760, 332], [998, 442], [1065, 479], [1672, 853]])
-                cases.push({tag: pages[i].tag + "-" + size[0], name: pages[i].tag,
+            for (var size of [[760, 332], [998, 442], [1065, 479], [1672, 712], [1672, 853]])
+                cases.push({tag: pages[i].tag + "-" + size[0] + "x" + size[1], name: pages[i].tag,
                             file: pages[i].file, action: pages[i].action, w: size[0], h: size[1]})
         }
         return cases
@@ -91,6 +91,15 @@ TestCase {
                 compare(inspector.x, page.mainWidth)
                 verify(findChild(page, "editorTrackScroller").height >= 86)
                 var exportButton = findChild(page, "editorExportButton")
+                if (data.h === 712) {
+                    var tracks = findChild(page, "editorTrackScroller")
+                    verify(tracks.height >= tracks.contentHeight, "all six tracks fit the desktop default")
+                    for (var trackIndex = 0; trackIndex < 6; ++trackIndex) {
+                        var gain = findChild(page, "editorTrackGain" + trackIndex)
+                        inside(gain, gain.parent)
+                    }
+                    inside(exportButton, page)
+                }
                 revealVertically(exportButton)
                 inside(exportButton, page)
             }
@@ -146,6 +155,8 @@ TestCase {
         try {
             waitForRendering(host.contentItem)
             var available = WindowController.availableGeometryForWindow(host)
+            verify(host.height <= Math.min(800, Math.floor(available.height * 0.72)),
+                   "default tools window should leave comfortable desktop space")
             verify(host.width < available.width && host.height < available.height,
                    "default tools window fills work area: " + host.width + "x" + host.height
                    + " vs " + available.width + "x" + available.height)

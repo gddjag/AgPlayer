@@ -21,6 +21,22 @@ class WindowControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void audioToolsUseCompactHeightWithoutOverridingCustomSizes()
+    {
+        WindowController windows;
+        for (const QSize size : {QSize(1280, 720), QSize(1440, 860), QSize(1920, 1040), QSize(3840, 2100)}) {
+            const QRect area(QPoint(100, 50), size);
+            const QRect requested(0, 0, 1672, 941);
+            const QRect compact = windows.audioToolsStartupGeometryForAvailableArea(requested, area, true);
+            QCOMPARE(compact.height(), qMin(800, size.height() * 72 / 100));
+            QVERIFY(area.contains(compact));
+            const QRect oldDefault = windows.startupGeometryForAvailableArea(requested, area, true);
+            QCOMPARE(windows.audioToolsStartupGeometryForAvailableArea(oldDefault, area, false), compact);
+            const QRect custom(area.topLeft() + QPoint(30, 30), QSize(900, 600).boundedTo(size - QSize(100, 100)));
+            QCOMPARE(windows.audioToolsStartupGeometryForAvailableArea(custom, area, false), custom);
+        }
+    }
+
     void applicationReactivationRestoresMinimizedPlayer()
     {
         QWindow mainWindow;
@@ -364,8 +380,11 @@ void WindowControllerTest::audioToolsStartupFitsWorkAreaAndKeepsUserGeometry()
     if (QByteArray(QTest::currentDataTag()).endsWith("user-choice")) {
         QCOMPARE(tools.geometry(), saved);
     } else {
-        QCOMPARE(tools.size(), QSize(1672, 941).boundedTo(
-            QSize(area.width() * 78 / 100, area.height() * 78 / 100)));
+        const QSize expected = QSize(1672, 941).boundedTo(
+            QSize(area.width() * 78 / 100, area.height() * 78 / 100));
+        QCOMPARE(tools.size(), windowKind == 0
+            ? QSize(expected.width(), qMin(expected.height(), qMin(800, area.height() * 72 / 100)))
+            : expected);
         QVERIFY(area.adjusted(24, 24, -24, -24).contains(tools.geometry()));
     }
 }

@@ -51,6 +51,61 @@ class SixTrackRecordingIntegrationTest final : public QObject {
     Q_OBJECT
 private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
+    void overwriteMiddlePreservesSidesOtherTrackAndOneUndo() {
+        auto input = std::make_shared<CaptureFixture>();
+        AudioEditorController editor(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(editor.recorder()->setCaptureFactoryForTesting([input] { return std::make_unique<FixtureInput>(input); }));
+        QVERIFY(editor.createUntitledDocument(48000, 2, 4800));
+        editor.selectEvent("1");
+        QVERIFY(editor.triggerAction("editor.copy"));
+        editor.setSelectedTrack(1);
+        QVERIFY(editor.triggerAction("editor.paste"));
+        editor.setSelectedTrack(0);
+        QVERIFY(editor.seekFrame(1200));
+        QVERIFY(editor.startRecording());
+        QVERIFY(editor.viewport()->visibleFrameCount() <= editor.sampleRate() * 10LL);
+        QTRY_VERIFY(input->started.load());
+        input->push(960, 0.25F);
+        QTRY_COMPARE(editor.recorder()->recordedFrames(), 960);
+        QTRY_COMPARE(editor.playheadFrame(), 2160);
+        const auto peaks = editor.recorder()->waveformPeaks(0, 960, 10);
+        QCOMPARE(peaks.size(), 1);
+        QVERIFY(peaks.front().toList()[1].toFloat() > 0.24F);
+        editor.pauseResumeRecording();
+        input->push(480, 0.9F);
+        QCOMPARE(editor.recorder()->recordedFrames(), 960);
+        editor.stopRecording();
+        QTRY_VERIFY_WITH_TIMEOUT(!editor.busy(), 10000);
+        QCOMPARE(editor.timelineEventViews().size(), 4);
+        QCOMPARE(editor.totalFrames(), 4800);
+        bool left = false, right = false, other = false, take = false;
+        for (const auto& item : editor.timelineEventViews()) {
+            const auto clip = item.toMap();
+            const auto start = clip.value("timelineStart").toLongLong();
+            const auto end = clip.value("timelineEnd").toLongLong();
+            if (clip.value("trackIndex").toInt() == 1) other = start == 0 && end == 4800;
+            else {
+                left |= start == 0 && end == 1200;
+                take |= start == 1200 && end == 2160;
+                right |= start == 2160 && end == 4800;
+            }
+        }
+        QVERIFY(left && right && other && take);
+        QVERIFY(editor.undo());
+        QCOMPARE(editor.timelineEventViews().size(), 2);
+        QVERIFY(editor.redo());
+        QCOMPARE(editor.timelineEventViews().size(), 4);
+        QVERIFY(editor.seekFrame(1200));
+        QVERIFY(editor.startRecording());
+        QTRY_VERIFY(input->started.load());
+        input->push(480, 0.5F);
+        QTRY_COMPARE(editor.recorder()->recordedFrames(), 480);
+        editor.stopRecording();
+        QTRY_VERIFY_WITH_TIMEOUT(!editor.busy(), 10000);
+        QCOMPARE(editor.timelineEventViews().size(), 5);
+        QVERIFY(editor.undo());
+        QCOMPARE(editor.timelineEventViews().size(), 4);
+    }
     void capturePauseStopUndoAndPortableProject() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -96,6 +151,7 @@ private slots:
         agplayer::DecodedAudioBlock block;
         QCOMPARE(decoder.read(block), AG_OK);
         QCOMPARE(block.frames, std::size_t(960));
+        // Unity (0 dB) is the default; save/reopen must preserve actual input.
         QVERIFY(std::abs(block.samples[0] - 0.125F) < 0.00001F);
         QVERIFY(std::abs(block.samples[960] - 0.25F) < 0.00001F);
         decoder.close();

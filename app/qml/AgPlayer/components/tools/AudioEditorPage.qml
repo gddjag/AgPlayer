@@ -12,6 +12,7 @@ Rectangle {
     focus: true
 
     readonly property bool narrowLayout: width < 1100
+    readonly property bool compactHeight: height < 800
     readonly property real inspectorWidth: narrowLayout ? 300 : 380
     readonly property real mainWidth: width - inspectorWidth
     property bool pendingExportAfterDirectory: false
@@ -94,6 +95,11 @@ Rectangle {
             AudioEditorController.positionMs - 5000))
     }
     Shortcut {
+        sequence: "End"; context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable() && AudioEditorController.hasDocument && !AudioEditorController.busy
+        onActivated: AudioEditorController.seekFrame(AudioEditorController.totalFrames)
+    }
+    Shortcut {
         objectName: "editorForwardShortcut"
         sequence: "Right"
         context: Qt.WindowShortcut
@@ -168,14 +174,21 @@ Rectangle {
         onActivated: AudioEditorController.triggerAction("editor.undo")
     }
     Shortcut {
-        sequence: "Ctrl+Y"
+        sequences: [StandardKey.Redo]
         context: Qt.WindowShortcut
         enabled: page.editorShortcutAvailable()
         onActivated: AudioEditorController.triggerAction("editor.redo")
     }
+    Shortcut {
+        sequences: [StandardKey.SaveAs]; context: Qt.WindowShortcut
+        enabled: page.editorShortcutAvailable() && AudioEditorController.hasDocument && !AudioEditorController.busy
+        onActivated: saveProjectDialog.open()
+    }
 
     Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) {
+            if (AudioEditorController.busy && !mainColumn.recordingActive)
+                AudioEditorController.cancelOperation()
             mainColumn.cancelGesture()
             AudioEditorController.clearTransientState()
             event.accepted = true
@@ -263,20 +276,25 @@ Rectangle {
         if (page)
             page.ensureExportSettingsConsistent()
     })
+    function handleDropUrls(urls, x, y) {
+        if (urls.length === 1 && urls[0].toString().toLowerCase().endsWith(".agproj"))
+            return AudioEditorController.openProject(urls[0])
+        return mainColumn.dropAudio(urls, x, y)
+    }
     DropArea {
         id: editorAudioDropArea
         objectName: "editorAudioDropArea"
         anchors.fill: parent
         z: 100
         onDropped: function(drop) {
-            if (drop.urls.length === 1 && drop.urls[0].toString().toLowerCase().endsWith(".agproj"))
-                AudioEditorController.openProject(drop.urls[0])
-            else AudioEditorController.addFiles(drop.urls)
+            page.handleDropUrls(drop.urls, drop.x, drop.y)
+            drop.acceptProposedAction()
         }
     }
     EditorSixTrackWorkspace {
         id: mainColumn
         objectName: "editorMainColumn"
+        shortcutsEnabled: page.editorShortcutAvailable()
         width: page.mainWidth
         height: page.height
         onImportRequested: openDialog.open()
@@ -343,7 +361,7 @@ Rectangle {
                     objectName: "inspectorTempoGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 156
+                    height: collapsed ? 38 : page.compactHeight ? 124 : 156
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -362,6 +380,9 @@ Rectangle {
                             }
                             ThemedIconButton {
                                 objectName: "inspectorTempoCollapse"
+                                ToolTip.visible: hovered
+                                ToolTip.text: accessibleName + " (Alt+1)"
+                                Shortcut { sequence: "Alt+1"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable(); onActivated: tempoGroup.collapsed = !tempoGroup.collapsed }
                                 focusPolicy: Qt.TabFocus
                                 Keys.onSpacePressed: function(event) {
                                     event.accepted = true
@@ -397,7 +418,9 @@ Rectangle {
                                 }
                             }
                             ThemedButton {
+                                id: detectBpmButton
                                 objectName: "inspectorDetectBpmButton"
+                                Shortcut { sequence: "Ctrl+Shift+B"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable() && detectBpmButton.enabled; onActivated: detectBpmButton.clicked() }
                                 focusPolicy: Qt.TabFocus
                                 Layout.preferredHeight: Theme.controlHeight
                                 Keys.onSpacePressed: function(event) {
@@ -426,8 +449,7 @@ Rectangle {
                                     elide: Text.ElideRight
                                 }
                                 ToolTip.visible: hovered
-                                    && AudioEditorController.bpmError.length > 0
-                                ToolTip.text: AudioEditorController.bpmError
+                                ToolTip.text: (AudioEditorController.bpmError || qsTr("自动检测 BPM")) + " (Ctrl+Shift+B)"
                             }
                         }
                         RowLayout {
@@ -462,6 +484,10 @@ Rectangle {
                             }
                             ThemedButton {
                                 objectName: "inspectorSpeedResetButton"
+                                id: speedResetButton
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("重置速度与音高 (Ctrl+0)")
+                                Shortcut { sequence: "Ctrl+0"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable() && speedResetButton.enabled; onActivated: speedResetButton.clicked() }
                                 compact: true
                                 focusPolicy: Qt.TabFocus
                                 Layout.preferredHeight: Theme.controlHeight
@@ -482,7 +508,7 @@ Rectangle {
                     objectName: "inspectorPitchGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 105
+                    height: collapsed ? 38 : page.compactHeight ? 90 : 105
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -501,6 +527,9 @@ Rectangle {
                             }
                             ThemedIconButton {
                                 objectName: "inspectorPitchCollapse"
+                                ToolTip.visible: hovered
+                                ToolTip.text: accessibleName + " (Alt+2)"
+                                Shortcut { sequence: "Alt+2"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable(); onActivated: pitchGroup.collapsed = !pitchGroup.collapsed }
                                 focusPolicy: Qt.TabFocus
                                 Keys.onSpacePressed: function(event) {
                                     event.accepted = true
@@ -523,6 +552,10 @@ Rectangle {
                             Label { text: qsTr("半音"); color: Theme.textSecondary }
                             ThemedButton {
                                 objectName: "inspectorPitchMinus"
+                                id: pitchMinusButton
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("降低一个半音 (Ctrl+Down)")
+                                Shortcut { sequence: "Ctrl+Down"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable() && pitchMinusButton.enabled; onActivated: pitchMinusButton.clicked() }
                                 compact: true
                                 focusPolicy: Qt.TabFocus
                                 Keys.onSpacePressed: function(event) {
@@ -568,6 +601,10 @@ Rectangle {
                             }
                             ThemedButton {
                                 objectName: "inspectorPitchPlus"
+                                id: pitchPlusButton
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("升高一个半音 (Ctrl+Up)")
+                                Shortcut { sequence: "Ctrl+Up"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable() && pitchPlusButton.enabled; onActivated: pitchPlusButton.clicked() }
                                 compact: true
                                 focusPolicy: Qt.TabFocus
                                 Keys.onSpacePressed: function(event) {
@@ -599,7 +636,7 @@ Rectangle {
                     objectName: "inspectorPreservePitchGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : 130
+                    height: collapsed ? 38 : page.compactHeight ? 100 : 130
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -618,6 +655,9 @@ Rectangle {
                             }
                             ThemedIconButton {
                                 objectName: "inspectorPreservePitchCollapse"
+                                ToolTip.visible: hovered
+                                ToolTip.text: accessibleName + " (Alt+3)"
+                                Shortcut { sequence: "Alt+3"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable(); onActivated: preservePitchGroup.collapsed = !preservePitchGroup.collapsed }
                                 focusPolicy: Qt.TabFocus
                                 Keys.onSpacePressed: function(event) {
                                     event.accepted = true
@@ -641,6 +681,10 @@ Rectangle {
                             Label { text: qsTr("变速时保持音调"); color: Theme.textSecondary; Layout.fillWidth: true }
                             ThemedSwitch {
                                 objectName: "inspectorPreservePitchSwitch"
+                                id: preservePitchSwitch
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("变速时保持音调 (Alt+P)")
+                                Shortcut { sequence: "Alt+P"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable() && preservePitchSwitch.enabled; onActivated: AudioEditorController.setKeepPitch(!preservePitchSwitch.checked) }
                                 checked: AudioEditorController.keepPitch
                                 enabled: AudioEditorController.timePitchSupported
                                     && AudioEditorController.hasDocument
@@ -662,6 +706,10 @@ Rectangle {
                             }
                             ThemedSwitch {
                                 objectName: "inspectorFormantSwitch"
+                                id: formantSwitch
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("保持人声共振峰 (Alt+F)")
+                                Shortcut { sequence: "Alt+F"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable() && formantSwitch.enabled; onActivated: AudioEditorController.setFormantPreservation(!formantSwitch.checked) }
                                 checked: AudioEditorController.formantPreservation
                                 enabled: AudioEditorController.formantPreservationSupported
                                     && AudioEditorController.hasDocument
@@ -682,13 +730,13 @@ Rectangle {
                     property bool collapsed: false
                     property bool exportInProgress: false
                     property bool exportCompleted: false
-                    height: collapsed ? 38 : 388
+                    height: collapsed ? 38 : page.compactHeight ? 352 : 388
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
                     radius: 6
                     ColumnLayout {
-                        anchors.fill: parent; anchors.margins: exportGroup.collapsed ? 6 : 16; spacing: 7
+                        anchors.fill: parent; anchors.margins: exportGroup.collapsed ? 6 : page.compactHeight ? 8 : 16; spacing: page.compactHeight ? 4 : 7
                         RowLayout {
                             Layout.fillWidth: true
                             Label {
@@ -701,6 +749,9 @@ Rectangle {
                             }
                             ThemedIconButton {
                                 objectName: "inspectorExportCollapse"
+                                ToolTip.visible: hovered
+                                ToolTip.text: accessibleName + " (Alt+4)"
+                                Shortcut { sequence: "Alt+4"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable(); onActivated: exportGroup.collapsed = !exportGroup.collapsed }
                                 focusPolicy: Qt.TabFocus
                                 Keys.onSpacePressed: function(event) {
                                     event.accepted = true
@@ -720,7 +771,7 @@ Rectangle {
                         GridLayout {
                             visible: !exportGroup.collapsed
                             Layout.fillWidth: true; columns: 2
-                            columnSpacing: 6; rowSpacing: 6
+                            columnSpacing: 6; rowSpacing: page.compactHeight ? 4 : 6
                             Label {
                                 Layout.preferredWidth: 58
                                 text: qsTr("输出格式")
@@ -932,6 +983,10 @@ Rectangle {
                                 }
                                 ThemedButton {
                                     objectName: "editorExportBrowseButton"
+                                    id: exportBrowseButton
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("选择导出目录 (Ctrl+Shift+O)")
+                                    Shortcut { sequence: "Ctrl+Shift+O"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable() && exportBrowseButton.enabled; onActivated: exportBrowseButton.clicked() }
                                     compact: true
                                     focusPolicy: Qt.TabFocus
                                     Keys.onSpacePressed: function(event) {
@@ -949,6 +1004,9 @@ Rectangle {
                         ThemedCheckBox {
                             id: exportSelectionOnly
                             objectName: "editorExportSelectionOnly"
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("仅导出框选的音轨与时间范围 (Alt+E)")
+                            Shortcut { sequence: "Alt+E"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable() && exportSelectionOnly.enabled; onActivated: exportSelectionOnly.toggle() }
                             visible: !exportGroup.collapsed
                             Layout.fillWidth: true
                             text: qsTr("仅导出选区")
@@ -965,6 +1023,9 @@ Rectangle {
                         ThemedButton {
                             id: exportActionButton
                             objectName: "editorExportButton"
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("导出音频 (Ctrl+Shift+E)")
+                            Shortcut { sequence: "Ctrl+Shift+E"; context: Qt.WindowShortcut; enabled: page.editorShortcutAvailable() && exportActionButton.enabled; onActivated: exportActionButton.clicked() }
                             focusPolicy: Qt.TabFocus
                             Keys.onSpacePressed: function(event) {
                                 event.accepted = true

@@ -14,6 +14,7 @@ namespace agplayer::editor {
 struct EditorInputDevice final {
     QString id;
     QString name;
+    bool isDefault{};
 };
 
 // Hardware boundary. open/start/stop and enumeration run outside the GUI thread.
@@ -43,6 +44,8 @@ class EditorRecordingService final : public QObject {
     Q_PROPERTY(State state READ state NOTIFY stateChanged)
     Q_PROPERTY(qint64 recordedFrames READ recordedFrames NOTIFY recordedFramesChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
+    Q_PROPERTY(double inputGain READ inputGain WRITE setInputGain NOTIFY inputGainChanged)
+    Q_PROPERTY(double inputLevel READ inputLevel NOTIFY inputLevelChanged)
     Q_PROPERTY(QString partialRecordingPath READ partialRecordingPath NOTIFY partialRecordingPathChanged)
 
 public:
@@ -60,12 +63,16 @@ public:
     [[nodiscard]] State state() const;
     [[nodiscard]] qint64 recordedFrames() const;
     [[nodiscard]] QString error() const;
+    [[nodiscard]] double inputGain() const;
+    [[nodiscard]] double inputLevel() const;
+    void setInputGain(double gain);
     [[nodiscard]] QString partialRecordingPath() const;
     // Hardware-boundary injection for integration tests; never replace an
     // active capture or permission request.
     bool setCaptureFactoryForTesting(EditorCaptureFactory factory);
 
     Q_INVOKABLE void refreshInputDevices();
+    Q_INVOKABLE QVariantList waveformPeaks(qint64 start, qint64 end, int pixels) const;
     // true means accepted, not that hardware has started; observe actual device,
     // state and failed. The output path must not already exist.
     Q_INVOKABLE bool start(const QString& outputPath, int sampleRate, int channels);
@@ -81,6 +88,8 @@ signals:
     void stateChanged();
     void recordedFramesChanged();
     void errorChanged();
+    void inputGainChanged();
+    void inputLevelChanged();
     void partialRecordingPathChanged();
     void finished(const QString& path, qint64 frames);
     void failed(const QString& message, const QString& partialPath, qint64 frames);

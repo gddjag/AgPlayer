@@ -172,6 +172,28 @@ QRect WindowController::startupGeometryForAvailableArea(
     return result;
 }
 
+QRect WindowController::audioToolsStartupGeometryForAvailableArea(
+    const QRect& requested, const QRect& available, bool firstRun) const
+{
+    QRect result = startupGeometryForAvailableArea(requested, available, firstRun);
+    if (!requested.isValid() || !available.isValid()) return result;
+    const QRect oldDefault = startupGeometryForAvailableArea(
+        QRect(0, 0, 1672, 941), available, true);
+    const bool centered = qAbs(requested.center().x() - available.center().x()) <= 1
+                       && qAbs(requested.center().y() - available.center().y()) <= 1;
+    const bool legacyDefault = centered
+        && (requested.size() == oldDefault.size() || requested.size() == QSize(1672, 941));
+    const bool nearlyFull = requested.height() > available.height() * 94 / 100
+                        || requested.width() > available.width() * 94 / 100;
+    // Only migrate an untouched default or an off-screen/near-full window.
+    // Explicit user sizes remain persistent, including deliberately tall windows.
+    if (firstRun || legacyDefault || nearlyFull) {
+        result.setHeight(qMin(result.height(), qMin(800, qMax(1, available.height() * 72 / 100))));
+        result.moveCenter(available.center());
+    }
+    return result;
+}
+
 void WindowController::setWindows(QWindow* mainWindow, QWindow* miniWindow)
 {
     if (mainWindow_ != nullptr) {
@@ -409,7 +431,7 @@ void WindowController::setAudioToolsWindow(QWindow* audioToolsWindow)
     if (audioToolsWindow_ != nullptr) {
         const QString geometryKey = QStringLiteral("windows/audioToolsGeometry");
         const bool restored = restoreGeometry(audioToolsWindow_, geometryKey);
-        audioToolsWindow_->setGeometry(startupGeometryForAvailableArea(
+        audioToolsWindow_->setGeometry(audioToolsStartupGeometryForAvailableArea(
             audioToolsWindow_->geometry(), availableGeometryForWindow(audioToolsWindow_), !restored));
         if (restored) {
             positionedAuxiliaryWindows_.insert(audioToolsWindow_);

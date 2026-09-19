@@ -16,6 +16,44 @@ class AudioDocumentTest final : public QObject {
     }
 
 private slots:
+    void croppingTrackGapCanClearRangeWithoutDereferencingIt()
+    {
+        auto value = document(100);
+        QVERIFY(value.insertSource({"later.wav", 48'000, 2, 100}, 500, 4));
+        QVERIFY(value.setSelection({200, 300, 4}));
+        QVERIFY(value.cropToSelection());
+        QCOMPARE(value.timelineSnapshot().events.size(), size_t{1});
+        QCOMPARE(value.totalFrames(), SampleFrame{100});
+        QVERIFY(!value.selection());
+        QVERIFY(value.undo());
+        QCOMPARE(value.timelineSnapshot().events.size(), size_t{2});
+    }
+    void trackRangeOperationsLeaveOtherTracksUntouched()
+    {
+        for (int operation = 0; operation < 5; ++operation) {
+            auto value = document();
+            QVERIFY(value.insertSource({"other.wav", 48'000, 2, 1'000}, 0, 4));
+            QVERIFY(value.setSelection({200, 600, 4}));
+            if (operation == 0) QVERIFY(value.deleteSelection());
+            if (operation == 1) QVERIFY(value.silenceSelection());
+            if (operation == 2) QVERIFY(value.fadeIn());
+            if (operation == 3) QVERIFY(value.fadeOut());
+            if (operation == 4) QVERIFY(value.cropToSelection());
+            const auto events = value.timelineSnapshot().events;
+            QCOMPARE(std::count_if(events.begin(), events.end(), [](const auto& event) { return event.trackIndex == 0; }), 1);
+            const auto original = std::find_if(events.begin(), events.end(), [](const auto& event) { return event.id == 1; });
+            QVERIFY(original != events.end());
+            QCOMPARE(original->sourceStart, SampleFrame{0});
+            QCOMPARE(original->timelineStart, SampleFrame{0});
+            QCOMPARE(audibleFrames(*original), SampleFrame{1'000});
+            QVERIFY(!original->mute);
+            QCOMPARE(original->fadeIn, SampleFrame{0});
+            QCOMPARE(original->fadeOut, SampleFrame{0});
+            QVERIFY(value.undo());
+            QCOMPARE(value.timelineSnapshot().events.size(), size_t{2});
+        }
+    }
+
     void cropSelectionOnlyChangesNamedClip()
     {
         auto value = document();

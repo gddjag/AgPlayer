@@ -1727,7 +1727,7 @@ int main(int argc, char* argv[])
                 });
             QObject::connect(
                 &nativeDrops, &NativeDropRouter::pathsDropped, &app,
-                [&](NativeDropRouter::Target target, const QStringList& paths) {
+                [&](NativeDropRouter::Target target, const QStringList& paths, const QPointF& position) {
                     if (paths.isEmpty()) {
                         return;
                     }
@@ -1780,7 +1780,11 @@ int main(int argc, char* argv[])
                     case NativeDropRouter::Target::AudioTools:
                         switch (audioTools.currentTool()) {
                         case 0:
-                            audioEditor.openFile(urls.constFirst());
+                            if (audioToolsWindow == nullptr || !QMetaObject::invokeMethod(
+                                    audioToolsWindow, "handleEditorDropUrls", Qt::DirectConnection,
+                                    Q_ARG(QVariant, QVariant::fromValue(urls)),
+                                    Q_ARG(QVariant, position.x()), Q_ARG(QVariant, position.y())))
+                                audioEditor.openDroppedUrls(urls);
                             break;
                         case 1:
                             formatConverter.loadFiles(urls);

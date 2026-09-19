@@ -13,10 +13,11 @@ namespace agplayer::editor {
 struct Selection final {
     SampleFrame start{};
     SampleFrame end{};
+    int trackIndex{-1}; // -1 is an explicit whole-timeline range (legacy projects).
 
     [[nodiscard]] bool valid() const noexcept
     {
-        return start >= 0 && end > start;
+        return start >= 0 && end > start && trackIndex >= -1 && trackIndex < 6;
     }
 };
 
@@ -89,6 +90,7 @@ public:
     bool insertSourceAtCursor(AudioSource source, SampleFrame cursor);
     bool insertSource(AudioSource source, SampleFrame timelineStart);
     bool insertSource(AudioSource source, SampleFrame timelineStart, int trackIndex);
+    bool overwriteSource(AudioSource source, SampleFrame timelineStart, int trackIndex);
     bool undo();
     bool redo();
     void beginCoalescedEdit(EventId id) noexcept

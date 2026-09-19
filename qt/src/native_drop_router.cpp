@@ -1,6 +1,7 @@
 #include "native_drop_router.hpp"
 
 #include <QCoreApplication>
+#include <QGuiApplication>
 #include <QDir>
 #include <QDropEvent>
 #include <QDragEnterEvent>
@@ -142,7 +143,7 @@ bool NativeDropRouter::eventFilter(QObject* watched, QEvent* event)
             }
         }
         if (!paths.isEmpty()) {
-            routeLocalPaths(resolvedTarget, paths);
+            routeLocalPaths(resolvedTarget, paths, drop->position());
             drop->acceptProposedAction();
         }
         return true;
@@ -150,7 +151,7 @@ bool NativeDropRouter::eventFilter(QObject* watched, QEvent* event)
     return QObject::eventFilter(watched, event);
 }
 
-void NativeDropRouter::routeLocalPaths(Target target, const QStringList& paths)
+void NativeDropRouter::routeLocalPaths(Target target, const QStringList& paths, const QPointF& position)
 {
     QStringList normalized;
     QSet<QString> seen;
@@ -168,7 +169,7 @@ void NativeDropRouter::routeLocalPaths(Target target, const QStringList& paths)
         }
     }
     if (!normalized.isEmpty()) {
-        emit pathsDropped(target, normalized);
+        emit pathsDropped(target, normalized, position);
     }
 }
 
@@ -191,7 +192,12 @@ bool NativeDropRouter::nativeEventFilter(const QByteArray& eventType,
     const HDROP drop = reinterpret_cast<HDROP>(nativeMessage->wParam);
     Target resolvedTarget = *target;
     POINT clientPoint{};
+    QPointF logicalPosition(-1, -1);
     if (DragQueryPoint(drop, &clientPoint)) {
+        qreal scale = 1;
+        for (auto* window : QGuiApplication::allWindows())
+            if (static_cast<quintptr>(window->winId()) == handle) { scale = window->devicePixelRatio(); break; }
+        logicalPosition = QPointF(clientPoint.x / scale, clientPoint.y / scale);
         const auto hitTarget = hitTargets_.constFind(handle);
         if (hitTarget != hitTargets_.cend()
             && hitTarget->hitTest(QPointF(clientPoint.x, clientPoint.y))) {
@@ -209,7 +215,7 @@ bool NativeDropRouter::nativeEventFilter(const QByteArray& eventType,
                                              static_cast<qsizetype>(length)));
     }
     DragFinish(drop);
-    routeLocalPaths(resolvedTarget, paths);
+    routeLocalPaths(resolvedTarget, paths, logicalPosition);
     return true;
 #else
     Q_UNUSED(message)

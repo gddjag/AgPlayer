@@ -302,7 +302,7 @@ public:
         lossless_ = lossless;
         connect(&router_, &NativeDropRouter::pathsDropped, this,
                 [this](NativeDropRouter::Target target,
-                       const QStringList& paths) {
+                       const QStringList& paths, const QPointF& position) {
             delivered_ = false;
             if (target != NativeDropRouter::Target::AudioTools
                 || tools_ == nullptr || paths.isEmpty()) {
@@ -314,7 +314,11 @@ public:
                 urls.append(QUrl::fromLocalFile(path));
             }
             switch (tools_->currentTool()) {
-            case 0: editor_->openDroppedUrls(urls); break;
+            case 0:
+                if (!dropWindow_ || !QMetaObject::invokeMethod(dropWindow_, "handleEditorDropUrls", Qt::DirectConnection,
+                        Q_ARG(QVariant, QVariant::fromValue(urls)), Q_ARG(QVariant, position.x()), Q_ARG(QVariant, position.y())))
+                    editor_->openDroppedUrls(urls);
+                break;
             case 1: format_->loadFiles(urls); break;
             case 2: metadata_->loadFiles(urls); break;
             case 3: filenames_->loadFiles(urls); break;
@@ -380,7 +384,7 @@ public:
         return guard.isNull();
     }
 
-    Q_INVOKABLE bool sendUrls(QObject* target, const QList<QUrl>& urls)
+    Q_INVOKABLE bool sendUrls(QObject* target, const QList<QUrl>& urls, qreal x = 12, qreal y = 12)
     {
         if (target == nullptr || urls.isEmpty()) {
             return false;
@@ -389,18 +393,19 @@ public:
             return false;
         }
         QWindow* window = windowForTarget(target);
+        dropWindow_ = window;
         delivered_ = false;
         router_.registerWindow(window, NativeDropRouter::Target::AudioTools);
 
         QMimeData mimeData;
         mimeData.setUrls(urls);
-        QDragEnterEvent enter(QPoint(12, 12), Qt::CopyAction, &mimeData,
+        QDragEnterEvent enter(QPoint(qRound(x), qRound(y)), Qt::CopyAction, &mimeData,
                               Qt::NoButton, Qt::NoModifier);
         QCoreApplication::sendEvent(window, &enter);
         if (!enter.isAccepted()) {
             return false;
         }
-        QDropEvent drop(QPointF(12.0, 12.0), Qt::CopyAction, &mimeData,
+        QDropEvent drop(QPointF(x, y), Qt::CopyAction, &mimeData,
                         Qt::NoButton, Qt::NoModifier);
         QCoreApplication::sendEvent(window, &drop);
         return delivered_ && drop.isAccepted();
@@ -607,6 +612,7 @@ private:
 
     NativeDropRouter router_;
     AudioToolsController* tools_ = nullptr;
+    QPointer<QWindow> dropWindow_;
     FormatConverter* format_ = nullptr;
     AudioEditorController* editor_ = nullptr;
     MetadataEditor* metadata_ = nullptr;

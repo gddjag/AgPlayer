@@ -31,14 +31,14 @@ public:
     void registerHitTarget(QWindow* window, Target target,
                            std::function<bool(const QPointF&)> hitTest);
     void unregisterWindow(QWindow* window);
-    void routeLocalPaths(Target target, const QStringList& paths);
+    void routeLocalPaths(Target target, const QStringList& paths, const QPointF& position = QPointF(-1, -1));
 
     bool eventFilter(QObject* watched, QEvent* event) override;
     bool nativeEventFilter(const QByteArray& eventType, void* message,
                            qintptr* result) override;
 
 signals:
-    void pathsDropped(NativeDropRouter::Target target, const QStringList& paths);
+    void pathsDropped(NativeDropRouter::Target target, const QStringList& paths, const QPointF& position);
 
 private:
     struct HitTarget {

@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <thread>
 
 namespace agplayer::editor {
@@ -53,7 +54,7 @@ public:
         if (!enumerate(error)) return {};
         std::vector<EditorInputDevice> result;
         result.reserve(inputs_.size());
-        for (const auto& input : inputs_) result.push_back({input.id, input.name});
+        for (const auto& input : inputs_) result.push_back({input.id, input.name, input.isDefault});
         return result;
     }
 
@@ -117,7 +118,7 @@ public:
     }
 
 private:
-    struct NativeInput { QString id; QString name; ma_device_id native; };
+    struct NativeInput { QString id; QString name; ma_device_id native; bool isDefault; };
 
     QString deviceId(const ma_device_id& id) const
     {
@@ -157,7 +158,7 @@ private:
         inputs_.reserve(count);
         for (ma_uint32 index = 0; index < count; ++index) {
             const QString id = deviceId(inputs[index].id);
-            if (!id.isEmpty()) inputs_.push_back({id, QString::fromUtf8(inputs[index].name), inputs[index].id});
+            if (!id.isEmpty()) inputs_.push_back({id, QString::fromUtf8(inputs[index].name), inputs[index].id, inputs[index].isDefault != 0});
         }
         if (inputs_.empty()) { error = QStringLiteral("未找到可用的音频输入设备。"); return false; }
         return true;
@@ -224,6 +225,8 @@ struct CaptureSession final {
 
     std::vector<float> ring;
     const std::size_t channels;
+    std::atomic<double> gain{1.0};
+    std::atomic<double> level{0.0};
     std::atomic<std::uint64_t> read{0}, write{0};
     std::atomic<qint64> writtenFrames{0};
     std::atomic_bool paused{false}, stop{false}, cancelled{false};
@@ -231,6 +234,12 @@ struct CaptureSession final {
     // Set/read by the worker, then by GUI only after worker.join().
     bool ownsFile{};
     QString path;
+    // Only the writer and GUI touch this bounded overview, never the capture callback.
+    mutable std::mutex peakMutex;
+    std::vector<std::pair<float, float>> peaks;
+    qint64 peakFrames{256};
+    qint64 pendingFrames{};
+    float pendingMin{1}, pendingMax{-1};
 };
 
 static_assert(std::atomic<std::uint64_t>::is_always_lock_free,
@@ -278,9 +287,12 @@ bool writeAvailable(QFile& file, CaptureSession& session, QString& error)
     }
     std::array<char, blockFrames * 2U * 3U> pcm{};
     const auto count = static_cast<std::size_t>(frames * session.channels);
+    const double gain = session.gain.load(std::memory_order_relaxed);
+    double blockPeak = 0;
     for (std::size_t index = 0; index < count; ++index) {
         const float raw = session.ring[static_cast<std::size_t>((read + index) % session.ring.size())];
-        const double bounded = std::isfinite(raw) ? std::clamp(static_cast<double>(raw), -1.0, 1.0) : 0.0;
+        const double bounded = std::isfinite(raw) ? std::clamp(static_cast<double>(raw) * gain, -1.0, 1.0) : 0.0;
+        blockPeak = std::max(blockPeak, std::abs(bounded));
         const auto value = static_cast<std::int32_t>(std::clamp(std::llround(bounded * 8'388'608.0),
                                                               -8'388'608LL, 8'388'607LL));
         const auto bits = static_cast<std::uint32_t>(value);
@@ -289,8 +301,33 @@ bool writeAvailable(QFile& file, CaptureSession& session, QString& error)
         pcm[index * 3 + 2] = static_cast<char>((bits >> 16U) & 0xffU);
     }
     const qint64 bytes = static_cast<qint64>(count * 3U);
+    double previousPeak = session.level.load(std::memory_order_relaxed);
+    while (previousPeak < blockPeak
+           && !session.level.compare_exchange_weak(previousPeak, blockPeak, std::memory_order_relaxed)) {}
     const qint64 written = file.write(pcm.data(), bytes);
     const qint64 completeFrames = std::max<qint64>(0, written) / static_cast<qint64>(session.channels * 3U);
+    {
+        std::lock_guard<std::mutex> lock(session.peakMutex);
+        for (qint64 frame = 0; frame < completeFrames; ++frame) {
+            for (std::size_t channel = 0; channel < session.channels; ++channel) {
+                const auto raw = session.ring[static_cast<std::size_t>((read + frame * session.channels + channel) % session.ring.size())];
+                const float value = std::isfinite(raw) ? static_cast<float>(std::clamp(static_cast<double>(raw) * gain, -1.0, 1.0)) : 0.0F;
+                session.pendingMin = std::min(session.pendingMin, value);
+                session.pendingMax = std::max(session.pendingMax, value);
+            }
+            if (++session.pendingFrames == session.peakFrames) {
+                session.peaks.emplace_back(session.pendingMin, session.pendingMax);
+                session.pendingFrames = 0; session.pendingMin = 1; session.pendingMax = -1;
+                if (session.peaks.size() == 8192) {
+                    for (std::size_t i = 0; i < 4096; ++i)
+                        session.peaks[i] = {std::min(session.peaks[2*i].first, session.peaks[2*i+1].first),
+                                            std::max(session.peaks[2*i].second, session.peaks[2*i+1].second)};
+                    session.peaks.resize(4096);
+                    session.peakFrames *= 2;
+                }
+            }
+        }
+    }
     session.writtenFrames.store(previousFrames + completeFrames, std::memory_order_release);
     session.read.store(read + static_cast<std::uint64_t>(completeFrames) * session.channels,
                        std::memory_order_release);
@@ -306,6 +343,9 @@ struct EditorRecordingService::Impl final {
     EditorCaptureFactory factory;
     QVariantList devices;
     QString selected;
+    bool selectionInitialized{};
+    double inputGain{1.0};
+    double inputLevel{};
     QString actual;
     QString error;
     QString partialPath;
@@ -332,6 +372,9 @@ EditorRecordingService::EditorRecordingService(EditorCaptureFactory factory, QOb
                                      {QStringLiteral("name"), QStringLiteral("系统默认输入")}});
     impl_->progress.setInterval(50);
     connect(&impl_->progress, &QTimer::timeout, this, [this] {
+        const double captured = impl_->session ? impl_->session->level.exchange(0.0, std::memory_order_relaxed) : 0.0;
+        const double level = state() == Recording ? captured : 0.0;
+        if (impl_->inputLevel != level) { impl_->inputLevel = level; emit inputLevelChanged(); }
         const qint64 current = recordedFrames();
         if (current != impl_->lastFrames) { impl_->lastFrames = current; emit recordedFramesChanged(); }
     });
@@ -355,7 +398,9 @@ QString EditorRecordingService::selectedInputDeviceId() const { return impl_->se
 
 void EditorRecordingService::setSelectedInputDeviceId(const QString& id)
 {
-    if ((state() != Idle && state() != Error) || impl_->selected == id) return;
+    if (state() != Idle && state() != Error) return;
+    impl_->selectionInitialized = true;
+    if (impl_->selected == id) return;
     impl_->selected = id;
     emit selectedInputDeviceIdChanged();
 }
@@ -365,7 +410,48 @@ EditorRecordingService::State EditorRecordingService::state() const { return imp
 qint64 EditorRecordingService::recordedFrames() const
 { return impl_->session ? impl_->session->writtenFrames.load(std::memory_order_acquire) : impl_->lastFrames; }
 QString EditorRecordingService::error() const { return impl_->error; }
+double EditorRecordingService::inputGain() const { return impl_->inputGain; }
+double EditorRecordingService::inputLevel() const { return impl_->inputLevel; }
+void EditorRecordingService::setInputGain(double gain)
+{
+    if (!std::isfinite(gain)) return;
+    gain = std::clamp(gain, 1.0, 8.0);
+    if (impl_->inputGain == gain) return;
+    impl_->inputGain = gain;
+    if (impl_->session) impl_->session->gain.store(gain, std::memory_order_relaxed);
+    emit inputGainChanged();
+}
 QString EditorRecordingService::partialRecordingPath() const { return impl_->partialPath; }
+
+QVariantList EditorRecordingService::waveformPeaks(qint64 start, qint64 end, int pixels) const
+{
+    const auto session = impl_->session;
+    if (!session || end <= start) return {};
+    std::lock_guard<std::mutex> lock(session->peakMutex);
+    end = std::min(end, session->writtenFrames.load(std::memory_order_acquire));
+    start = std::max<qint64>(0, start);
+    if (end <= start) return {};
+    pixels = std::clamp(pixels, 1, 2048);
+    QVariantList values;
+    values.reserve(pixels * 2);
+    for (int i = 0; i < pixels; ++i) {
+        const auto first = (start + (end - start) * i / pixels) / session->peakFrames;
+        const auto last = (start + (end - start) * (i + 1) / pixels - 1) / session->peakFrames;
+        float lo = 0, hi = 0;
+        for (qint64 bucket = first; bucket <= std::max(first, last); ++bucket) {
+            if (bucket < static_cast<qint64>(session->peaks.size())) {
+                lo = std::min(lo, session->peaks[bucket].first);
+                hi = std::max(hi, session->peaks[bucket].second);
+            } else if (session->pendingFrames > 0) {
+                lo = std::min(lo, session->pendingMin); hi = std::max(hi, session->pendingMax);
+            }
+        }
+        values.append(lo); values.append(hi);
+    }
+    QVariantList channels;
+    channels.append(QVariant::fromValue(values));
+    return channels;
+}
 
 bool EditorRecordingService::setCaptureFactoryForTesting(EditorCaptureFactory factory)
 {
@@ -392,7 +478,8 @@ void EditorRecordingService::refreshInputDevices()
             if (backend) {
                 for (const auto& input : backend->devices(error)) {
                     result.append(QVariantMap{{QStringLiteral("id"), input.id},
-                                               {QStringLiteral("name"), input.name}});
+                                               {QStringLiteral("name"), input.name},
+                                               {QStringLiteral("isDefault"), input.isDefault}});
                 }
             } else error = QStringLiteral("无法创建录音设备接口。");
         } catch (...) { error = QStringLiteral("无法读取录音设备列表。"); }
@@ -402,6 +489,18 @@ void EditorRecordingService::refreshInputDevices()
                                          {QStringLiteral("name"), QStringLiteral("系统默认输入")}}};
             impl_->devices.append(result);
             emit inputDevicesChanged();
+            if (!impl_->selectionInitialized && !result.isEmpty()
+                && (state() == Idle || state() == Error)) {
+                QString selected = result.front().toMap().value(QStringLiteral("id")).toString();
+                for (const auto& device : result) {
+                    const auto fields = device.toMap();
+                    if (fields.value(QStringLiteral("isDefault")).toBool()) {
+                        selected = fields.value(QStringLiteral("id")).toString();
+                        break;
+                    }
+                }
+                setSelectedInputDeviceId(selected);
+            }
             if (!error.isEmpty() && (state() == Idle || state() == Error)) {
                 impl_->error = error;
                 emit errorChanged();
@@ -466,6 +565,7 @@ void EditorRecordingService::startWorker(const QString& outputPath, const int sa
     session->path = outputPath;
     session->paused.store(state() == Paused, std::memory_order_release);
     impl_->session = session;
+    session->gain.store(impl_->inputGain, std::memory_order_relaxed);
     const EditorCaptureFactory factory = impl_->factory;
     const QString selected = impl_->selected;
     const quint64 generation = impl_->generation;
@@ -621,6 +721,10 @@ void EditorRecordingService::setState(const State state)
 {
     if (impl_->state == state) return;
     impl_->state = state;
+    if (state != Recording) {
+        if (impl_->session) impl_->session->level.store(0.0, std::memory_order_relaxed);
+        if (impl_->inputLevel != 0.0) { impl_->inputLevel = 0.0; emit inputLevelChanged(); }
+    }
     emit stateChanged();
 }
 
