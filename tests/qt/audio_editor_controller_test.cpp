@@ -3020,9 +3020,16 @@ private slots:
         QVERIFY(controller.seekFrame(123));
         controller.cancelAndWaitForBpmTaskForTesting();
         QVERIFY(QFile::remove(source));
-        QVERIFY(controller.playPause());
+        // A nonzero starting position can discover the missing source during
+        // prepare/seek, before playback starts, or on the decoder thread.
+        const bool accepted = controller.playPause();
+        if (!accepted) {
+            QCOMPARE(controller.state(), EditorSessionState::Error);
+            QCOMPARE(controller.playheadFrame(), qint64{123});
+        }
         QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Error,
                                   10'000);
+        QVERIFY(!controller.playing());
 
         const qint64 frameBefore = controller.playheadFrame();
         const qint64 positionBefore = controller.positionMs();
