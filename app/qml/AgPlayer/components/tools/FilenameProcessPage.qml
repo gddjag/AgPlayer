@@ -19,6 +19,7 @@ Control {
     readonly property bool compactLayout: width < 1500
     readonly property real desktopWorkspaceWidth: 1440
     readonly property bool narrowLayout: width < desktopWorkspaceWidth
+    readonly property bool macStackedLayout: Qt.platform.os === "osx" && narrowLayout
 
     component AccentCheckBox: ThemedCheckBox {}
 
@@ -402,7 +403,7 @@ Control {
             id: compactTabs
             objectName: "filenameCompactTabs"
             property int currentIndex: 0
-            visible: page.narrowLayout
+            visible: page.narrowLayout && !page.macStackedLayout
             Layout.fillWidth: true
             Layout.preferredHeight: visible ? Theme.controlHeightProminent : 0
             Layout.maximumHeight: Layout.preferredHeight
@@ -430,24 +431,30 @@ Control {
             Layout.fillWidth: true
             Layout.fillHeight: true
             contentWidth: width
-            contentHeight: page.narrowLayout && compactTabs.currentIndex === 1
-                ? Math.max(height, rulesPanel.height + 300) : height
+            contentHeight: page.macStackedLayout
+                ? Math.max(height, 1120)
+                : page.narrowLayout && compactTabs.currentIndex === 1
+                  ? Math.max(height, rulesPanel.height + 300) : height
             flickableDirection: Flickable.VerticalFlick
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-            RowLayout {
+            GridLayout {
                 width: workspaceScroller.contentWidth
                 height: workspaceScroller.contentHeight
-                spacing: Theme.spacingXs
+                columns: page.macStackedLayout ? 1 : 2
+                columnSpacing: Theme.spacingXs
+                rowSpacing: Theme.spacingXs
 
             Rectangle {
                 id: filePanel
                 objectName: "filenameFilePanel"
-                visible: !page.narrowLayout || compactTabs.currentIndex === 0
+                visible: page.macStackedLayout || !page.narrowLayout
+                         || compactTabs.currentIndex === 0
                 Layout.fillWidth: page.narrowLayout
-                Layout.fillHeight: true
+                Layout.fillHeight: !page.macStackedLayout
+                Layout.preferredHeight: page.macStackedLayout ? 260 : -1
                 Layout.preferredWidth: page.narrowLayout ? 0 : Math.max(380, Math.round(page.width * 0.3711))
                 Layout.maximumWidth: page.narrowLayout ? 10000 : Layout.preferredWidth
                 color: page.panelColor
@@ -607,9 +614,11 @@ Control {
 
             ColumnLayout {
                 id: rulesColumn
-                visible: !page.narrowLayout || compactTabs.currentIndex === 1
+                visible: page.macStackedLayout || !page.narrowLayout
+                         || compactTabs.currentIndex === 1
                 Layout.fillWidth: true
-                Layout.fillHeight: true
+                Layout.fillHeight: !page.macStackedLayout
+                Layout.preferredHeight: page.macStackedLayout ? 850 : -1
                 Layout.preferredWidth: page.narrowLayout ? 0 : Math.max(620, page.width * 0.61)
                 spacing: 6
 

@@ -13,6 +13,7 @@ Rectangle {
 
     readonly property real desktopMinimumWidth: 1206
     readonly property bool compactLayout: width < desktopMinimumWidth
+    readonly property bool macStackedLayout: Qt.platform.os === "osx" && compactLayout
     readonly property real inspectorRatio: 0.44
     readonly property color canvasColor: Theme.editorCanvas
     readonly property color panelColor: Theme.panel
@@ -685,7 +686,7 @@ Rectangle {
             id: compactMetadataTabs
             objectName: "metadataCompactTabs"
             property int currentIndex: 0
-            visible: page.compactLayout
+            visible: page.compactLayout && !page.macStackedLayout
             Layout.fillWidth: true
             Layout.preferredHeight: visible ? 36 : 0
             Layout.maximumHeight: Layout.preferredHeight
@@ -718,20 +719,36 @@ Rectangle {
             color: page.canvasColor
             radius: 6
 
-            RowLayout {
+            Flickable {
+                id: metadataWorkbenchScroller
+                objectName: "metadataWorkbenchScroller"
                 anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 10
-                anchors.topMargin: 8
-                anchors.bottomMargin: 8
-                spacing: 8
+                anchors.margins: 8
+                contentWidth: width
+                contentHeight: page.macStackedLayout ? Math.max(height, 960) : height
+                interactive: page.macStackedLayout
+                flickableDirection: Flickable.VerticalFlick
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {
+                    policy: page.macStackedLayout ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                }
+
+            GridLayout {
+                width: metadataWorkbenchScroller.contentWidth
+                height: metadataWorkbenchScroller.contentHeight
+                columns: page.macStackedLayout ? 1 : 2
+                columnSpacing: 8
+                rowSpacing: 8
 
                 Rectangle {
                     id: filePanel
                     objectName: "metadataFilePanel"
-                    visible: !page.compactLayout || compactMetadataTabs.currentIndex === 0
-                    Layout.fillWidth: page.compactLayout ? visible : true
-                    Layout.fillHeight: true
+                    visible: page.macStackedLayout || !page.compactLayout
+                             || compactMetadataTabs.currentIndex === 0
+                    Layout.fillWidth: true
+                    Layout.fillHeight: !page.macStackedLayout
+                    Layout.preferredHeight: page.macStackedLayout ? 300 : -1
                     Layout.preferredWidth: page.compactLayout
                                            ? 0
                                            : workbench.width - 26
@@ -1000,9 +1017,11 @@ Rectangle {
                 Rectangle {
                     id: inspectorPanel
                     objectName: "metadataInspectorPanel"
-                    visible: !page.compactLayout || compactMetadataTabs.currentIndex === 1
-                    Layout.fillWidth: page.compactLayout && visible
-                    Layout.fillHeight: true
+                    visible: page.macStackedLayout || !page.compactLayout
+                             || compactMetadataTabs.currentIndex === 1
+                    Layout.fillWidth: page.compactLayout
+                    Layout.fillHeight: !page.macStackedLayout
+                    Layout.preferredHeight: page.macStackedLayout ? 650 : -1
                     Layout.preferredWidth: page.compactLayout
                                            ? 0
                                            : page.width * page.inspectorRatio - 12
@@ -1492,6 +1511,7 @@ Rectangle {
                                 }
                             }
                 }
+            }
             }
         }
     }

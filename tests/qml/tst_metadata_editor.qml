@@ -228,6 +228,12 @@ TestCase {
         const filesTab = findChild(compactPage, "metadataCompactFilesTab")
         const editorTab = findChild(compactPage, "metadataCompactEditorTab")
         verify(files && inspector && tabs && filesTab && editorTab)
+        if (compactPage.macStackedLayout) {
+            verify(!tabs.visible)
+            verify(files.visible && inspector.visible)
+            verify(inspector.y >= files.y + files.height - 1)
+            return
+        }
         compare(tabs.currentIndex, 0)
         compare(tabs.height, 36)
         tryVerify(function() {
@@ -278,8 +284,9 @@ TestCase {
             const tabs = findChild(candidate, "metadataCompactTabs")
             verify(files && inspector && tabs)
             if (candidate.compactLayout) {
-                verify(tabs.visible)
-                tabs.currentIndex = 1
+                compare(tabs.visible, !candidate.macStackedLayout)
+                if (!candidate.macStackedLayout)
+                    tabs.currentIndex = 1
                 tryVerify(function() { return inspector.visible })
             }
             verify(inspector.mapToItem(candidate, inspector.width, 0).x

@@ -75,20 +75,30 @@ TestCase {
         verify(page)
         try {
             waitForRendering(page)
-            if (data.name === "metadata" && page.compactLayout) {
+            if (data.name === "metadata" && page.compactLayout
+                    && !page.macStackedLayout) {
                 var tab = findChild(page, "metadataCompactEditorTab")
                 inside(tab, page)
                 mouseClick(tab, tab.width / 2, tab.height / 2)
                 waitForRendering(page)
             }
             snapshot(page, data.tag)
+            revealVertically(findChild(page, data.action))
             inside(findChild(page, data.action), page)
             if (data.name === "editor") {
+                revealVertically(findChild(page, "editorPlaybackTransport"))
                 inside(findChild(page, "editorPlaybackTransport"), page)
+                revealVertically(findChild(page, "editorRecordingTransport"))
                 inside(findChild(page, "editorRecordingTransport"), page)
                 var inspector = findChild(page, "editorInspector")
-                inside(inspector, page)
-                compare(inspector.x, page.mainWidth)
+                revealVertically(inspector)
+                if (page.macStackedLayout) {
+                    compare(inspector.x, 0)
+                    verify(inspector.y >= findChild(page, "editorMainColumn").height)
+                } else {
+                    inside(inspector, page)
+                    compare(inspector.x, page.mainWidth)
+                }
                 verify(findChild(page, "editorTrackScroller").height >= 86)
                 var exportButton = findChild(page, "editorExportButton")
                 if (data.h === 712) {
@@ -105,7 +115,7 @@ TestCase {
             }
             if (data.name === "filename") {
                 var tabs = findChild(page, "filenameCompactTabs")
-                if (tabs) {
+                if (tabs && tabs.visible) {
                     var settingsTab = findChild(page, "filenameCompactRulesTab")
                     mouseClick(settingsTab, settingsTab.width / 2, settingsTab.height / 2)
                     waitForRendering(page)
