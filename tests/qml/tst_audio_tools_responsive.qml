@@ -90,8 +90,9 @@ TestCase {
                 waitForRendering(page)
             }
             snapshot(page, data.tag)
-            revealVertically(findChild(page, data.action))
-            inside(findChild(page, data.action), page)
+            var primaryAction = findChild(page, data.action)
+            revealVertically(primaryAction)
+            inside(primaryAction, page)
             if (data.name === "editor") {
                 revealVertically(findChild(page, "editorPlaybackTransport"))
                 inside(findChild(page, "editorPlaybackTransport"), page)
