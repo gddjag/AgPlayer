@@ -748,7 +748,7 @@ TestCase {
             tryCompare(Theme, "isLight", false)
             compare(surface.color.toString(), Theme.glassSurface.toString())
             compare(surface.border.color.toString(), Theme.glassBorder.toString())
-            compare(currentLine.color.toString(), Theme.accent.toString())
+            compare(currentLine.color.toString(), Theme.lyricCurrentText.toString())
             compare(currentLine.font.weight, Font.Bold)
             compare(source.color.toString(), Theme.textSecondary.toString())
 
@@ -756,7 +756,7 @@ TestCase {
             tryCompare(Theme, "isLight", true)
             compare(surface.color.toString(), Theme.glassSurface.toString())
             compare(surface.border.color.toString(), Theme.glassBorder.toString())
-            compare(currentLine.color.toString(), Theme.accent.toString())
+            compare(currentLine.color.toString(), Theme.lyricCurrentText.toString())
             compare(currentLine.font.weight, Font.Bold)
             compare(source.color.toString(), Theme.textSecondary.toString())
         } finally {
@@ -1265,8 +1265,8 @@ TestCase {
     function test_theme_cards_fit_readable_text_in_five_compact_rows() {
         var panel = windowedPresetPanel()
         var cards = []
-        compare(PlayerExperienceController.builtInThemeChoices.length, 13)
-        for (var preset = 0; preset < 13; ++preset) {
+        compare(PlayerExperienceController.builtInThemeChoices.length, 15)
+        for (var preset = 0; preset < 15; ++preset) {
             var card = findChild(panel, "immersivePresetCard" + preset)
             verify(card)
             cards.push(card)
@@ -1306,14 +1306,17 @@ TestCase {
         verify(cards[2].x > cards[1].x && cards[1].x > cards[0].x)
         verify(cards[5].x > cards[4].x && cards[4].x > cards[3].x)
         verify(cards[8].x > cards[7].x && cards[7].x > cards[6].x)
-        compare(findChild(panel, "immersivePresetCard13"), null)
+        compare(findChild(panel, "immersivePresetCard15"), null)
         compare(cards[9].y, cards[10].y)
         compare(cards[10].y, cards[11].y)
         verify(cards[9].y > cards[6].y && cards[12].y > cards[9].y)
         compare(cards[12].x, cards[0].x)
-        verify(cards[12].y + cards[12].height - cards[0].y <= 250,
+        compare(cards[12].y, cards[13].y)
+        compare(cards[13].y, cards[14].y)
+        verify(cards[14].x > cards[13].x && cards[13].x > cards[12].x)
+        verify(cards[14].y + cards[14].height - cards[0].y <= 250,
                "preset grid height="
-               + (cards[12].y + cards[12].height - cards[0].y))
+               + (cards[14].y + cards[14].height - cards[0].y))
     }
 
     function test_readable_preset_page_keeps_quality_control_visible() {
@@ -1336,43 +1339,43 @@ TestCase {
 
     function test_last_theme_card_applies_id_without_overwriting_dynamics() {
         var panel = windowedPresetPanel()
-        var amberCinema = findChild(panel, "immersivePresetCard12")
-        verify(amberCinema)
+        var lastCard = findChild(panel, "immersivePresetCard14")
+        verify(lastCard)
         PlayerExperienceController.terrainAmplitude = 37
         PlayerExperienceController.audioResponse = 123
         PlayerExperienceController.responseRange = 117
-        mouseClick(amberCinema, amberCinema.width / 2,
-                   amberCinema.height / 2, Qt.LeftButton)
-        tryCompare(PlayerExperienceController, "themeId", PlayerExperienceController.builtInThemeChoices[12].id)
+        mouseClick(lastCard, lastCard.width / 2,
+                   lastCard.height / 2, Qt.LeftButton)
+        tryCompare(PlayerExperienceController, "themeId", PlayerExperienceController.builtInThemeChoices[14].id)
         compare(PlayerExperienceController.terrainAmplitude, 37)
         compare(PlayerExperienceController.audioResponse, 123)
         compare(PlayerExperienceController.responseRange, 117)
-        compare(amberCinema.checkable, false)
-        var host = amberCinema.Window.window
+        compare(lastCard.checkable, false)
+        var host = lastCard.Window.window
         verify(host)
         compare(host.objectName, "immersiveVisualWindow")
         host.requestActivate()
         tryCompare(host, "active", true)
         // The click above already focused the command with MouseFocusReason.
         // An actual focus transition is required to exercise keyboard styling.
-        var precedingCard = findChild(panel, "immersivePresetCard11")
+        var precedingCard = findChild(panel, "immersivePresetCard13")
         verify(precedingCard)
         precedingCard.forceActiveFocus(Qt.TabFocusReason)
         tryCompare(precedingCard, "activeFocus", true)
-        tryCompare(amberCinema, "activeFocus", false)
-        amberCinema.forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(lastCard, "activeFocus", false)
+        lastCard.forceActiveFocus(Qt.TabFocusReason)
         function focusDiagnostic() {
             return "host.active=" + host.active
-                    + " activeFocus=" + amberCinema.activeFocus
-                    + " focusReason=" + amberCinema.focusReason
+                    + " activeFocus=" + lastCard.activeFocus
+                    + " focusReason=" + lastCard.focusReason
                     + " activeFocusItem="
                     + (host.activeFocusItem ? host.activeFocusItem.objectName : "null")
         }
-        tryVerify(function() { return amberCinema.activeFocus }, 1000,
+        tryVerify(function() { return lastCard.activeFocus }, 1000,
                   focusDiagnostic())
-        compare(amberCinema.focusReason, Qt.TabFocusReason, focusDiagnostic())
-        tryCompare(amberCinema, "visualFocus", true)
-        compare(amberCinema.background.border.width, 2)
+        compare(lastCard.focusReason, Qt.TabFocusReason, focusDiagnostic())
+        tryCompare(lastCard, "visualFocus", true)
+        compare(lastCard.background.border.width, 2)
     }
 
     function test_000_first_immersive_open_accepts_shortcuts() {
@@ -1626,12 +1629,13 @@ TestCase {
         scroll.contentItem.contentY = Math.min(targetY,
                                               scroll.contentHeight - scroll.height)
         wait(0)
-        var bounds = mappedBounds(lastEq, scroll)
-        verify(bounds.top >= -0.5 && bounds.bottom <= scroll.height + 0.5,
-               "last visual EQ band remains reachable in the dynamic tab")
+        tryVerify(function() {
+            var bounds = mappedBounds(lastEq, scroll)
+            return bounds.top >= -0.5 && bounds.bottom <= scroll.height + 0.5
+        }, 1000, "last visual EQ band remains reachable in the dynamic tab")
     }
 
-    function test_panel_exposes_thirteen_themes_lyrics_and_real_dynamics() {
+    function test_panel_exposes_fifteen_themes_lyrics_and_real_dynamics() {
         PlayerExperienceController.immersiveMode =
                 PlayerExperienceController.TerrainReactor
         PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
@@ -1654,7 +1658,7 @@ TestCase {
         }, 1000)
         verify(panel.height <= panel.parent.height - 108)
         var presetCards = []
-        for (var preset = 0; preset < 13; ++preset) {
+        for (var preset = 0; preset < 15; ++preset) {
             var presetCard = findChild(panel, "immersivePresetCard" + preset)
             verify(presetCard)
             presetCards.push(presetCard)
@@ -2522,12 +2526,12 @@ TestCase {
         panel.currentTab = 0
         wait(0)
         var presetScroll = findChild(panel, "immersivePanelScroll")
-        var lastPreset = findChild(panel, "immersivePresetCard12")
+        var lastPreset = findChild(panel, "immersivePresetCard14")
         verify(presetScroll && lastPreset)
         var presetRight = lastPreset.mapToItem(presetScroll, lastPreset.width, 0).x
         verify(presetRight <= presetScroll.width + 0.5,
                "preset and color controls must stay inside the narrow panel")
-        for (var cardIndex = 0; cardIndex < 13; ++cardIndex) {
+        for (var cardIndex = 0; cardIndex < 15; ++cardIndex) {
             var card = findChild(panel, "immersivePresetCard" + cardIndex)
             var title = findChild(card, "immersivePresetTitle" + cardIndex)
             verify(title, "each preset must expose a visible name")
@@ -2674,6 +2678,8 @@ TestCase {
     }
 
     function test_lyrics_switch_drives_service_and_below_list_panel() {
+        PlayerExperienceController.rollingSidePanelPage = 0
+        PlayerExperienceController.rollingSidePanelExpanded = true
         SettingsController.playerShellMode = 2
         wait(20)
         PlayerExperienceController.immersiveMode =
