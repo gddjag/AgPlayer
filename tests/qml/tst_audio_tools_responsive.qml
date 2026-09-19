@@ -94,6 +94,10 @@ TestCase {
             snapshot(page, data.tag)
             var primaryAction = findChild(page, data.action)
             revealVertically(primaryAction)
+            if (data.name === "metadata" && page.macStackedLayout) {
+                var metadataScroller = findChild(page, "metadataWorkbenchScroller")
+                metadataScroller.contentY = Math.max(0, metadataScroller.contentHeight - metadataScroller.height)
+            }
             inside(primaryAction, page)
             if (data.name === "editor") {
                 revealVertically(findChild(page, "editorPlaybackTransport"))
