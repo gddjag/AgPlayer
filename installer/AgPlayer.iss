@@ -34,7 +34,7 @@ RestartApplications=no
 SetupLogging=yes
 DisableProgramGroupPage=yes
 DisableDirPage=no
-SetupIconFile=..\assets\brand\agplayer.ico
+SetupIconFile=..\assets\brand\desktop-install-icon.ico
 WizardImageFile=..\assets\brand\installer-wizard.png
 WizardSmallImageFile=..\assets\brand\installer-small.png
 

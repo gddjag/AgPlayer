@@ -83,7 +83,7 @@ inline SrgbRgb workingLinearToSrgb(const LinearRgb color) noexcept
 // RGB facts. The later built-ins originate in six-digit sRGB notation and are
 // converted here before exposing the catalog, so renderer consumers receive
 // the same working-linear values without a rounded intermediate table.
-inline const std::array<BuiltInTheme, 13>& builtInThemes()
+inline const std::array<BuiltInTheme, 15>& builtInThemes()
 {
     constexpr auto l = [](const float r, const float g, const float b) {
         return ThemeColorInput{ThemeColorEncoding::WorkingLinear, r, g, b};
@@ -124,7 +124,7 @@ inline const std::array<BuiltInTheme, 13>& builtInThemes()
              asWorking(mix(warmCore, base, 0.35F)),
              asWorking(fromSrgb8(ripple[0], ripple[1], ripple[2]))}, glow};
     };
-    static const std::array<BuiltInTheme, 13> themes{{
+    static const std::array<BuiltInTheme, 15> themes{{
         {"ink-wash", "Ink Wash", {l(1,1,1),l(1,1,1),l(1,1,1),l(0,0,0),l(.35F,.35F,.35F),l(0,0,0),l(.35F,.35F,.35F),l(.66F,.74F,.76F)}, 1.10F},
         {"nocturnal", "Nocturnal", {l(.01F,.02F,.04F),l(.03F,.05F,.09F),l(.01F,.02F,.04F),l(0,.3F,1),l(.6F,.2F,1),l(1,.2F,.1F),l(1,.6F,0),l(.2F,.9F,1)}, 1.00F},
         {"neon-tokyo", "Neon Tokyo", {l(.01F,.005F,.02F),l(.04F,.01F,.06F),l(.01F,.005F,.02F),l(1,.1F,.6F),l(.6F,.1F,1),l(.1F,1,.8F),l(.1F,.4F,1),l(1,1,1)}, 1.50F},
@@ -137,10 +137,13 @@ inline const std::array<BuiltInTheme, 13>& builtInThemes()
         hexTheme("blue-hour", "Blue Hour", {39,60,85}, {29,49,72}, {139,197,231}, {242,140,114}, {207,231,244}, 1.05F),
         hexTheme("porcelain-teal", "Porcelain Teal", {221,232,228}, {238,244,241}, {36,120,111}, {184,93,77}, {79,112,106}, .78F),
         hexTheme("wine-signal", "Wine Signal", {58,36,48}, {47,32,42}, {131,197,190}, {217,93,115}, {240,203,211}, 1.06F),
-        // Calibrated for the reference shader's direct linear output: purple
-        // surfaces, pink interior and a small warm-yellow hot center.
+        // Single-hue palettes retain the reference elevation/timbre response.
         {"violet-heart", "Violet Heart", {s(5,2,10),s(107,57,155),s(4,2,8),
-            s(201,122,255),s(165,90,218),s(255,164,218),s(255,246,159),s(201,122,255)}, 1.10F},
+            s(201,122,255),s(165,90,218),s(155,135,255),s(126,150,255),s(180,130,255)}, 1.10F},
+        {"sakura-glow", "Sakura Glow", {s(10,2,7),s(150,48,102),s(8,2,6),
+            s(255,118,194),s(222,80,164),s(255,158,212),s(246,125,210),s(255,142,210)}, 1.05F},
+        {"abyss-blue", "Abyss Blue", {s(2,4,12),s(42,75,155),s(2,3,10),
+            s(75,140,255),s(65,103,228),s(115,178,255),s(105,145,255),s(112,171,255)}, 1.05F},
     }};
     return themes;
 }

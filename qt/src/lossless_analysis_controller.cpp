@@ -56,6 +56,8 @@ QString verdictText(const agplayer::lossless::Verdict verdict)
     case Verdict::SuspectedLossyTranscode:
         return QCoreApplication::translate(
             "LosslessAnalysisController", "疑似有损转码");
+    case Verdict::KnownLossyEncoding:
+        return QCoreApplication::translate("LosslessAnalysisController", "当前为有损编码（原始来源未知）");
     case Verdict::SuspectedUpsample:
         return QCoreApplication::translate(
             "LosslessAnalysisController", "疑似升频");
@@ -92,6 +94,7 @@ QString reportVerdictText(const agplayer::lossless::Verdict verdict)
     case Verdict::CredibleLossless: return QString::fromUtf8("可信无损");
     case Verdict::SuspectedLossyTranscode:
         return QString::fromUtf8("疑似有损转码");
+    case Verdict::KnownLossyEncoding: return QString::fromUtf8("当前为有损编码（原始来源未知）");
     case Verdict::SuspectedUpsample: return QString::fromUtf8("疑似升频");
     case Verdict::SuspectedBitDepthExpansion:
         return QString::fromUtf8("疑似扩位");
@@ -113,6 +116,8 @@ QString translatedVerdictCode(const QString& code)
         return verdictText(Verdict::CredibleLossless);
     if (code == QStringLiteral("suspected_lossy_transcode"))
         return verdictText(Verdict::SuspectedLossyTranscode);
+    if (code == QStringLiteral("known_lossy_encoding"))
+        return verdictText(Verdict::KnownLossyEncoding);
     if (code == QStringLiteral("suspected_upsample"))
         return verdictText(Verdict::SuspectedUpsample);
     if (code == QStringLiteral("suspected_bit_depth_expansion"))
@@ -1595,6 +1600,7 @@ public:
                 ++credible;
             } else if (verdict
                            == QStringLiteral("suspected_lossy_transcode")
+                       || verdict == QStringLiteral("known_lossy_encoding")
                        || verdict
                            == QStringLiteral("suspected_lossy_upsample")) {
                 ++transcode;

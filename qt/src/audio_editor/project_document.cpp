@@ -616,7 +616,8 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
     if (request.document->selection()) {
         const Selection value = *request.document->selection();
         selection = QJsonObject{{QStringLiteral("start"), integerJson(value.start)},
-                                {QStringLiteral("end"), integerJson(value.end)}};
+                                {QStringLiteral("end"), integerJson(value.end)},
+                                {QStringLiteral("trackIndex"), value.trackIndex}};
     }
     QJsonArray tracks;
     for (std::size_t index = 0; index < timeline.tracks.size(); ++index) {
@@ -883,8 +884,11 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
     const QJsonValue selection = root.value(QStringLiteral("selection"));
     if (!selection.isNull()) {
         if (!selection.isObject()) { result.message = QStringLiteral("invalid selection"); return result; }
-        const QJsonObject object = selection.toObject(); qint64 start{}, end{};
-        if (!integer(object.value(QStringLiteral("start")), start) || !integer(object.value(QStringLiteral("end")), end) || !document.setSelection({start, end})) { result.message = QStringLiteral("invalid selection"); return result; }
+        const QJsonObject object = selection.toObject(); qint64 start{}, end{}, track = -1;
+        if ((object.contains(QStringLiteral("trackIndex")) && !integer(object.value(QStringLiteral("trackIndex")), track))
+            || track < -1 || track >= 6
+            || !integer(object.value(QStringLiteral("start")), start) || !integer(object.value(QStringLiteral("end")), end)
+            || !document.setSelection({start, end, static_cast<int>(track)})) { result.message = QStringLiteral("invalid selection"); return result; }
     }
     if (!integer(root.value(QStringLiteral("playheadFrame")), result.playheadFrame) || !integer(root.value(QStringLiteral("visibleStartFrame")), result.visibleStartFrame) || !integer(root.value(QStringLiteral("visibleEndFrame")), result.visibleEndFrame)
         || result.playheadFrame < 0 || result.playheadFrame > document.totalFrames()

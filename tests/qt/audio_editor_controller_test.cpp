@@ -4,6 +4,7 @@
 #include "playback_controller.hpp"
 #include "../core/bpm_fixture.hpp"
 #include "decoder.hpp"
+#include "waveform_analyzer.hpp"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -262,6 +263,59 @@ class AudioEditorControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void editorContourMatchesPlayerAggregationRatherThanPeakCeiling()
+    {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("contour.wav");
+        std::vector<float> samples(4000, 0.0F);
+        for (std::size_t i = 0; i < samples.size(); ++i)
+            samples[i] = i % 100 < (i / 1000 + 1) * 10 ? 1.0F : 0.0F;
+        QVERIFY(writeMonoFloatWav(path, samples));
+        const auto analysis = agplayer::editor::AudioFileAnalyzer::analyze(
+            std::filesystem::path(path.toStdWString()), 4);
+        QVERIFY(analysis.success);
+        for (const auto mode : {agplayer::WaveformAggregation::AverageAbsolute,
+                                agplayer::WaveformAggregation::Rms}) {
+            agplayer::WaveformBucketizer player(samples.size(), 4, 1, 8000, mode);
+            QCOMPARE(player.add(samples, samples.size()), AG_OK);
+            std::vector<float> mix, bass, mid, high;
+            QCOMPARE(player.finish(mix, bass, mid, high), AG_OK);
+            for (std::size_t i = 0; i < 4; ++i) {
+                const auto rawEditor = mode == agplayer::WaveformAggregation::Rms
+                    ? std::sqrt(analysis.mean_square[i]) : analysis.mean_absolute[i];
+                const auto maximum = mode == agplayer::WaveformAggregation::Rms
+                    ? std::sqrt(*std::max_element(analysis.mean_square.begin(), analysis.mean_square.end()))
+                    : *std::max_element(analysis.mean_absolute.begin(), analysis.mean_absolute.end());
+                const auto editor = rawEditor / maximum;
+                QVERIFY(std::abs(editor - mix[i]) < 1e-5F);
+                QCOMPARE(analysis.channel_peaks[0][i * 2 + 1], 1.0F);
+            }
+        }
+    }
+    void droppedBatchUsesPointerTrackAndFrameWithoutOverwriting()
+    {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("drop.wav");
+        QVERIFY(writeMonoFloatWav(path, std::vector<float>(8000, 0.2F)));
+        AudioEditorController editor(AG_AUDIO_BACKEND_NULL);
+        const auto url = QUrl::fromLocalFile(path);
+        QVERIFY(editor.addFiles({url, url, url}, 2, 24000));
+        QVERIFY(waitForDocumentLoad(editor));
+        QCOMPARE(editor.timelineEventViews().size(), 3);
+        for (int i = 0; i < 3; ++i) {
+            const auto clip = editor.timelineEventViews()[i].toMap();
+            QCOMPARE(clip.value("trackIndex").toInt(), i + 2);
+            QCOMPARE(clip.value("timelineStart").toLongLong(), editor.sampleRate() / 2);
+        }
+        QVERIFY(editor.addFiles({url}, 2, editor.sampleRate() / 2));
+        QVERIFY(waitForDocumentLoad(editor));
+        QCOMPARE(editor.timelineEventViews().size(), 4);
+        QVERIFY(editor.importResults().front().toMap().value("success").toBool());
+        QCOMPARE(editor.importResults().front().toMap().value("trackIndex").toInt(), 5);
+        QVERIFY(editor.addFiles({url}));
+        QVERIFY(waitForDocumentLoad(editor));
+        QCOMPARE(editor.timelineEventViews().size(), 5);
+    }
     void batchImportPrefersEmptyTracksThenUsesCollisionFreeOccupiedTrack()
     {
         QTemporaryDir directory;
@@ -2539,6 +2593,37 @@ private slots:
         QCOMPARE(controller.lastExportPath(), previousPath);
     }
 
+    void trackRangeExportExcludesOtherTracksButFullExportStillMixes()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const auto a = temporary.filePath("a.wav"), b = temporary.filePath("b.wav");
+        QVERIFY(writeStereoFloatWav(a, std::vector<float>(9600, 0.1F), 48000));
+        QVERIFY(writeStereoFloatWav(b, std::vector<float>(9600, 0.3F), 48000));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.addFiles({QUrl::fromLocalFile(a), QUrl::fromLocalFile(b)}));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 10000);
+        QCOMPARE(controller.timelineEventViews().size(), 2);
+        QVERIFY(controller.setSelection(480, 2400, 1));
+        controller.setSelectedTrack(0); // A later click must not retarget the range.
+        QCOMPARE(controller.selectionTrack(), 1);
+        const auto selected = temporary.filePath("selected.wav");
+        QVERIFY(controller.exportTo(QUrl::fromLocalFile(selected), true, QStringLiteral("pcm_s24le")));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 10000);
+        QVERIFY2(controller.state() == EditorSessionState::Ready, qPrintable(controller.errorMessage()));
+        const auto range = decodeProbe(selected);
+        QCOMPARE(range.frames, 1920);
+        for (const float value : range.firstChannel) QVERIFY2(std::abs(value - 0.3F) < 0.001F, qPrintable(QString::number(value)));
+        const auto fullPath = temporary.filePath("full.wav");
+        QVERIFY(controller.exportTo(QUrl::fromLocalFile(fullPath), false, QStringLiteral("pcm_s24le")));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.busy(), 10000);
+        const auto full = decodeProbe(fullPath);
+        QCOMPARE(full.frames, 4800);
+        for (const float value : full.firstChannel) QVERIFY(std::abs(value - 0.4F) < 0.001F);
+        QVERIFY(controller.clearSelection());
+        QCOMPARE(controller.selectionTrack(), -1);
+    }
+
     void configuredExportDefaultsToAUsableDirectoryAndPublishesDecodedSuccessPath()
     {
         using agplayer::editor::AudioFileAnalyzer;
@@ -4350,6 +4435,18 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(ready(), 10'000);
         const QVariantList precise = controller.viewportChannelPeaks()
             .front().toList();
+        const auto clipId = controller.timelineEventViews().front().toMap().value(QStringLiteral("id")).toString();
+        // Both overview contour settings must switch to decoded detail at zoom.
+        const auto displayed = controller.eventPeaks(clipId, 128, 1).front().toList();
+        QCOMPARE(controller.eventPeaks(clipId, 128, 2).front().toList(), displayed);
+        for (qsizetype i = 0; i < precise.size(); ++i)
+            QVERIFY(std::abs(displayed[i].toDouble() - precise[i].toDouble() * 1.7) < .0001);
+        QCOMPARE(controller.eventPeaks(clipId, 128, 0).front().toList(), precise);
+        QVERIFY(controller.viewport()->setVisibleRange(12, 16));
+        // Available synchronously, before the queued refinement can run.
+        const auto reused = controller.eventPeaks(clipId, 128, 0).front().toList();
+        QCOMPARE(reused.size(), 8);
+        QCOMPARE(reused.front(), precise[4]);
         for (qsizetype point = 0; point < 8; ++point) {
             const double expected = std::abs(
                 samples[static_cast<std::size_t>(point + 10)]);

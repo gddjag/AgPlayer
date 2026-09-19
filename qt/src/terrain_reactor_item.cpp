@@ -1787,9 +1787,6 @@ void TerrainReactorItem::copyStyleSource()
                        encodedRole(ThemeColorRole::CoolEdge),
                        encodedRole(ThemeColorRole::WarmEdge)};
             next.bodyColor = encodedRole(ThemeColorRole::BaseSecondary);
-            // Authored Violet Heart keeps purple surfaces; its pink/yellow
-            // warm roles illuminate only the raised central interior.
-            if (themeId == "violet-heart") next.bodyColor.setW(2.0F);
             next.rippleColor = encodedRole(ThemeColorRole::Ripple);
             next.atmosphereColor = encodedRole(ThemeColorRole::Fog);
         } else {
@@ -1797,6 +1794,9 @@ void TerrainReactorItem::copyStyleSource()
             // path: body, beat core, ripple, hot edge, and environment.
             next.rippleColor = next.colors[3];
             next.atmosphereColor = next.colors[0];
+            // Custom picker values are display sRGB, unlike the original
+            // presets' authored direct-linear output contract.
+            next.atmosphereColor.setW(2.0F);
             const auto blendLinear = [](QVector4D a, QVector4D b, float weight) {
                 QVector4D result(0, 0, 0, 1);
                 for (int channel = 0; channel < 3; ++channel)

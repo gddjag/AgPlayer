@@ -11,12 +11,12 @@ class ImmersiveThemeCatalogTest final : public QObject {
     Q_OBJECT
 
 private slots:
-    void violetHeartHasDarkPurpleBodyAndPinkBeatLight()
+    void violetHeartHasPurpleBodyAndBlueVioletBeatLight()
     {
         const auto* theme = findBuiltInTheme("violet-heart");
         QVERIFY(theme);
         const std::array<SrgbRgb, 8> expected{{{5,2,10},{107,57,155},{4,2,8},
-            {201,122,255},{165,90,218},{255,164,218},{255,246,159},{201,122,255}}};
+            {201,122,255},{165,90,218},{155,135,255},{126,150,255},{180,130,255}}};
         for (std::size_t i = 0; i < expected.size(); ++i) {
             const auto color = workingLinearToSrgb(toWorkingLinear(theme->colors[i]));
             QCOMPARE(int(std::round(color.red * 255)), int(expected[i].red));
@@ -34,10 +34,12 @@ private slots:
 void ImmersiveThemeCatalogTest::hasStableOrderAndMinimalMonochromeDefault()
 {
     const auto& themes = builtInThemes();
-    QCOMPARE(static_cast<int>(themes.size()), 13);
+    QCOMPARE(static_cast<int>(themes.size()), 15);
     QVERIFY(themes.front().id == "ink-wash");
     QVERIFY(themes.at(4).id == "minimal-monochrome");
-    QVERIFY(themes.back().id == "violet-heart");
+    QVERIFY(themes.at(12).id == "violet-heart");
+    QVERIFY(themes.at(13).id == "sakura-glow");
+    QVERIFY(themes.back().id == "abyss-blue");
     QVERIFY(findBuiltInTheme("daybreak-lime") == nullptr);
     QVERIFY(defaultBuiltInTheme().id == "minimal-monochrome");
 }

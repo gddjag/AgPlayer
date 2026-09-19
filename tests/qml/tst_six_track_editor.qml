@@ -80,6 +80,15 @@ TestCase {
         compare(inspector.x, page.mainWidth)
         verify(inspector.width >= 300)
         inside(inspector, page)
+        const device = visualChild(page, "editorInputDevice")
+        const meter = visualChild(page, "editorRecordingLevel")
+        const recordingGain = visualChild(page, "editorRecordingGain")
+        inside(meter, page)
+        inside(recordingGain, page)
+        compare(meter.width, device.width)
+        verify(meter.mapToItem(page, 0, meter.height).y <= device.mapToItem(page, 0, 0).y)
+        compare(device.palette.text, Theme.primaryText)
+        compare(visualChild(page, "editorTrackHeader0").border.width, 0)
         const exportButton = visualChild(page, "editorExportButton")
         if (data.tag === "reference") {
             let measurements = {pageTop: page.mapToItem(host.contentItem, 0, 0).y, pageHeight: page.height}
@@ -97,7 +106,10 @@ TestCase {
         for (const name of ["editorCommandBar", "editorRecordingTransport", "editorInputDevice", "editorRecordButton", "editorPauseRecordingButton", "editorPlaybackTransport", "editorCurrentTime"])
             inside(visualChild(page, name), page)
         const scroller = visualChild(page, "editorTrackScroller")
-        verify(scroller.height >= 86)
+        verify(scroller.height >= 82)
+        const transport = visualChild(page, "editorRecordingTransport")
+        verify(transport.y >= scroller.y + scroller.height,
+               "Transport must remain below the timeline")
         inside(scroller, page)
         const first = AudioEditorController.timelineEventViews[0]
         const waveform = visualChild(page, "editorWaveformGeometry_" + first.id)
@@ -141,7 +153,11 @@ TestCase {
         compare(AudioEditorController.timelineEventViews[0].trackIndex, 0)
         compare(AudioEditorController.timelineEventViews[0].timelineStart, original.timelineStart)
     }
-    function test_rightClickCreatesVolumeLineThenControlPoint() {
+    function test_rightClickCreatesVolumeLineThenControlPoint_data() {
+        return [{tag: "dark", mode: 0}, {tag: "light", mode: 1}]
+    }
+    function test_rightClickCreatesVolumeLineThenControlPoint(data) {
+        SettingsController.themeMode = data.mode
         importPcm(1)
         const host = createEditorHost()
         tryVerify(function() { return visualChild(host.contentItem, "editorWaveformCanvas") !== null })
@@ -149,18 +165,26 @@ TestCase {
         const x = Math.round(canvas.width * 0.4)
         mouseClick(canvas, x, canvas.rowHeight - 18, Qt.RightButton)
         const lineAction = findChild(host, "editorAddVolumeLine")
+        const menu = findChild(host, "editorClipContextMenu")
+        tryCompare(menu, "opened", true)
+        waitForRendering(host.contentItem)
         verify(lineAction, "Waveform context menu must offer a real volume line")
         tryVerify(function() { return lineAction.visible && lineAction.enabled })
         mouseClick(lineAction, lineAction.width / 2, lineAction.height / 2)
         compare(AudioEditorController.timelineEventViews[0].envelope.length, 1)
         compare(AudioEditorController.timelineEventViews[0].envelope[0].gain, 1)
-        const menu = findChild(host, "editorClipContextMenu")
         tryCompare(menu, "visible", false)
         mouseClick(canvas, x, canvas.gainY(1, 0), Qt.RightButton)
         tryCompare(menu, "opened", true)
         const pointAction = findChild(host, "editorAddVolumePoint")
         verify(pointAction)
         tryVerify(function() { return pointAction.visible && pointAction.enabled })
+        compare(menu.background.color, Theme.surfaceElevated)
+        const submenuEntry = menu.itemAt(menu.count - 1)
+        verify(submenuEntry && submenuEntry.subMenu)
+        compare(submenuEntry.contentItem.color, Theme.primaryText)
+        if (typeof visualFixtureOutput !== "undefined" && visualFixtureOutput.length > 0)
+            grabImage(host.contentItem).save(visualFixtureOutput + "-menu-" + data.tag + ".png")
         mouseClick(pointAction, pointAction.width / 2, pointAction.height / 2)
         const points = AudioEditorController.timelineEventViews[0].envelope
         compare(points.length, 2)
@@ -202,24 +226,94 @@ TestCase {
         verify(AudioEditorController.undo())
         compare(canvas.eventById(String(first.id)).sourceEnd, original.sourceEnd)
     }
+    function test_controlDragPansWithoutMovingClip() {
+        importPcm(2)
+        const host = createEditorHost()
+        const canvas = visualChild(host.contentItem, "editorWaveformCanvas")
+        const viewport = AudioEditorController.viewport
+        viewport.zoomAt(4, 0)
+        const original = AudioEditorController.timelineEventViews[0]
+        mousePress(canvas, canvas.width * 0.8, 45, Qt.LeftButton, Qt.ControlModifier)
+        mouseMove(canvas, canvas.width * 0.3, 45, 20)
+        mouseRelease(canvas, canvas.width * 0.3, 45, Qt.LeftButton, Qt.ControlModifier)
+        verify(viewport.visibleStartFrame > 0)
+        compare(canvas.eventById(String(original.id)).timelineStart, original.timelineStart)
+        const bar = visualChild(host.contentItem, "editorTimelineScrollBar")
+        verify(bar && bar.visible)
+        mousePress(bar, bar.width * (bar.position + bar.size / 2), bar.height / 2)
+        mouseMove(bar, bar.width * 0.75, bar.height / 2, 20)
+        mouseRelease(bar, bar.width * 0.75, bar.height / 2)
+        verify(viewport.overviewStartRatio > 0.3)
+    }
+    function test_quietWaveformDisplayDoesNotInventSilentSignal() {
+        const host = createEditorHost()
+        const canvas = visualChild(host.contentItem, "editorWaveformCanvas")
+        const quiet = canvas.readablePeaks([[-0.01, 0.01]])
+        fuzzyCompare(quiet[0][1], 0.01, 0.000001)
+        const contour = canvas.readablePeaks([[-1, 1, -0.5, 0.5, -0.1, 0.1]])[0]
+        compare(contour[1], 1)
+        compare(contour[3] / contour[1], 0.5)
+        compare(canvas.readablePeaks([[0, 2]])[0][1], 1)
+        compare(canvas.readablePeaks([[0, 0]])[0][1], 0)
+        compare(canvas.readablePeaks([[0, null]])[0][1], null)
+    }
+    function test_muteShortcutDoesNotFireInsideTextField() {
+        importPcm(1)
+        const host = createEditorHost()
+        const canvas = visualChild(host.contentItem, "editorWaveformCanvas")
+        canvas.forceActiveFocus()
+        keyClick(Qt.Key_M)
+        tryCompare(AudioEditorController.tracks[0], "muted", true)
+        const input = visualChild(host.contentItem, "inspectorBpmInput")
+        input.forceActiveFocus()
+        keyClick(Qt.Key_M)
+        compare(AudioEditorController.tracks[0].muted, true)
+        canvas.forceActiveFocus()
+        keyClick(Qt.Key_M)
+        tryCompare(AudioEditorController.tracks[0], "muted", false)
+    }
+    function test_trackGainWheelAndDoubleClickReset() {
+        importPcm(1)
+        const host = createEditorHost()
+        const slider = visualChild(host.contentItem, "editorTrackGain0")
+        verify(slider)
+        verify(AudioEditorController.setTrackGain(0, 1.5))
+        mouseWheel(slider, slider.width / 2, slider.height / 2, 0, 120)
+        tryVerify(function() { return Math.abs(AudioEditorController.tracks[0].gain - 1.55) < 0.001 })
+        mouseDoubleClickSequence(slider, slider.width * 0.8, slider.height / 2)
+        tryVerify(function() { return Math.abs(AudioEditorController.tracks[0].gain - 1) < 0.001 })
+        tryCompare(slider, "value", 1)
+        compare(slider.position, 0.5)
+        const canvas = visualChild(host.contentItem, "editorWaveformCanvas")
+        mouseMove(canvas, 1, canvas.rowHeight - 16)
+        compare(visualChild(canvas, "editorWaveformInteraction").cursorShape, Qt.SizeHorCursor)
+        const clip = visualChild(canvas, "editorClip_" + AudioEditorController.timelineEventViews[0].id)
+        compare(clip.border.width, 0)
+    }
     function test_bodySelectionRetainsDragOutEntry() {
         importPcm(3)
         const host = createEditorHost()
         tryVerify(function() { return visualChild(host.contentItem, "editorWaveformCanvas") !== null })
         const canvas = visualChild(host.contentItem, "editorWaveformCanvas")
         const y = canvas.rowHeight - 18
-        mousePress(canvas, canvas.width * 0.2, y, Qt.LeftButton)
+        mousePress(canvas, canvas.width * 0.2, y, Qt.RightButton)
         mouseMove(canvas, canvas.width * 0.6, y, 20)
-        mouseRelease(canvas, canvas.width * 0.6, y, Qt.LeftButton)
+        mouseRelease(canvas, canvas.width * 0.6, y, Qt.RightButton)
         verify(AudioEditorController.selectionEnd > AudioEditorController.selectionStart)
+        compare(visualChild(canvas, "editorSelectionOverlay").height, canvas.rowHeight)
         const start = AudioEditorController.selectionStart, end = AudioEditorController.selectionEnd
-        mousePress(canvas, canvas.width * 0.4, y, Qt.LeftButton)
+        const capsule = visualChild(canvas, "editorSelectionDragCapsule")
+        verify(capsule && capsule.visible)
+        mousePress(capsule, capsule.width / 2, capsule.height / 2, Qt.LeftButton)
         compare(visualChild(canvas, "editorWaveformInteraction").mode, "handoff")
         keyClick(Qt.Key_Escape)
-        mouseRelease(canvas, canvas.width * 0.4, y, Qt.LeftButton)
+        mouseRelease(capsule, capsule.width / 2, capsule.height / 2, Qt.LeftButton)
         compare(AudioEditorController.selectionStart, start)
         compare(AudioEditorController.selectionEnd, end)
         compare(AudioEditorController.timelineEventViews.length, 3)
+        mouseClick(canvas, canvas.width * 0.4, y, Qt.RightButton)
+        verify(AudioEditorController.selectionEnd <= AudioEditorController.selectionStart)
+        verify(!findChild(host, "editorClipContextMenu").visible)
     }
     function test_envelopePointWinsHitTestAndUndoIsAtomic() {
         importPcm(1)
@@ -248,7 +342,7 @@ TestCase {
         compare(restored.envelope[0].offset, offset)
         compare(restored.envelope[0].gain, 1)
     }
-    function test_sharedSplitBoundaryTrimsBothSides() {
+    function test_sharedSplitBoundaryTrimsOnlySelectedClipLeavingGap() {
         importPcm(1)
         const host = createEditorHost()
         tryVerify(function() { return visualChild(host.contentItem, "editorTrackHeader0") !== null })
@@ -263,14 +357,21 @@ TestCase {
         mouseRelease(canvas, boundary + 30, canvas.rowHeight - 12, Qt.LeftButton)
         const clips = AudioEditorController.timelineEventViews
         compare(clips.length, 2)
-        verify(clips[0].timelineEnd > split)
-        compare(clips[0].timelineEnd, clips[1].timelineStart)
-        compare(clips[0].sourceEnd, clips[1].sourceStart)
+        compare(clips[0].timelineEnd, split)
+        verify(clips[1].timelineStart > split)
+        compare(clips[0].sourceEnd, split)
         verify(AudioEditorController.triggerAction("editor.undo"))
         compare(AudioEditorController.timelineEventViews[0].timelineEnd, split)
         compare(AudioEditorController.timelineEventViews[1].timelineStart, split)
+        AudioEditorController.selectEvent(String(AudioEditorController.timelineEventViews[0].id))
+        mousePress(canvas, boundary, canvas.rowHeight - 12, Qt.LeftButton)
+        mouseMove(canvas, boundary - 30, canvas.rowHeight - 12, 30)
+        mouseRelease(canvas, boundary - 30, canvas.rowHeight - 12, Qt.LeftButton)
+        verify(AudioEditorController.timelineEventViews[0].timelineEnd < split)
+        compare(AudioEditorController.timelineEventViews[1].timelineStart, split)
+        compare(AudioEditorController.timelineEventViews[1].sourceStart, split)
     }
-    function test_playheadBodyScrubDoesNotCreateSelection() {
+    function test_leftBodyAtPlayheadMovesClipInsteadOfSelecting() {
         importPcm(1)
         const host = createEditorHost()
         tryVerify(function() { return visualChild(host.contentItem, "editorTrackHeader0") !== null })
@@ -278,13 +379,15 @@ TestCase {
         verify(AudioEditorController.seekFrame(Math.floor(AudioEditorController.totalFrames / 4)))
         waitForRendering(canvas)
         const x = canvas.pixelAtFrame(AudioEditorController.playheadFrame)
-        const expected = canvas.frameAtCanvasPixel(x + 40)
+        const clip = AudioEditorController.timelineEventViews[0]
         mousePress(canvas, x + 2, canvas.rowHeight - 16, Qt.LeftButton)
         mouseMove(canvas, x + 40, canvas.rowHeight - 16, 30)
         mouseRelease(canvas, x + 40, canvas.rowHeight - 16, Qt.LeftButton)
-        verify(Math.abs(AudioEditorController.playheadFrame - expected) <= 1)
+        verify(AudioEditorController.timelineEventViews[0].timelineStart > clip.timelineStart)
         compare(AudioEditorController.playing, false)
         verify(AudioEditorController.selectionEnd <= AudioEditorController.selectionStart)
+        verify(AudioEditorController.undo())
+        compare(AudioEditorController.timelineEventViews[0].timelineStart, clip.timelineStart)
     }
     function test_blankTrackClickClearsPreviouslySelectedClip() {
         importPcm(1)
@@ -372,7 +475,7 @@ TestCase {
         for (let i = 0; i < 6; ++i) {
             const header = visualChild(host.contentItem, "editorTrackHeader" + i)
             verify(header, "Missing track " + (i + 1))
-            verify(header.height >= 86)
+            compare(header.height, 82)
         }
         verify(findChild(host, "editorRecordingTransport"))
         verify(findChild(host, "editorInputDevice"))

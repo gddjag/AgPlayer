@@ -37,6 +37,7 @@ Rectangle {
         if (code === "credible_lossless" || code === "credible_native_dsd")
             return Theme.losslessVerdictCredible
         if (code === "suspected_lossy_transcode"
+                || code === "known_lossy_encoding"
                 || code === "suspected_lossy_upsample")
             return Theme.losslessVerdictTranscode
         if (code === "suspected_upsample"
@@ -146,7 +147,7 @@ Rectangle {
                         model: [
                             { code: "all", label: qsTr("全部"), shortLabel: qsTr("全部") },
                             { code: "credible", label: qsTr("可信无损"), shortLabel: qsTr("可信") },
-                            { code: "transcode", label: qsTr("疑似转码"), shortLabel: qsTr("转码") },
+                            { code: "transcode", label: qsTr("有损 / 疑似转码"), shortLabel: qsTr("有损 / 转码") },
                             { code: "upsample", label: qsTr("疑似升频"), shortLabel: qsTr("升频") },
                             { code: "inconclusive", label: qsTr("无法确定"), shortLabel: qsTr("不确定") }
                         ]

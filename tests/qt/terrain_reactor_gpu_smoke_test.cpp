@@ -44,7 +44,9 @@ private slots:
     void spatialLyricsAndPointerRippleRender();
     void referencePcmAnalysisFollowsActualFramesAndStopsWhenHidden();
     void independentCustomColorsChangeGpuPixels();
-    void violetHeartKeepsPurpleSurfacesAndLocalizedWarmInterior();
+    void violetHeartUsesElevationDrivenReferenceGlow();
+    void violetHeartUsesElevationDrivenReferenceGlow_data();
+    void referenceGlowHasNoPresetOrStageOverrides();
     void densityAndQualityChangesKeepDrawingCompleteFrames();
     void cameraPunchDoesNotMoveTheGroundProjection();
     void denseMaterialFrameBudgetProbe_data();
@@ -450,6 +452,26 @@ void TerrainReactorGpuSmokeTest::referenceSharpnessReachesSideGlowUnclipped()
              "Original sharpness may exceed one; clipping it lengthens the side glow on sharp attacks");
 }
 
+void TerrainReactorGpuSmokeTest::referenceGlowHasNoPresetOrStageOverrides()
+{
+    const QDir directory = QFileInfo(QString::fromUtf8(AGPLAYER_TERRAIN_SHADER_SOURCE)).dir();
+    QFile shader(directory.filePath(QStringLiteral("terrain_reactor.frag")));
+    QVERIFY(shader.open(QIODevice::ReadOnly));
+    const QString source = QString::fromUtf8(shader.readAll());
+    const int begin = source.indexOf(QStringLiteral("if (referenceMode) {"));
+    const int end = source.indexOf(QStringLiteral("if (ubuf.bodyColor.a > 0.5) {"), begin);
+    QVERIFY(begin >= 0 && end > begin);
+    const QString material = source.mid(begin, end - begin);
+    QVERIFY2(!material.contains(QStringLiteral("warmBlend = 0.0")),
+             "All presets must retain the reference timbral warm/cool blend");
+    QVERIFY2(!material.contains(QStringLiteral("localizedCore")),
+             "A separate center-only glow must not replace reference cap/side/rim emission");
+    QVERIFY2(!material.contains(QStringLiteral("runtimeWhite")),
+             "Stage width must not introduce a white ripple color correction");
+    QVERIFY(material.contains(QStringLiteral("currentGlow = mix(currentGlow, vec3(1.0), referenceRippleAnim.y)")));
+    QVERIFY(material.contains(QStringLiteral("result += vec3(1.0) * referenceRippleAnim.y * 1.2")));
+}
+
 void TerrainReactorGpuSmokeTest::shaderFalloffsKeepSmoothstepEdgesAscending()
 {
     QFile shader(QString::fromUtf8(AGPLAYER_TERRAIN_SHADER_SOURCE));
@@ -611,10 +633,18 @@ void TerrainReactorGpuSmokeTest::independentCustomColorsChangeGpuPixels()
     }
 }
 
-void TerrainReactorGpuSmokeTest::violetHeartKeepsPurpleSurfacesAndLocalizedWarmInterior()
+void TerrainReactorGpuSmokeTest::violetHeartUsesElevationDrivenReferenceGlow_data()
 {
+    QTest::addColumn<QString>("themeId");
+    for (const auto* id : {"violet-heart", "sakura-glow", "abyss-blue"})
+        QTest::newRow(id) << QString::fromLatin1(id);
+}
+
+void TerrainReactorGpuSmokeTest::violetHeartUsesElevationDrivenReferenceGlow()
+{
+    QFETCH(QString, themeId);
     PlayerExperienceController style;
-    QVERIFY(style.applyTheme(QStringLiteral("violet-heart")));
+    QVERIFY(style.applyTheme(themeId));
     style.restoreDynamicDefaults();
     style.setTopographyDensity(46);
     style.setAutoRotate(0);
@@ -636,6 +666,7 @@ void TerrainReactorGpuSmokeTest::violetHeartKeepsPurpleSurfacesAndLocalizedWarmI
         QSKIP("Color proof requires an accelerated renderer");
     item.setActive(true);
     QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready, 5000);
+    qint64 quietBrightness = 0;
     for (int raised = 0; raised < 2; ++raised) {
         item.setSyntheticFeatures(raised ? QVariantList{.95,.88,.75,.35,0,0,0,0}
                                          : QVariantList{0,0,0,0,0,0,0,0},
@@ -643,28 +674,30 @@ void TerrainReactorGpuSmokeTest::violetHeartKeepsPurpleSurfacesAndLocalizedWarmI
         QTest::qWait(1000);
         const auto image = window.grabWindow();
         QVERIFY(!image.isNull());
-        int purple = 0, warm = 0, warmOutsideCore = 0;
+        int purple = 0, warm = 0, blue = 0, yellow = 0;
+        qint64 brightness = 0;
         for (int y = 0; y < image.height(); ++y)
             for (int x = 0; x < image.width(); ++x) {
                 const auto c = image.pixelColor(x, y);
+                brightness += c.red() + c.green() + c.blue();
+                if (c.blue() > 30 && c.blue() > c.red() * 1.2 && c.blue() > c.green() * 1.05) ++blue;
+                if (c.red() > 50 && c.green() > 50 && c.blue() < std::min(c.red(), c.green()) * .8) ++yellow;
                 if (c.blue() > 30 && c.blue() > c.red() * 1.15
                     && c.red() > c.green() * 1.4) ++purple;
                 if (c.red() > 50 && c.red() > c.blue() * 1.10
                     && c.red() > c.green() * 1.25) {
                     ++warm;
-                    if (x < image.width() / 4 || x > image.width() * 3 / 4)
-                        ++warmOutsideCore;
                 }
             }
-        qInfo() << "Violet Heart raised/purple/warm/outside:" << raised
-                << purple << warm << warmOutsideCore;
-        QVERIFY(purple > 1000);
-        QVERIFY2(purple > warm * 3, "Pink must not replace the dominant purple body");
-        QCOMPARE(warmOutsideCore, 0);
-        if (raised) QVERIFY2(warm > 50, "Raised central interior must visibly glow pink/warm");
-        else QCOMPARE(warm, 0);
+        qInfo() << "Violet Heart raised/purple/warm:" << raised << purple << warm;
+        if (!raised) quietBrightness = brightness;
+        else QVERIFY2(brightness > quietBrightness, "Elevation must brighten the reference material");
+        QCOMPARE(yellow, 0);
+        if (themeId == "violet-heart") { QVERIFY(purple > 1000); QCOMPARE(warm, 0); }
+        else if (themeId == "abyss-blue") { QVERIFY(blue > 1000); QCOMPARE(warm, 0); }
+        else QVERIFY(warm > 50);
         QVERIFY(image.save(QCoreApplication::applicationDirPath()
-            + (raised ? "/violet-heart-raised.png" : "/violet-heart-quiet.png")));
+            + "/" + themeId + (raised ? "-raised.png" : "-quiet.png")));
     }
     item.setActive(false);
 }

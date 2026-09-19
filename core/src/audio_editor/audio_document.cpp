@@ -222,7 +222,7 @@ bool sameSharedBoundaryParameters(const AudioEvent& left,
 
 bool operator==(const Selection& left, const Selection& right) noexcept
 {
-    return left.start == right.start && left.end == right.end;
+    return left.start == right.start && left.end == right.end && left.trackIndex == right.trackIndex;
 }
 
 bool operator==(const Marker& left, const Marker& right) noexcept
@@ -323,7 +323,7 @@ bool AudioDocument::cropEventToSelection(EventId id)
 {
     if (!hasValidSelection()) return false;
     const auto* event = timeline_.event(id);
-    if (!event) return false;
+    if (!event || (selection_->trackIndex >= 0 && selection_->trackIndex != event->trackIndex)) return false;
     const auto start = std::max(selection_->start, event->timelineStart);
     const auto end = std::min(selection_->end, event->timelineStart + audibleFrames(*event));
     if (end <= start) return false;
@@ -506,7 +506,8 @@ std::vector<AudioEvent> AudioDocument::selectedEvents() const
     std::vector<AudioEvent> selected;
     for (const AudioEvent& event : candidate) {
         const SampleFrame end = event.timelineStart + audibleFrames(event);
-        if (event.timelineStart >= selection_->start && end <= selection_->end) {
+        if ((selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+            && event.timelineStart >= selection_->start && end <= selection_->end) {
             selected.push_back(event);
         }
     }
@@ -517,8 +518,8 @@ bool AudioDocument::splitSelectionBoundaries(
     std::vector<AudioEvent>& events, EventId& nextId) const
 {
     if (!hasValidSelection()) return false;
-    return splitAtFrame(events, selection_->start, nextId)
-        && splitAtFrame(events, selection_->end, nextId);
+    return splitAtFrame(events, selection_->start, nextId, selection_->trackIndex)
+        && splitAtFrame(events, selection_->end, nextId, selection_->trackIndex);
 }
 
 bool AudioDocument::deleteSelection()
@@ -526,13 +527,13 @@ bool AudioDocument::deleteSelection()
     if (!hasValidSelection()) return false;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     EventId candidateId = next_event_id_;
-    if (!splitAtFrame(candidate, selection_->start, candidateId)
-        || !splitAtFrame(candidate, selection_->end, candidateId)) return false;
+    if (!splitSelectionBoundaries(candidate, candidateId)) return false;
     const auto oldSize = candidate.size();
     candidate.erase(std::remove_if(candidate.begin(), candidate.end(),
         [this](const AudioEvent& event) {
             const SampleFrame end = event.timelineStart + audibleFrames(event);
-            return event.timelineStart >= selection_->start && end <= selection_->end;
+            return (selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+                && event.timelineStart >= selection_->start && end <= selection_->end;
         }), candidate.end());
     if (candidate.size() == oldSize || !applyCandidate(std::move(candidate))) return false;
     next_event_id_ = candidateId;
@@ -543,17 +544,20 @@ bool AudioDocument::deleteSelection()
 bool AudioDocument::cropToSelection()
 {
     if (!hasValidSelection()) return false;
+    const int selectionTrack = selection_->trackIndex;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     EventId candidateId = next_event_id_;
     if (!splitSelectionBoundaries(candidate, candidateId)) return false;
     candidate.erase(std::remove_if(candidate.begin(), candidate.end(),
         [this](const AudioEvent& event) {
             const SampleFrame end = event.timelineStart + audibleFrames(event);
-            return event.timelineStart < selection_->start || end > selection_->end;
+            return (selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+                && (event.timelineStart < selection_->start || end > selection_->end);
         }), candidate.end());
     if (candidate.empty()) return false;
     for (AudioEvent& event : candidate) {
-        event.timelineStart -= selection_->start;
+        if (selection_->trackIndex >= 0 && event.trackIndex != selection_->trackIndex) continue;
+        if (selection_->trackIndex < 0) event.timelineStart -= selection_->start;
         const SampleFrame lastOffset = audibleFrames(event) - 1;
         const float firstGain = envelopeGainAt(event, 0);
         const float lastGain = envelopeGainAt(event, lastOffset);
@@ -567,7 +571,7 @@ bool AudioDocument::cropToSelection()
     }
     if (!applyCandidate(std::move(candidate))) return false;
     next_event_id_ = candidateId;
-    selection_ = Selection{0, timeline_.totalFrames()};
+    if (selectionTrack < 0) selection_ = Selection{0, timeline_.totalFrames()};
     return true;
 }
 
@@ -579,7 +583,8 @@ bool AudioDocument::silenceSelection()
     if (!splitSelectionBoundaries(candidate, candidateId)) return false;
     for (AudioEvent& event : candidate) {
         const SampleFrame end = event.timelineStart + audibleFrames(event);
-        if (event.timelineStart >= selection_->start && end <= selection_->end) {
+        if ((selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+            && event.timelineStart >= selection_->start && end <= selection_->end) {
             event.mute = true;
         }
     }
@@ -597,7 +602,8 @@ bool AudioDocument::fadeIn()
     for (AudioEvent& event : candidate) {
         const SampleFrame frames = audibleFrames(event);
         const SampleFrame end = event.timelineStart + frames;
-        if (event.timelineStart >= selection_->start && end <= selection_->end) {
+        if ((selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+            && event.timelineStart >= selection_->start && end <= selection_->end) {
             event.fadeIn = frames - event.fadeOut;
         }
     }
@@ -615,7 +621,8 @@ bool AudioDocument::fadeOut()
     for (AudioEvent& event : candidate) {
         const SampleFrame frames = audibleFrames(event);
         const SampleFrame end = event.timelineStart + frames;
-        if (event.timelineStart >= selection_->start && end <= selection_->end) {
+        if ((selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+            && event.timelineStart >= selection_->start && end <= selection_->end) {
             event.fadeOut = frames - event.fadeIn;
         }
     }
@@ -758,12 +765,12 @@ bool AudioDocument::cutSelection()
     if (copied.empty()) return false;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     EventId candidateId = next_event_id_;
-    if (!splitAtFrame(candidate, selection_->start, candidateId)
-        || !splitAtFrame(candidate, selection_->end, candidateId)) return false;
+    if (!splitSelectionBoundaries(candidate, candidateId)) return false;
     candidate.erase(std::remove_if(candidate.begin(), candidate.end(),
         [this](const AudioEvent& event) {
             const SampleFrame end = event.timelineStart + audibleFrames(event);
-            return event.timelineStart >= selection_->start && end <= selection_->end;
+            return (selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+                && event.timelineStart >= selection_->start && end <= selection_->end;
         }), candidate.end());
     if (!applyCandidate(std::move(candidate))) return false;
     clipboard_ = copied;
@@ -995,13 +1002,15 @@ bool AudioDocument::replaceSelectionWithSource(AudioSource source)
     candidate.erase(std::remove_if(candidate.begin(), candidate.end(),
         [&replacement](const AudioEvent& event) {
             const SampleFrame end = event.timelineStart + audibleFrames(event);
-            return event.timelineStart >= replacement.start
+            return (replacement.trackIndex < 0 || event.trackIndex == replacement.trackIndex)
+                && event.timelineStart >= replacement.start
                 && end <= replacement.end;
         }), candidate.end());
     auto shared = std::make_shared<const AudioSource>(std::move(source));
     candidate.push_back(AudioEvent{candidateId, shared, 0,
                                    shared->total_frames, replacement.start,
                                    1.0F, 0, 0, 1.0, 0, false, {}});
+    candidate.back().trackIndex = std::max(0, replacement.trackIndex);
     if (!applyCandidate(std::move(candidate))) return false;
     next_event_id_ = candidateId + 1;
     selection_.reset();
@@ -1052,6 +1061,31 @@ bool AudioDocument::replaceEventWithSource(EventId id, AudioSource source,
     state.events.insert(state.events.end(), pieces.begin(), pieces.end());
     if (!applyCandidate(std::move(state.events))) return false;
     next_event_id_ = candidateId;
+    return true;
+}
+
+bool AudioDocument::overwriteSource(AudioSource source, const SampleFrame cursor, const int trackIndex)
+{
+    const auto current = timeline_.snapshot();
+    if (cursor < 0 || trackIndex < 0 || trackIndex >= 6 || source.sample_rate == 0
+        || source.channels == 0 || source.total_frames <= 0 || current.sampleRate == 0) return false;
+    const auto duration = sourceToProjectFrames(source.total_frames, source.sample_rate, current.sampleRate);
+    if (duration <= 0 || cursor > std::numeric_limits<SampleFrame>::max() - duration) return false;
+    const auto end = cursor + duration;
+    auto candidate = current.events;
+    auto nextId = next_event_id_;
+    if (!splitAtFrame(candidate, cursor, nextId, trackIndex)
+        || !splitAtFrame(candidate, end, nextId, trackIndex)
+        || nextId == std::numeric_limits<EventId>::max()) return false;
+    candidate.erase(std::remove_if(candidate.begin(), candidate.end(), [&](const AudioEvent& event) {
+        return event.trackIndex == trackIndex && event.timelineStart >= cursor && event.timelineStart < end;
+    }), candidate.end());
+    auto shared = std::make_shared<const AudioSource>(std::move(source));
+    AudioEvent take{nextId++, shared, 0, shared->total_frames, cursor};
+    take.trackIndex = trackIndex;
+    candidate.push_back(std::move(take));
+    if (!applyCandidate(std::move(candidate))) return false;
+    next_event_id_ = nextId;
     return true;
 }
 

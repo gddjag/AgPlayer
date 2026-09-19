@@ -6,6 +6,11 @@ import AgPlayer
 Window {
     id: window
     objectName: "audioToolsWindow"
+    function handleEditorDropUrls(urls, x, y) {
+        if (!audioEditorLoader.item) return AudioEditorController.openDroppedUrls(urls)
+        const p = audioEditorLoader.item.mapFromItem(window.contentItem, x, y)
+        return audioEditorLoader.item.handleDropUrls(urls, p.x, p.y)
+    }
     visible: false
     readonly property rect availableWorkArea: WindowController.availableGeometryForWindow(window)
     readonly property rect initialGeometry: WindowController.startupGeometryForAvailableArea(
@@ -299,6 +304,7 @@ Window {
                     currentIndex: window.pageIndexForTool(AudioToolsController.currentTool)
 
                     Loader {
+                        id: audioEditorLoader
                         objectName: "audioEditorPageLoader"
                         active: AudioToolsController.currentTool === 0
                         sourceComponent: Component {

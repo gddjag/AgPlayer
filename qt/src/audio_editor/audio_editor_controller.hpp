@@ -59,11 +59,14 @@ class AudioEditorController final : public QObject {
     Q_PROPERTY(int selectedTrack READ selectedTrack WRITE setSelectedTrack NOTIFY selectedTrackChanged)
     Q_PROPERTY(QVariantList importResults READ importResults NOTIFY importResultsChanged)
     Q_PROPERTY(agplayer::editor::EditorRecordingService* recorder READ recorder CONSTANT)
+    Q_PROPERTY(int recordingTrack READ recordingTrack NOTIFY stateChanged)
+    Q_PROPERTY(qint64 recordingStartFrame READ recordingStartFrame NOTIFY stateChanged)
     Q_PROPERTY(EditorSessionState state READ state NOTIFY stateChanged)
     Q_PROPERTY(bool hasDocument READ hasDocument NOTIFY documentChanged)
     Q_PROPERTY(bool modified READ modified NOTIFY documentChanged)
     Q_PROPERTY(qint64 totalFrames READ totalFrames NOTIFY documentChanged)
     Q_PROPERTY(qint64 selectionStart READ selectionStart NOTIFY documentChanged)
+    Q_PROPERTY(int selectionTrack READ selectionTrack NOTIFY documentChanged)
     Q_PROPERTY(qint64 selectionEnd READ selectionEnd NOTIFY documentChanged)
     Q_PROPERTY(qint64 selectionFrames READ selectionFrames NOTIFY documentChanged)
     Q_PROPERTY(QString filePath READ filePath NOTIFY documentChanged)
@@ -149,7 +152,9 @@ public:
     void setSelectedTrack(int index);
     [[nodiscard]] QVariantList importResults() const { return import_results_; }
     [[nodiscard]] agplayer::editor::EditorRecordingService* recorder() noexcept { return &recorder_; }
-    Q_INVOKABLE bool addFiles(const QList<QUrl>& sources);
+    [[nodiscard]] int recordingTrack() const noexcept { return recording_track_; }
+    [[nodiscard]] qint64 recordingStartFrame() const noexcept { return recording_start_frame_; }
+    Q_INVOKABLE bool addFiles(const QList<QUrl>& sources, int targetTrack = -1, qint64 frame = -1);
     Q_INVOKABLE bool setTrackMute(int index, bool muted);
     Q_INVOKABLE bool beginTrackGainGesture(int index);
     Q_INVOKABLE bool updateTrackGainGesture(double gain);
@@ -157,7 +162,7 @@ public:
     Q_INVOKABLE bool cancelTrackGainGesture();
     Q_INVOKABLE bool setTrackGain(int index, double gain);
     Q_INVOKABLE bool moveEventToTrack(const QString& id, qint64 frame, int trackIndex);
-    Q_INVOKABLE QVariantList eventPeaks(const QString& id, int pixelWidth) const;
+    Q_INVOKABLE QVariantList eventPeaks(const QString& id, int pixelWidth, int contour = 0) const;
     Q_INVOKABLE bool beginScrub();
     Q_INVOKABLE void previewScrub(qint64 frame);
     Q_INVOKABLE bool endScrub();
@@ -171,6 +176,7 @@ public:
     [[nodiscard]] qint64 totalFrames() const noexcept
     { return document_.totalFrames(); }
     [[nodiscard]] qint64 selectionStart() const noexcept;
+    [[nodiscard]] int selectionTrack() const noexcept { return document_.selection() ? document_.selection()->trackIndex : -1; }
     [[nodiscard]] qint64 selectionEnd() const noexcept;
     [[nodiscard]] qint64 selectionFrames() const noexcept;
     [[nodiscard]] QString filePath() const { return source_path_; }
@@ -301,7 +307,7 @@ public:
                               qint64 bitRate = 0, bool keepMetadata = true,
                               bool variableBitRate = true, int quality = 80);
     Q_INVOKABLE bool exportToConfiguredDirectory(bool selectionOnly = false);
-    Q_INVOKABLE bool setSelection(qint64 startFrame, qint64 endFrame);
+    Q_INVOKABLE bool setSelection(qint64 startFrame, qint64 endFrame, int trackIndex = -1);
     Q_INVOKABLE bool clearSelection();
     Q_INVOKABLE void selectEvent(const QString& id);
     Q_INVOKABLE void clearEventSelection();
@@ -311,9 +317,11 @@ public:
     struct ClipWaveformSlice final {
         qint64 startFrame{};
         qint64 endFrame{};
+        bool decodedDetail{};
         std::vector<std::vector<float>> peaks;
     };
     struct ViewportWaveformResult final {
+        std::uint64_t revision{};
         std::vector<std::vector<float>> peaks;
         std::unordered_map<agplayer::editor::EventId, ClipWaveformSlice> clipPeaks;
         bool hasVisibleEvent{};
@@ -453,6 +461,7 @@ private:
         QString appendSkipMessage;
         quint64 expectedRevision{};
         int recordingTrack{-1};
+        int dropTrack{-1};
         agplayer::editor::TimelineSnapshot relinkSnapshot;
         std::vector<agplayer::editor::Marker> relinkMarkers;
         std::optional<agplayer::editor::Selection> relinkSelection;
@@ -493,6 +502,7 @@ private:
     [[nodiscard]] double effectivePlaybackVolume() const noexcept;
     void updatePlaybackMix() noexcept;
     void applyTrackMix(agplayer::editor::TimelineSnapshot& snapshot) const noexcept;
+    void applySelectionTrack(agplayer::editor::TimelineSnapshot& snapshot) const noexcept;
     bool preparePlayback();
     void releaseEditorPlaybackOutput() noexcept;
     [[nodiscard]] qint64 currentPlaybackTimelineFrame() const noexcept;
@@ -571,6 +581,7 @@ private:
     QVariantList viewport_channel_peaks_;
     std::unordered_map<agplayer::editor::EventId, ClipWaveformSlice> event_waveform_peaks_;
     quint64 event_waveform_generation_{};
+    std::uint64_t event_waveform_revision_{};
     QTimer viewport_waveform_debounce_timer_;
     QString selected_event_id_;
     QFutureWatcherBase* viewport_waveform_watcher_ = nullptr;

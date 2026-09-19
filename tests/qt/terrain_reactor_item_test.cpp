@@ -181,6 +181,7 @@ private slots:
                      QStringLiteral("#C020F0"));
         }
         const auto custom = item.renderStyleSnapshot();
+        QCOMPARE(custom.atmosphereColor.w(), 2.0F);
         for (const auto color : {custom.colors[1], custom.colors[2], custom.colors[4],
                                  custom.rippleColor, custom.atmosphereColor}) {
             QVERIFY(std::abs(color.x() - 192.0F / 255.0F) < .0001F);
@@ -441,9 +442,8 @@ void TerrainReactorItemTest::referenceThemesReachRendererWithoutHexQuantization(
             QVERIFY(std::abs(separateValues[index].x() - encoded.red) < 0.00001F);
             QVERIFY(std::abs(separateValues[index].y() - encoded.green) < 0.00001F);
             QVERIFY(std::abs(separateValues[index].z() - encoded.blue) < 0.00001F);
-            // Only Violet Heart localizes the warm palette to the raised core.
-            QCOMPARE(separateValues[index].w(),
-                     index == 0 && theme.id == "violet-heart" ? 2.0F : 1.0F);
+            // Every preset uses the reference elevation/timbre glow contract.
+            QCOMPARE(separateValues[index].w(), 1.0F);
         }
     }
 }

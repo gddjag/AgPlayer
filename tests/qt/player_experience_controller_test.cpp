@@ -996,8 +996,9 @@ void PlayerExperienceControllerTest::builtInThemesApplyWithoutDynamicPresetChang
         QStringLiteral("锦鲤池"), QStringLiteral("珊瑚礁"), QStringLiteral("苔藓玻璃"),
         QStringLiteral("蓝调时刻"), QStringLiteral("青瓷"), QStringLiteral("绯红信号"),
         QStringLiteral("紫夜霓心"),
+        QStringLiteral("绯樱流光"), QStringLiteral("深海蓝曜"),
     };
-    QCOMPARE(choices.size(), 13);
+    QCOMPARE(choices.size(), 15);
     for (qsizetype index = 0; index < choices.size(); ++index) {
         const QVariant& item = choices.at(index);
         const QVariantMap choice = item.toMap();

@@ -70,11 +70,43 @@ QByteArray readFile(const QString& path)
 class EditorRecordingServiceTest final : public QObject {
     Q_OBJECT
 private slots:
+    void autoSelectsDeviceAndBoostsRealPcmAndPeaks()
+    {
+        QTemporaryDir directory;
+        auto fixture = std::make_shared<InputFixture>();
+        EditorRecordingService recorder(factory(fixture));
+        QTRY_COMPARE(recorder.selectedInputDeviceId(), QStringLiteral("fixture"));
+        recorder.setSelectedInputDeviceId(QString{});
+        recorder.refreshInputDevices();
+        QTest::qWait(100);
+        QCOMPARE(recorder.selectedInputDeviceId(), QString{});
+        QCOMPARE(recorder.inputGain(), 1.0);
+        recorder.setInputGain(4);
+        QSignalSpy completed(&recorder, &EditorRecordingService::finished);
+        const auto output = directory.filePath(QStringLiteral("gain.wav"));
+        QVERIFY(recorder.start(output, 48000, 1));
+        QTRY_VERIFY(!recorder.actualInputDeviceName().isEmpty());
+        fixture->send({0.0625F, -0.0625F, 0.0F});
+        QTRY_COMPARE(recorder.recordedFrames(), 3);
+        const auto peaks = recorder.waveformPeaks(0, 3, 1).first().toList();
+        QCOMPARE(peaks[0].toFloat(), -0.25F);
+        QCOMPARE(peaks[1].toFloat(), 0.25F);
+        // Observe timer-driven metering without racing its next zero sample.
+        QSignalSpy levels(&recorder, &EditorRecordingService::inputLevelChanged);
+        fixture->send({0.0625F});
+        QTRY_VERIFY(!levels.empty());
+        recorder.pause();
+        QCOMPARE(recorder.inputLevel(), 0.0);
+        recorder.stop();
+        QTRY_COMPARE(completed.count(), 1);
+        QCOMPARE(readFile(output).mid(44, 9).toHex(), QByteArray("0000200000e0000000"));
+    }
     void pauseExcludesInputAndStopProducesExactPcm24()
     {
         QTemporaryDir directory;
         auto fixture = std::make_shared<InputFixture>();
         EditorRecordingService recorder(factory(fixture));
+        recorder.setInputGain(1); // Unity capture preserves the original PCM.
         QSignalSpy completed(&recorder, &EditorRecordingService::finished);
         QSignalSpy failed(&recorder, &EditorRecordingService::failed);
         const QString output = directory.filePath(QStringLiteral("capture.wav"));
@@ -122,6 +154,7 @@ private slots:
         const QString output = directory.filePath(QStringLiteral("partial.wav"));
         auto fixture = std::make_shared<InputFixture>();
         EditorRecordingService recorder(factory(fixture));
+        recorder.setInputGain(1);
         QSignalSpy completed(&recorder, &EditorRecordingService::finished);
         QSignalSpy failed(&recorder, &EditorRecordingService::failed);
         QVERIFY(recorder.start(output, 44'100, 2));
