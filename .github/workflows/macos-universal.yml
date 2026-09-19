@@ -198,6 +198,8 @@ jobs:
           architectures="$(lipo -archs "$app_path/Contents/MacOS/AgPlayer")"
           for required_arch in x86_64 arm64; do
             printf '%s\n' "$architectures" | tr ' ' '\n' | grep -qx "$required_arch"
+            nm -arch "$required_arch" "$app_path/Contents/MacOS/AgPlayer" \
+              | grep -E '[Tt] .*qt_static_plugin_QDarwinMicrophonePermissionPlugin'
           done
           codesign --verify --deep --strict --all-architectures "$app_path"
           signature_log="$RUNNER_TEMP/agplayer-signatures.log"
