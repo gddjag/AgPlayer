@@ -238,6 +238,8 @@ if(APPLE)
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/macos/Info.plist.in"
         INSTALL_RPATH "@executable_path/../Frameworks")
+    # Darwin permission backends are static plugins even with shared Qt.
+    qt_import_plugins(AgPlayer INCLUDE Qt6::QDarwinMicrophonePermissionPlugin)
 endif()
 target_include_directories(AgPlayer PRIVATE "${CMAKE_BINARY_DIR}/generated")
 if(TARGET AgSeparationWorker)
