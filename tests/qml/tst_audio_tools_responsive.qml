@@ -20,22 +20,29 @@ TestCase {
         return component
     }
     function inside(item, owner) {
+        var p = item ? item.mapToItem(owner, 0, 0) : null
+        var visible = item && item.visible
+        var clipped = []
+        for (var ancestor = item ? item.parent : null; ancestor && ancestor !== owner;
+             ancestor = ancestor.parent) {
+            if (ancestor.clip)
+                clipped.push({owner: ancestor, point: item.mapToItem(ancestor, 0, 0)})
+        }
         verify(item, "missing control")
-        verify(item.visible, item.objectName + " is hidden")
-        var p = item.mapToItem(owner, 0, 0)
+        verify(visible, item.objectName + " is hidden")
         verify(p.x >= -1 && p.y >= -1 && p.x + item.width <= owner.width + 1
                && p.y + item.height <= owner.height + 1,
                item.objectName + " outside " + owner.width + "x" + owner.height
                + ": " + p.x + "," + p.y + " " + item.width + "x" + item.height)
-        for (var ancestor = item.parent; ancestor && ancestor !== owner; ancestor = ancestor.parent) {
-            if (!ancestor.clip) continue
-            var local = item.mapToItem(ancestor, 0, 0)
+        for (var clippedItem of clipped) {
+            var local = clippedItem.point
+            var clipOwner = clippedItem.owner
             verify(local.x >= -1 && local.y >= -1
-                   && local.x + item.width <= ancestor.width + 1
-                   && local.y + item.height <= ancestor.height + 1,
-                   item.objectName + " clipped by " + ancestor.objectName
+                   && local.x + item.width <= clipOwner.width + 1
+                   && local.y + item.height <= clipOwner.height + 1,
+                   item.objectName + " clipped by " + clipOwner.objectName
                    + ": " + local.x + "," + local.y + " " + item.width + "x" + item.height
-                   + " in " + ancestor.width + "x" + ancestor.height)
+                   + " in " + clipOwner.width + "x" + clipOwner.height)
         }
     }
     function revealVertically(item) {
