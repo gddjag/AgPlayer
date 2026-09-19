@@ -173,7 +173,9 @@ QVariant LibraryModel::data(const QModelIndex& index, int role) const
     case PathRole:
         return track.path;
     case TitleRole:
-        return track.title;
+        // Display fallback only: never write a filename into the metadata tag.
+        return track.title.trimmed().isEmpty()
+            ? QFileInfo(track.path).completeBaseName() : track.title;
     case ArtistRole:
         return track.artist;
     case AlbumRole:
@@ -994,7 +996,7 @@ bool LibraryModel::updateTrackPath(const QString& trackId, const QString& newPat
                                        : QStringLiteral("missing");
     const QModelIndex changed = index(row, 0);
     emit dataChanged(changed, changed,
-                     {PathRole, AvailableRole, FileStatusRole,
+                     {PathRole, TitleRole, AvailableRole, FileStatusRole,
                       MetadataProbeAttemptedRole});
     emit flushRequested();
     return true;
@@ -1038,7 +1040,7 @@ bool LibraryModel::updateTrackPaths(const QHash<QString, QString>& paths)
         pathRows_.insert(key, row);
         const QModelIndex changed = index(row, 0);
         emit dataChanged(changed, changed,
-                         {PathRole, AvailableRole, FileStatusRole,
+                         {PathRole, TitleRole, AvailableRole, FileStatusRole,
                           MetadataProbeAttemptedRole});
     }
     emit flushRequested();

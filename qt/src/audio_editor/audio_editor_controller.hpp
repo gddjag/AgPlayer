@@ -5,6 +5,7 @@
 #include "editor_action_model.hpp"
 #include "editor_viewport.hpp"
 #include "editor_playback_adapter.hpp"
+#include "editor_recording_service.hpp"
 #include "project_document.hpp"
 #include "selection_drag_controller.hpp"
 #include "../../../core/src/audio_editor/time_pitch_session.hpp"
@@ -19,12 +20,14 @@
 #include <QFutureWatcher>
 #include <QList>
 #include <QPointer>
+#include <QStringList>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 
 #include <atomic>
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -52,6 +55,10 @@ class AudioEditorController final : public QObject {
     Q_OBJECT
     Q_PROPERTY(EditorActionModel* actions READ actions CONSTANT)
     Q_PROPERTY(EditorViewport* viewport READ viewport CONSTANT)
+    Q_PROPERTY(QVariantList tracks READ tracks NOTIFY documentChanged)
+    Q_PROPERTY(int selectedTrack READ selectedTrack WRITE setSelectedTrack NOTIFY selectedTrackChanged)
+    Q_PROPERTY(QVariantList importResults READ importResults NOTIFY importResultsChanged)
+    Q_PROPERTY(agplayer::editor::EditorRecordingService* recorder READ recorder CONSTANT)
     Q_PROPERTY(EditorSessionState state READ state NOTIFY stateChanged)
     Q_PROPERTY(bool hasDocument READ hasDocument NOTIFY documentChanged)
     Q_PROPERTY(bool modified READ modified NOTIFY documentChanged)
@@ -137,6 +144,27 @@ public:
 
     [[nodiscard]] EditorActionModel* actions() noexcept { return &actions_; }
     [[nodiscard]] EditorViewport* viewport() noexcept { return &viewport_; }
+    [[nodiscard]] QVariantList tracks() const;
+    [[nodiscard]] int selectedTrack() const noexcept { return selected_track_; }
+    void setSelectedTrack(int index);
+    [[nodiscard]] QVariantList importResults() const { return import_results_; }
+    [[nodiscard]] agplayer::editor::EditorRecordingService* recorder() noexcept { return &recorder_; }
+    Q_INVOKABLE bool addFiles(const QList<QUrl>& sources);
+    Q_INVOKABLE bool setTrackMute(int index, bool muted);
+    Q_INVOKABLE bool beginTrackGainGesture(int index);
+    Q_INVOKABLE bool updateTrackGainGesture(double gain);
+    Q_INVOKABLE bool endTrackGainGesture();
+    Q_INVOKABLE bool cancelTrackGainGesture();
+    Q_INVOKABLE bool setTrackGain(int index, double gain);
+    Q_INVOKABLE bool moveEventToTrack(const QString& id, qint64 frame, int trackIndex);
+    Q_INVOKABLE QVariantList eventPeaks(const QString& id, int pixelWidth) const;
+    Q_INVOKABLE bool beginScrub();
+    Q_INVOKABLE void previewScrub(qint64 frame);
+    Q_INVOKABLE bool endScrub();
+    Q_INVOKABLE void cancelScrub();
+    Q_INVOKABLE bool startRecording();
+    Q_INVOKABLE void pauseResumeRecording();
+    Q_INVOKABLE void stopRecording();
     [[nodiscard]] EditorSessionState state() const noexcept { return state_; }
     [[nodiscard]] bool hasDocument() const noexcept { return has_document_; }
     [[nodiscard]] bool modified() const noexcept { return modified_; }
@@ -280,8 +308,14 @@ public:
     Q_INVOKABLE bool clearTimeline();
     Q_INVOKABLE void setViewportWaveformDevicePixelRatio(
         double devicePixelRatio);
+    struct ClipWaveformSlice final {
+        qint64 startFrame{};
+        qint64 endFrame{};
+        std::vector<std::vector<float>> peaks;
+    };
     struct ViewportWaveformResult final {
         std::vector<std::vector<float>> peaks;
+        std::unordered_map<agplayer::editor::EventId, ClipWaveformSlice> clipPeaks;
         bool hasVisibleEvent{};
         bool hasUnavailableVisibleEvent{};
     };
@@ -357,6 +391,8 @@ public:
     Q_INVOKABLE bool reduceNoise();
 
 signals:
+    void selectedTrackChanged();
+    void importResultsChanged();
     void playbackRequested(bool* accepted);
     void stateChanged();
     void documentChanged();
@@ -402,13 +438,21 @@ private:
         std::shared_ptr<std::atomic_bool> cancelToken;
         std::vector<agplayer::editor::AudioSource> sources;
     };
-    enum class DocumentLoadKind { OpenFile, OpenProject, Relink };
+    enum class DocumentLoadKind { OpenFile, OpenProject, Relink, Append };
     struct DocumentLoadJob final {
         quint64 generation{};
         std::shared_ptr<std::atomic_bool> cancelToken;
         DocumentLoadKind kind{DocumentLoadKind::OpenFile};
         QString path;
         quint64 sourceId{};
+        QList<QUrl> appendUrls;
+        qint64 appendFrame{};
+        qsizetype appendIndex{};
+        std::array<bool, 6> appendUsedTracks{};
+        QStringList appendFailures;
+        QString appendSkipMessage;
+        quint64 expectedRevision{};
+        int recordingTrack{-1};
         agplayer::editor::TimelineSnapshot relinkSnapshot;
         std::vector<agplayer::editor::Marker> relinkMarkers;
         std::optional<agplayer::editor::Selection> relinkSelection;
@@ -418,6 +462,7 @@ private:
         DocumentLoadKind kind{DocumentLoadKind::OpenFile};
         QString path;
         quint64 sourceId{};
+        std::shared_ptr<DocumentLoadJob> appendJob;
         bool success{};
         QString message;
         agplayer::editor::AudioFileAnalysis analysis;
@@ -466,6 +511,7 @@ private:
     void finishTimelineMutation();
     void clearMissingEventSelection();
     void syncProjectSourcesAndIssues();
+    void cleanupUnreferencedSessionMedia();
     [[nodiscard]] std::optional<quint64> nextProjectSourceId() const;
     [[nodiscard]] static std::optional<agplayer::editor::EventId>
     parseEventId(const QString& id) noexcept;
@@ -487,6 +533,18 @@ private:
 
     EditorActionModel actions_;
     EditorViewport viewport_;
+    agplayer::editor::EditorRecordingService recorder_{this};
+    int selected_track_{};
+    QVariantList import_results_;
+    int gain_gesture_track_{-1};
+    double gain_gesture_value_{1.0};
+    bool scrub_active_{};
+    bool scrub_was_playing_{};
+    qint64 scrub_original_frame_{};
+    int recording_track_{-1};
+    qint64 recording_start_frame_{};
+    quint64 recording_revision_{};
+    QStringList owned_media_;
     agplayer::editor::AudioDocument document_;
     ag_player* player_{};
     PlaybackController* playback_controller_{};
@@ -511,6 +569,9 @@ private:
     std::shared_ptr<const agplayer::editor::PeakPyramid> primary_peak_pyramid_;
     SourcePeakPyramids source_peak_pyramids_;
     QVariantList viewport_channel_peaks_;
+    std::unordered_map<agplayer::editor::EventId, ClipWaveformSlice> event_waveform_peaks_;
+    quint64 event_waveform_generation_{};
+    QTimer viewport_waveform_debounce_timer_;
     QString selected_event_id_;
     QFutureWatcherBase* viewport_waveform_watcher_ = nullptr;
     quint64 viewport_waveform_generation_ = 0;
@@ -600,6 +661,7 @@ private:
         qint64 envelopeOffset{};
         double originalEnvelopeGain{1.0};
         double envelopeGain{1.0};
+        int trackIndex{};
     };
     EventGesture event_gesture_;
     QString active_tool_{QStringLiteral("select")};

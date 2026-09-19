@@ -55,7 +55,7 @@ TestCase {
 
     function test_small_pages_keep_primary_actions_reachable_data() {
         var pages = [
-            {tag: "editor", file: "AudioEditorPage.qml", action: "editorInspectorAccess"},
+            {tag: "editor", file: "AudioEditorPage.qml", action: "editorRecordButton"},
             {tag: "metadata", file: "MetadataEditPage.qml", action: "metadataApplyButton"},
             {tag: "filename", file: "FilenameProcessPage.qml", action: "filenameStartButton"},
             {tag: "separation", file: "VocalSeparationPage.qml", action: "separationPrimaryAction"},
@@ -82,15 +82,14 @@ TestCase {
                 waitForRendering(page)
             }
             snapshot(page, data.tag)
-            if (data.name !== "editor" || page.narrowLayout)
-                inside(findChild(page, data.action), page)
+            inside(findChild(page, data.action), page)
             if (data.name === "editor") {
                 inside(findChild(page, "editorPlaybackTransport"), page)
-                inside(findChild(page, "editorShortcutCard"), page)
-                if (page.narrowLayout) {
-                    var inspectorAccess = findChild(page, "editorInspectorAccess")
-                    mouseClick(inspectorAccess, inspectorAccess.width / 2, inspectorAccess.height / 2)
-                }
+                inside(findChild(page, "editorRecordingTransport"), page)
+                var inspector = findChild(page, "editorInspector")
+                inside(inspector, page)
+                compare(inspector.x, page.mainWidth)
+                verify(findChild(page, "editorTrackScroller").height >= 86)
                 var exportButton = findChild(page, "editorExportButton")
                 revealVertically(exportButton)
                 inside(exportButton, page)

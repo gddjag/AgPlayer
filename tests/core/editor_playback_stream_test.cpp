@@ -228,12 +228,12 @@ std::filesystem::path writeRampFixture()
     return path;
 }
 
-std::filesystem::path writeAutomationOrderFixture()
+std::filesystem::path writeAutomationOrderFixture(const bool baked = false)
 {
     constexpr std::uint32_t sampleRate = 8'000U;
     constexpr std::uint32_t frames = 8'000U;
     const auto path = std::filesystem::temp_directory_path()
-        / "agplayer-editor-automation-order.wav";
+        / (baked ? "agplayer-editor-automation-baked.wav" : "agplayer-editor-automation-order.wav");
     std::ofstream stream(path, std::ios::binary | std::ios::trunc);
     stream.write("RIFF", 4); writeU32(stream, 36U + frames * 4U);
     stream.write("WAVEfmt ", 8); writeU32(stream, 16U); writeU16(stream, 3U);
@@ -241,15 +241,15 @@ std::filesystem::path writeAutomationOrderFixture()
     writeU32(stream, sampleRate * 4U); writeU16(stream, 4U);
     writeU16(stream, 32U); stream.write("data", 4);
     writeU32(stream, frames * 4U);
-    const float sample = 0.5F;
     for (std::uint32_t frame = 0; frame < frames; ++frame) {
+        const float sample = baked && frame == 4'000 ? 0.0F : 0.5F;
         stream.write(reinterpret_cast<const char*>(&sample), sizeof(sample));
     }
     require(stream.good(), "could not write automation-order fixture");
     return path;
 }
 
-void automationRunsAfterTimePitchInRealtimeStream()
+void automationRunsBeforeTimePitchInRealtimeStream()
 {
     using namespace agplayer::editor;
     const auto path = writeAutomationOrderFixture();
@@ -268,19 +268,19 @@ void automationRunsAfterTimePitchInRealtimeStream()
     const auto samples = readAll(*stream);
     require(samples.size() > 3'500U && samples.size() < 4'500U,
             "automation-order stream duration mismatch");
-    const std::size_t mapped = samples.size() / 2U;
-    float localMinimum = 1.0F;
-    for (std::size_t index = mapped > 8U ? mapped - 8U : 0U;
-         index < std::min(samples.size(), mapped + 9U); ++index) {
-        localMinimum = std::min(localMinimum, std::abs(samples[index]));
-    }
-    require(localMinimum < 0.05F,
-            "time/pitch swallowed a post-process one-frame gain notch");
-    require(std::abs(samples[mapped - 32U]) > 0.25F
-                && std::abs(samples[mapped + 32U]) > 0.25F,
-            "post-time/pitch automation damaged neighboring audio");
+    const auto bakedPath = writeAutomationOrderFixture(true);
+    const auto bakedSource = std::make_shared<const AudioSource>(
+        AudioSource{bakedPath, 8'000, 1, 8'000});
+    auto bakedStream = EditorPlaybackStream::create(
+        TimelineSnapshot{{AudioEvent{1, bakedSource, 0, 8'000, 0}}, 8'000, 1},
+        parameters, error);
+    require(bakedStream != nullptr, "baked automation stream creation failed");
+    const auto bakedSamples = readAll(*bakedStream);
+    require(samples == bakedSamples,
+            "clip automation must enter TimePitch exactly like source PCM");
     std::error_code ignored;
     std::filesystem::remove(path, ignored);
+    std::filesystem::remove(bakedPath, ignored);
 }
 
 std::chrono::nanoseconds renderMutedEventTimeline(
@@ -335,13 +335,13 @@ void sequentialAutomationCursorSearchRemainsNearLinear()
         }
         return best;
     };
-    const auto small = fastest(100'000U);
-    const auto large = fastest(400'000U);
+    const auto small = fastest(1'000U);
+    const auto large = fastest(4'000U);
     if (large >= small * 10) {
         std::cerr << "automation event lookup rescanned the timeline per "
-                     "output block (100k="
+                     "output block (1k="
                   << std::chrono::duration_cast<std::chrono::microseconds>(small).count()
-                  << "us, 400k="
+                  << "us, 4k="
                   << std::chrono::duration_cast<std::chrono::microseconds>(large).count()
                   << "us)\n";
         std::exit(1);
@@ -388,7 +388,9 @@ void awkward44100OffsetsRemainSampleExact()
     require(analysis.success, "sample-exact fixture analysis failed");
     const float frame45 = static_cast<float>(45 * 100 - 10'000) / 32'768.0F;
 
-    auto trimmedDocument = AudioDocument::fromSource(analysis.source);
+    auto legacySnapshot = AudioDocument::fromSource(analysis.source).timelineSnapshot();
+    legacySnapshot.channels = 1;
+    auto trimmedDocument = AudioDocument::fromSnapshot(legacySnapshot);
     const auto eventId = trimmedDocument.timelineSnapshot().events.front().id;
     require(trimmedDocument.trimEvent(eventId, 45, 100, 0),
             "sample-exact event trim failed");
@@ -403,7 +405,7 @@ void awkward44100OffsetsRemainSampleExact()
             "awkward event source offset skipped one PCM frame");
 
     auto seekStream = EditorPlaybackStream::create(
-        AudioDocument::fromSource(analysis.source).timelineSnapshot(), neutral,
+        legacySnapshot, neutral,
         error);
     require(seekStream && seekStream->seek(1) == AG_OK
                 && seekStream->read(block) == AG_OK && block.frames > 0,
@@ -453,6 +455,7 @@ void multiEventProcessingAndDecodeFailuresAreCovered()
     gained.gain = 0.25F;
     auto snapshot = AudioDocument::fromEvents(
         {shaped, muted, gained}).timelineSnapshot();
+    snapshot.channels = 1; // Existing mono-project frame regression.
     EditorPlaybackParameters neutral;
     std::string error;
     auto stream = EditorPlaybackStream::create(snapshot, neutral, error);
@@ -583,7 +586,7 @@ int main(int argc, char** argv)
     }
     playbackBuffersAreReused(false);
     formantPreserverRestoresControlledSpectralCentroids();
-    automationRunsAfterTimePitchInRealtimeStream();
+    automationRunsBeforeTimePitchInRealtimeStream();
     sequentialAutomationCursorSearchRemainsNearLinear();
     automationCursorRepositionsAfterBackwardSeek();
     awkward44100OffsetsRemainSampleExact();

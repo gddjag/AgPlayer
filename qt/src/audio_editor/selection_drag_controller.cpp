@@ -105,6 +105,13 @@ QString cacheKey(const HandoffRequest& request)
     };
     add(request.sourceIdentity);
     add(QString::number(request.snapshot.totalFrames));
+    add(QString::number(request.snapshot.sampleRate));
+    add(QString::number(request.snapshot.channels));
+    add(QString::number(request.snapshot.legacyMasterGain, 'g', 9));
+    for (const auto& track : request.snapshot.tracks) {
+        add(QString::number(track.muted));
+        add(QString::number(track.gain, 'g', 9));
+    }
     for (const auto& event : request.snapshot.events) {
         if (event.source) {
             add(QString::fromStdWString(event.source->path.wstring()));
@@ -117,6 +124,8 @@ QString cacheKey(const HandoffRequest& request)
         add(QString::number(event.sourceStart));
         add(QString::number(event.sourceEnd));
         add(QString::number(event.timelineStart));
+        add(QString::number(event.trackIndex));
+        add(QString::number(event.timelineSampleRate));
         add(QString::number(event.gain, 'g',
                             std::numeric_limits<float>::max_digits10));
         add(QString::number(event.fadeIn));

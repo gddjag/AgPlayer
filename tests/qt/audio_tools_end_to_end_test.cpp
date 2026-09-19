@@ -66,6 +66,8 @@ class AudioToolsEndToEndTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void metadataEditorKeepsUntouchedTitle_data();
+    void metadataEditorKeepsUntouchedTitle();
     void formatConverterExposesOnlyReleaseFormats();
     void audioToolsControllerKeepsLegacyIdsAndSupportsSeparation();
     void allPlaybackLocationsPauseEachOther();
@@ -2986,6 +2988,50 @@ void AudioToolsEndToEndTest::performanceConversionAndMetadataBatch()
             QVERIFY(record->favorite);
         }
     }
+}
+
+void AudioToolsEndToEndTest::metadataEditorKeepsUntouchedTitle_data()
+{
+    QTest::addColumn<QString>("originalTitle");
+    QTest::newRow("missing-title") << QString{};
+    QTest::newRow("existing-title") << QStringLiteral("Original title");
+}
+
+void AudioToolsEndToEndTest::metadataEditorKeepsUntouchedTitle()
+{
+    QFETCH(QString, originalTitle);
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const auto input = temp.filePath(QStringLiteral("Unchanged.name.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 2));
+    if (!originalTitle.isEmpty()) {
+        QCOMPARE(ag_metadata_write(input.toUtf8().constData(), originalTitle.toUtf8().constData(),
+            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr), AG_OK);
+    }
+    LibraryModel library;
+    TrackRecord track;
+    track.trackId = QStringLiteral("title-preserved");
+    track.path = input;
+    track.title = originalTitle;
+    QVERIFY(library.append(track));
+    MetadataEditor editor;
+    editor.setLibraryModel(&library);
+    QSignalSpy loaded(&editor, &MetadataEditor::entriesLoaded);
+    editor.loadFiles({QUrl::fromLocalFile(input)});
+    QVERIFY(loaded.wait(30000));
+    QSignalSpy applied(&editor, &MetadataEditor::metadataApplied);
+    editor.applyMetadata({{QStringLiteral("artist"), QVariantMap{
+        {QStringLiteral("mode"), QStringLiteral("set")},
+        {QStringLiteral("value"), QStringLiteral("New artist")}}}}, {});
+    QVERIFY(applied.wait(30000));
+    QCOMPARE(applied.first().first().toInt(), 1);
+    ag_metadata* metadata = nullptr;
+    QCOMPARE(ag_metadata_open(input.toUtf8().constData(), &metadata), AG_OK);
+    const auto title = QString::fromUtf8(ag_metadata_title(metadata));
+    ag_metadata_destroy(metadata);
+    QCOMPARE(title, originalTitle);
+    QCOMPARE(library.trackForId(track.trackId).value(QStringLiteral("title")).toString(),
+             originalTitle.isEmpty() ? QStringLiteral("Unchanged.name") : originalTitle);
 }
 
 void AudioToolsEndToEndTest::metadataEditorWritesTags()

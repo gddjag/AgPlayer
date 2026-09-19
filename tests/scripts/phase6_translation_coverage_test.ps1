@@ -17,10 +17,8 @@ function Test-IsProjectPath([string]$Path, [string]$Root) {
 $phase6Qml = @(
     'app/qml/AgPlayer/AudioToolsWindow.qml',
     'app/qml/AgPlayer/components/tools/AudioEditorPage.qml',
-    'app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml',
+    'app/qml/AgPlayer/components/audioeditor/EditorSixTrackWorkspace.qml',
     'app/qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml',
-    'app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml',
-    'app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml',
     'app/qml/AgPlayer/components/tools/ToolSidebar.qml'
 )
 $expected = @{}
@@ -40,13 +38,16 @@ foreach ($relativePath in $phase6Qml) {
 $requiredSources = @{
     AudioEditorPage = @(
         '5qOA5rWL5Lit4oCm', '5Y6f5aeLICUxIEJQTQ==',
-        '4oCUIC8g5LiN6YCC55So', 'JTEg5aOw6YGT'
+        '5LuF5a+85Ye66YCJ5Yy6', '5a+85Ye66Z+z6aKR'
     ) | ForEach-Object { ConvertFrom-Utf8Base64 $_ }
     EditorWaveformCanvas = @(
         '57q/5oCn', '5bmz5ruR', '5oyH5pWw'
     ) | ForEach-Object { ConvertFrom-Utf8Base64 $_ }
-    EditorStatusBar = @(
-        '5a+85Ye65a6M5oiQ77yaJTE=', '5q2j5Zyo5aSE55CG4oCmICUxJQ=='
+    EditorSixTrackWorkspace = @(
+        '5re75Yqg6Z+z6aKR', '5L+d5a2Y5bel56iL',
+        '5aSE55CG5Lit4oCmICUxJQ==', '6L6T5YWl6K6+5aSH',
+        '5b2V6Z+z', '5pqC5YGc5b2V6Z+z', '57un57ut5b2V6Z+z',
+        '5Y+W5raI', '5oC75pe26ZW/ICAlMQ=='
     ) | ForEach-Object { ConvertFrom-Utf8Base64 $_ }
 }
 foreach ($context in $requiredSources.Keys) {

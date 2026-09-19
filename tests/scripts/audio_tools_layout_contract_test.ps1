@@ -10,8 +10,9 @@ function ConvertFrom-Utf8Base64([string]$Value) {
 $toolsRoot = Join-Path $SourceRoot 'app/qml/AgPlayer/components/tools'
 $editorRoot = Join-Path $SourceRoot 'app/qml/AgPlayer/components/audioeditor'
 $audioEditor = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'AudioEditorPage.qml')
-$commandBar = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $editorRoot 'EditorCommandBar.qml')
+$sixTrackWorkspace = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $editorRoot 'EditorSixTrackWorkspace.qml')
 $waveformCanvas = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $editorRoot 'EditorWaveformCanvas.qml')
+$editorSurface = $audioEditor + "`n" + $sixTrackWorkspace + "`n" + $waveformCanvas
 $toolsWindow = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $SourceRoot 'app/qml/AgPlayer/AudioToolsWindow.qml')
 $toolsNavigation = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $toolsRoot 'ToolSidebar.qml')
@@ -35,59 +36,24 @@ $separationPage = Get-Content -Raw -Encoding UTF8 -LiteralPath (
 $settingsPage = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $SourceRoot 'app/qml/AgPlayer/SettingsPage.qml')
 
-$forbidden = @('RecordingSession', 'Finalizing', 'recordingSupported', 'startRecording',
-               'editor.newRecording', 'editorRecordingTransport',
-               'inspectorRecordingGroup')
-$productionRoots = @(
-    (Join-Path $SourceRoot 'core/src'),
-    (Join-Path $SourceRoot 'qt/src'),
-    (Join-Path $SourceRoot 'app/qml'))
-$productionFiles = foreach ($root in $productionRoots) {
-    Get-ChildItem -LiteralPath $root -File -Recurse
-}
-$productionFiles += @(
-    (Join-Path $SourceRoot 'CMakeLists.txt'),
-    (Join-Path $SourceRoot 'core/CMakeLists.txt')) | Where-Object {
-    Test-Path -LiteralPath $_
-}
-foreach ($symbol in $forbidden) {
-    $matches = $productionFiles | Select-String -SimpleMatch -Pattern $symbol
-    if ($matches) {
-        throw "Recording production symbol remains: $symbol ($($matches[0].Path):$($matches[0].LineNumber))"
+# Six-track recording is a shipped capability now. Guard its real controller
+# wiring instead of the superseded contract that prohibited every recorder.
+foreach ($call in @('startRecording', 'pauseResumeRecording', 'stopRecording')) {
+    if ($controllerHeader -notmatch ('Q_INVOKABLE\s+(bool|void)\s+' + $call + '\(') -or
+        $sixTrackWorkspace -notmatch ('AudioEditorController\.' + $call + '\(')) {
+        throw "The six-track recorder is missing its real controller action: $call"
     }
 }
-
-$recordingTranslationSources = @(
-    '6K+36YCJ5oup5b2V6Z+z5L+d5a2Y5L2N572u',
-    '5peg5rOV5ZCv5Yqo5b2V6Z+z6K6+5aSH77yM6K+35qOA5p+l6K6+5aSH5LiO5p2D6ZmQ',
-    '5b2V6Z+z5a6M5oiQ77yM5L2G5peg5rOV5o+S5YWl5b2T5YmN5paH5qGj',
-    '5b2V6Z+z5bey5Y+W5raI', '5b2V6Z+z',
-    '6YCJ5oup5b2V6Z+z6K6+5aSH77yIQWx0K1LvvIk=',
-    '5pqC5YGcIC8g57un57ut5b2V6Z+z77yIU2hpZnQrUu+8iQ==',
-    '5byA5aeLIC8g57un57ut5b2V6Z+z77yIUu+8iQ==',
-    '5YGc5q2i5bm25L+d5a2Y5b2V6Z+z77yIQ3RybCtS77yJ',
-    '56m65qC8ID0g5pKt5pS+IC8g5pqC5YGcICAgICAgIFIgPSDlvIDlp4vlvZXpn7MgICAgICAgU2hpZnQrUiA9IOaaguWBnCAvIOe7p+e7reW9lemfsyAgICAgICBDdHJsK1IgPSDlgZzmraLlubbkv53lrZggICAgICAgUyA9IOWcqOaSreaUvuWktOWkhOWIhuWJsiAgICAgICBEZWxldGUgPSDliKDpmaTniYfmrrUgICAgICAgQ3RybCtDIC8gWCAvIFYgPSDlpI3liLYgLyDliarliIcgLyDnspjotLQgICAgICAgQ3RybCtaIC8gWSA9IOaSpOmUgCAvIOmHjeWBmg==',
-    '5pyq5qOA5rWL5Yiw6L6T5YWl6K6+5aSH', '5Y+W5raI5b2V6Z+z',
-    '5b2V6Z+z5o6n5Yi2', '5byA5aeL5b2V6Z+z',
-    '5pqC5YGc5oiW57un57ut5b2V6Z+z', '5b2V6Z+z5bey5pqC5YGc',
-    '5q2j5Zyo5b2V6Z+z', '5YeG5aSH5b2V6Z+z', 'QS4g5b2V6Z+z',
-    '6L6T5YWl6K6+5aSH', '6L6T5YWl55S15bmz', '55uR5ZCs',
-    '5b2V6Z+z5qC85byP', 'UGhhc2UgOSDliY3kuI3lj6/nlKg=',
-    '57un57ut5b2V6Z+z', '6YCJ5oup5b2V6Z+z6K6+5aSH',
-    '5pqC5YGc5b2V6Z+z', '5YGc5q2i5bm25L+d5a2Y5b2V6Z+z',
-    '5bGV5byA5b2V6Z+z6K6+572u', '5oqY5Y+g5b2V6Z+z6K6+572u',
-    '5YGc5q2i5b2V6Z+z', '5Yi35paw6L6T5YWl6K6+5aSH',
-    '5paw5bu65b2V6Z+z', '5omT5byA6Z+z6aKR5oiW5paw5bu65b2V6Z+z5Lul5byA5aeL57yW6L6R',
-    '5pKt5pS+77yaUGhhc2UgMTIg5o6l5YWlIMK3IFLvvJpQaGFzZSA5IOaOpeWFpSDCtyBDdHJsK1NoaWZ0K0Eg5Y+W5raI6YCJ5Yy6IMK3IEN0cmwrVyDmuIXnqbo=') |
-    ForEach-Object { ConvertFrom-Utf8Base64 $_ }
-$translationFiles = @('agplayer_zh.ts', 'agplayer_en.ts') | ForEach-Object {
-    Join-Path $SourceRoot "translations/$_"
-}
-foreach ($source in $recordingTranslationSources) {
-    $matches = Select-String -Path $translationFiles -SimpleMatch -Pattern "<source>$source</source>"
-    if ($matches) {
-        throw "Recording translation remains: $source ($($matches[0].Path):$($matches[0].LineNumber))"
+foreach ($binding in @('recorder\.inputDevices', 'recorder\.selectedInputDeviceId',
+    'recorder\.actualInputDeviceName', 'recorder\.recordedFrames', 'recorder\.error')) {
+    if ($sixTrackWorkspace -notmatch $binding) {
+        throw "Recording feedback must use the actual device/capture state: $binding"
     }
+}
+if ($controllerSource -notmatch 'recording_track_\s*=\s*selected_track_' -or
+    $controllerSource -notmatch 'recording_start_frame_\s*=\s*playhead_frame_' -or
+    $controllerSource -notmatch 'recording_revision_\s*=\s*document_\.timelineSnapshot\(\)\.revision') {
+    throw 'Recording must freeze the target track, cursor, and document revision at start.'
 }
 
 if ($appMain -notmatch 'audioEditor\.setPlaybackController\(&playback\)') {
@@ -136,20 +102,25 @@ if ($toolsWindow -notmatch 'onVisibleChanged:[\s\S]{0,220}AudioEditorController\
 }
 
 foreach ($control in @(
-    'editorMainColumn', 'editorInspector', 'editorCommandBar', 'fileSummaryBar',
-    'editorTimelineWorkspace', 'editorTimeRuler',
+    'editorMainColumn', 'editorInspector', 'editorCommandBar',
+    'editorTrackScroller', 'editorTimeRuler',
     'editorWaveformCanvas', 'editorPlaybackTransport',
-    'editorShortcutCard', 'editorStatusBar')) {
-    if ($audioEditor -notmatch ('objectName:\s*"' + $control + '"')) {
-        throw "The Phase 6 audio editor is missing $control."
+    'editorRecordingTransport', 'editorInputDevice', 'editorStatusBar', 'editorCancelOperation')) {
+    if ($editorSurface -notmatch ('objectName:\s*"' + $control + '"')) {
+        throw "The six-track audio editor is missing $control."
     }
 }
-if ($audioEditor -match 'objectName:\s*"editorTrackHeader"') {
-    throw 'The audio-editor timeline must not restore the removed track-header rail.'
+if ($audioEditor -notmatch 'EditorSixTrackWorkspace\s*\{' -or
+    $appCmake -notmatch 'EditorSixTrackWorkspace\.qml' -or
+    $sixTrackWorkspace -notmatch 'model:\s*6\b' -or
+    $sixTrackWorkspace -notmatch 'objectName:\s*"editorTrackHeader"\s*\+\s*index' -or
+    $sixTrackWorkspace -notmatch 'AudioEditorController\.tracks\[index\]') {
+    throw 'The page must instantiate the registered six-track workspace with stable track identities.'
 }
 
-if ($toolsWindow -notmatch 'width:\s*1672' -or
-    $toolsWindow -notmatch 'height:\s*941' -or
+if ($toolsWindow -notmatch 'WindowController\.startupGeometryForAvailableArea\([\s\S]{0,80}Qt\.rect\(0,\s*0,\s*1672,\s*941\)' -or
+    $toolsWindow -notmatch 'width:\s*initialGeometry\.width' -or
+    $toolsWindow -notmatch 'height:\s*initialGeometry\.height' -or
     $toolsWindow -notmatch 'objectName:\s*"audioToolsTitleBar"[\s\S]{0,180}Layout\.preferredHeight:\s*Theme\.titleBarHeight' -or
     $toolsWindow -notmatch 'ToolSidebar\s*\{' -or
     $toolsWindow -notmatch 'title:\s*qsTr\("AgPlayer') {
@@ -162,7 +133,7 @@ if ($toolsNavigation -notmatch 'implicitHeight:\s*Theme\.settingsRowHeight' -or
 foreach ($button in @('audioToolsMinimizeButton', 'audioToolsMaximizeButton',
                       'audioToolsCloseButton')) {
     $pattern = 'objectName:\s*"' + $button +
-        '"[\s\S]{0,180}Layout\.preferredWidth:\s*Theme\.navigationActionExtent' +
+        '"[\s\S]{0,400}Layout\.preferredWidth:\s*Theme\.navigationActionExtent' +
         '[\s\S]{0,100}Layout\.preferredHeight:\s*Theme\.navigationActionExtent' +
         '[\s\S]{0,100}iconSize:\s*14'
     if ($toolsWindow -notmatch $pattern) {
@@ -247,29 +218,28 @@ foreach ($label in $navOrder) {
 }
 
 $commandOrder = @(
-    'importAudio', 'saveProject', 'select', 'split', 'delete', 'crop',
-    'copy', 'paste', 'fadeIn', 'fadeOut', 'mute', 'noiseReduction', 'clear')
+    'importAudio', 'saveProject', 'undo', 'split', 'denoise', 'delete', 'clear')
 $previous = -1
 foreach ($command in $commandOrder) {
-    $position = $commandBar.IndexOf(('commandName: "' + $command + '"'))
+    $position = $sixTrackWorkspace.IndexOf(('name: "' + $command + '"'))
     if ($position -le $previous) {
         throw "The reference toolbar is missing or out of order: $command"
     }
     $previous = $position
 }
-foreach ($laterPhaseAction in @('cropToSelection', 'fadeIn', 'fadeOut', 'silenceSelection')) {
-    if ($commandBar -notmatch ('actionEnabled\(\s*"editor\.' + $laterPhaseAction + '"\)')) {
-        throw "The later-phase command must retain its honest disabled state: $laterPhaseAction"
-    }
+if ($sixTrackWorkspace -notmatch 'AudioEditorController\.actionEnabled\(modelData\.action\)' -or
+    $sixTrackWorkspace -notmatch 'enabled:\s*!AudioEditorController\.busy' -or
+    $sixTrackWorkspace -notmatch 'AudioEditorController\.triggerAction\(modelData\.action\)') {
+    throw 'Timeline commands must retain controller action and busy gates.'
 }
-if ($commandBar -notmatch 'clearTimeline\(\)' -or
-    $commandBar -match 'clearDocument\(') {
+if ($sixTrackWorkspace -notmatch 'clearTimeline\(\)' -or
+    $sixTrackWorkspace -match 'clearDocument\(') {
     throw 'Clear must remove all timeline events without closing the document.'
 }
 foreach ($obsolete in @(
     'insertSilence', 'clearDocument', 'exportMenu',
     'gainRequested', 'addMarker')) {
-    if ($commandBar -match $obsolete) {
+    if ($sixTrackWorkspace -match $obsolete) {
         throw "The Phase 6 toolbar still contains obsolete UI: $obsolete"
     }
 }
@@ -303,7 +273,8 @@ foreach ($obsolete in @(
 }
 foreach ($deletedQml in @(
     'OverviewNavigator.qml', 'RecordingInspectorSection.qml',
-    'TimePitchInspectorSection.qml', 'EditorTransportBar.qml')) {
+    'TimePitchInspectorSection.qml', 'EditorTransportBar.qml',
+    'EditorCommandBar.qml', 'FileSummaryBar.qml', 'EditorStatusBar.qml')) {
     if (Test-Path -LiteralPath (Join-Path $editorRoot $deletedQml)) {
         throw "Obsolete component still exists: $deletedQml"
     }
@@ -313,45 +284,41 @@ foreach ($deletedQml in @(
 }
 
 foreach ($mappingCall in @(
-    'viewport\.frameAtPixel', 'viewport\.pixelAtFrame',
+    'viewport\.frameAtPixel',
     'viewport\.zoomAt', 'viewport\.panByPixels')) {
     if ($waveformCanvas -notmatch $mappingCall) {
         throw "Waveform direct manipulation is missing shared mapping: $mappingCall"
     }
 }
-if ($audioEditor -notmatch 'frameAtPixel\(\s*index\s*\*\s*ruler\.width\s*/\s*8\)' -or
-    $audioEditor -notmatch 'visibleEndFrame' -or
-    $audioEditor -match 'visibleStartFrame\s*\+\s*AudioEditorController\.viewport\.visibleFrameCount') {
-    throw 'Ruler and timeline interactions must use the shared viewport mapper without duplicate frame arithmetic.'
+if ($sixTrackWorkspace -notmatch 'waveformCanvas\.frameAtCanvasPixel\(mouse\.x\)' -or
+    $sixTrackWorkspace -notmatch 'waveformCanvas\.pixelAtFrame\(AudioEditorController\.playheadFrame\)' -or
+    $sixTrackWorkspace -notmatch 'AudioEditorController\.viewport\.visibleStartFrame' -or
+    $sixTrackWorkspace -notmatch 'AudioEditorController\.viewport\.visibleFrameCount' -or
+    $waveformCanvas -notmatch 'function pixelAtFrame\(frame\)[\s\S]{0,450}viewport\.visibleStartFrame[\s\S]{0,120}viewport\.visibleFrameCount') {
+    throw 'The ruler, clip geometry, and pointer interactions must share the reactive editor viewport.'
 }
-foreach ($removedControl in @('editorTrackGain', 'editorTrackGainLabel')) {
-    if ($audioEditor -match ('objectName:\s*"' + $removedControl + '"')) {
-        throw "Removed editor control remains: $removedControl"
+foreach ($call in @('setTrackMute', 'beginTrackGainGesture', 'updateTrackGainGesture',
+    'endTrackGainGesture', 'cancelTrackGainGesture')) {
+    if ($sixTrackWorkspace -notmatch ('AudioEditorController\.' + $call + '\(')) {
+        throw "Track controls lost their undoable controller action: $call"
     }
 }
-if ($audioEditor -notmatch 'ThemedRangeSlider\s*\{[\s\S]{0,120}objectName:\s*"editorTimelineZoomRange"' -or
-    $audioEditor -notmatch 'Qt\.rgba\(Theme\.borderStrong\.r,[\s\S]{0,120}0\.30\)' -or
-    $audioEditor -notmatch 'objectName:\s*"editorTimelineZoomStartHandle"[\s\S]{0,100}radius:\s*0' -or
-    $audioEditor -notmatch 'objectName:\s*"editorTimelineZoomEndHandle"[\s\S]{0,100}radius:\s*0') {
-    throw 'The restored editor zoom strip must use the themed range control, square handles, and 30% track.'
-}
-if ($waveformCanvas -notmatch 'viewportChannelPeaks' -or
+if ($waveformCanvas -notmatch 'AudioEditorController\.eventPeaks\(' -or
+    $waveformCanvas -notmatch 'AudioEditorController\.playheadFrame' -or
     $waveformCanvas -match 'visibleStartRatio|visibleEndRatio|renderMode' -or
     $waveformCanvas -match 'positionMs\s*\*\s*AudioEditorController\.sampleRate') {
     throw 'Waveform QML must consume visible peaks and exact playheadFrame without a second crop/time path.'
 }
-if ($waveformCanvas -notmatch 'onReleased:\s*AudioEditorController\.releaseSelectionHandoff\(\)' -or
-    $waveformCanvas -notmatch 'onCanceled:\s*AudioEditorController\.cancelSelectionHandoff\(\)') {
+if ($waveformCanvas -notmatch 'finishedMode\s*===\s*"handoff"\)\s*AudioEditorController\.releaseSelectionHandoff\(\)' -or
+    $waveformCanvas -notmatch 'interaction\.mode\s*===\s*"handoff"\)\s*AudioEditorController\.cancelSelectionHandoff\(\)' -or
+    $waveformCanvas -notmatch 'onCanceled:\s*canvas\.cancelGesture\(\)') {
     throw 'Selection handoff release must preserve a triggered native drag while cancellation aborts it.'
 }
-if ($waveformCanvas -notmatch 'SettingsController\.waveformDensity' -or
-    $waveformCanvas -notmatch 'SettingsController\.waveformThickness' -or
-    $waveformCanvas -notmatch 'SettingsController\.waveformSolidBaseColor' -or
-    $waveformCanvas -notmatch 'SettingsController\.spectrumSolidColor' -or
-    $waveformCanvas -notmatch 'waveformMode\s*===\s*2\s*\?\s*1\.0' -or
-    $waveformCanvas -notmatch 'waveformMode\s*===\s*2\s*\?\s*3\.0' -or
+if ($waveformCanvas -notmatch 'AudioEditorWaveformItem\s*\{' -or
+    $waveformCanvas -notmatch 'waveformColor:\s*clipItem\.trackColor' -or
+    $waveformCanvas -notmatch 'AudioEditorController\.tracks\[Number\(modelData\.trackIndex\)\]\.color' -or
     $waveformCanvas -match 'waveformColor:\s*"#2587ff"') {
-    throw 'Editor and player waveforms must use the same configurable style inputs.'
+    throw 'Real native clip waveforms must use the approved per-track colors.'
 }
 foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', 'Ctrl\+V')) {
     if ($audioEditor -notmatch $shortcut) {
@@ -359,18 +326,22 @@ foreach ($shortcut in @('Ctrl\+1', 'Ctrl\+2', 'Ctrl\+B', 'Ctrl\+C', 'Ctrl\+X', '
     }
 }
 foreach ($responsiveHook in @('inspectorWidth', 'mainWidth',
-    'timelineWorkspaceTop', 'trackRegionTop', 'trackRegionHeight',
-    'narrowLayout', 'editorInspectorScroller',
-    'editorInspectorAccess')) {
+    'narrowLayout', 'editorInspectorScroller')) {
     if ($audioEditor -notmatch $responsiveHook) {
         throw "The responsive editor is missing $responsiveHook."
+    }
+}
+foreach ($responsiveHook in @('shortLayout', 'compactTransport', 'tinyTransport',
+    'Math.max(86, trackScroller.height / 6)', 'Flickable.VerticalFlick', 'ScrollBar.vertical')) {
+    if ($sixTrackWorkspace -notmatch [regex]::Escape($responsiveHook)) {
+        throw "The six-track workspace lost readable scrolling or compact controls: $responsiveHook"
     }
 }
 
 foreach ($capability in @('bpmDetectionSupported',
     'timePitchSupported', 'playbackSupported', 'exportSupported')) {
     if ($controllerHeader -notmatch ('Q_PROPERTY\(bool\s+' + $capability) -or
-        $audioEditor -notmatch ('AudioEditorController\.' + $capability)) {
+        $editorSurface -notmatch ('AudioEditorController\.' + $capability)) {
         throw "The Phase 6 future backend is missing an explicit capability gate: $capability"
     }
 }
@@ -381,35 +352,33 @@ foreach ($field in @('editorExportCodec', 'editorExportSampleRate',
         throw "The D. export settings group is missing $field."
     }
 }
-$shortcutPlay = [regex]::Escape((ConvertFrom-Utf8Base64 '56m65qC8ID0g5pKt5pS+IC8g5pqC5YGc'))
-$shortcutEnvelope = [regex]::Escape((ConvertFrom-Utf8Base64 '5Y+M5Ye76Z+z6YeP57q/ID0g5re75Yqg5o6n5Yi254K5'))
-if (($audioEditor + "`n" + $commandBar) -match 'Phase\s*[0-9]' -or
-    $audioEditor -notmatch $shortcutPlay -or
-    $audioEditor -notmatch $shortcutEnvelope) {
-    throw 'The editor still contains phased placeholder copy or is missing reference instructions.'
+if ($editorSurface -match 'Phase\s*[0-9]' -or
+    $audioEditor -notmatch 'function textInputHasFocus\(' -or
+    $audioEditor -notmatch '!page\.textInputHasFocus\(\)' -or
+    $audioEditor -notmatch '!page\.modalInputActive' -or
+    $waveformCanvas -notmatch 'onDoubleClicked:[\s\S]{0,1300}AudioEditorController\.addEnvelopePoint\(') {
+    throw 'The editor must keep real envelope editing and suppress shortcuts in text fields/dialogs.'
 }
-$statusOverlay = 'objectName:\s*"editorStatusBar"[\s\S]{0,240}' +
-    'visible:\s*AudioEditorController\.busy\s*\|\|\s*' +
-    'AudioEditorController\.errorMessage\.length\s*>\s*0\s*\|\|\s*' +
-    'statusSuccessTimer\.running'
-if ($audioEditor -notmatch $statusOverlay -or
-    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,360}y:\s*mainSurface\.height\s*-\s*height' -or
-    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,420}width:\s*mainSurface\.width' -or
-    $audioEditor -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,460}height:\s*visible\s*\?\s*25\s*:\s*0') {
-    throw 'Status feedback must be a 25 px bottom overlay shown only for processing, errors, or export success.'
+if ($sixTrackWorkspace -notmatch 'objectName:\s*"editorStatusBar"[\s\S]{0,500}visible:[\s\S]{0,180}AudioEditorController\.errorMessage[\s\S]{0,180}AudioEditorController\.busy' -or
+    $sixTrackWorkspace -notmatch 'AudioEditorController\.progress\s*\*\s*100' -or
+    $sixTrackWorkspace -notmatch 'onClicked:\s*AudioEditorController\.cancelOperation\(\)' -or
+    $audioEditor -notmatch 'function onExportSucceeded\(path\)' -or
+    $audioEditor -notmatch 'AudioEditorController\.lastExportPath') {
+    throw 'The editor must expose real progress, errors, cancellation, and successful export feedback.'
 }
 foreach ($accessibleObject in @('audioToolsMinimizeButton',
     'audioToolsMaximizeButton', 'audioToolsCloseButton',
-    'editorPrimaryPlayButton', 'editorPlayheadHandle',
+    'editorPlayheadLine', 'editorRulerSelectionInteraction',
     'editorSelectionStartHandle', 'editorSelectionEndHandle',
-    'editorEventLeftTrimHandle', 'editorEventRightTrimHandle')) {
-    $surface = $toolsWindow + "`n" + $audioEditor + "`n" + $waveformCanvas
+    'editorWaveformInteraction', 'editorRecordButton', 'editorPauseRecordingButton')) {
+    $surface = $toolsWindow + "`n" + $editorSurface
     if ($surface -notmatch ('objectName:\s*"' + $accessibleObject + '"')) {
         throw "Accessible control is missing a stable object name: $accessibleObject"
     }
 }
-if (($toolsWindow + "`n" + $audioEditor + "`n" + $waveformCanvas) -notmatch 'Accessible\.role' -or
-    ($toolsWindow + "`n" + $audioEditor + "`n" + $waveformCanvas) -notmatch 'Accessible\.name') {
+if (($toolsWindow + "`n" + $editorSurface) -notmatch 'Accessible\.role' -or
+    $sixTrackWorkspace -notmatch 'accessibleName:\s*\[qsTr\(' -or
+    $sixTrackWorkspace -notmatch 'Accessible\.name') {
     throw 'Icon-only editor/window controls must publish accessible names and roles.'
 }
 

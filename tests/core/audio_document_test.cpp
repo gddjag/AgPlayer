@@ -16,6 +16,135 @@ class AudioDocumentTest final : public QObject {
     }
 
 private slots:
+    void cropSelectionOnlyChangesNamedClip()
+    {
+        auto value = document();
+        QVERIFY(value.insertSource({"other.wav", 48'000, 2, 1'000}, 0, 4));
+        QVERIFY(value.setSelection({200, 600}));
+        QVERIFY(value.cropEventToSelection(1));
+        const auto events = value.timelineSnapshot().events;
+        const auto cropped = std::find_if(events.begin(), events.end(), [](const auto& e) { return e.id == 1; });
+        const auto other = std::find_if(events.begin(), events.end(), [](const auto& e) { return e.id == 2; });
+        QCOMPARE(cropped->sourceStart, SampleFrame{200});
+        QCOMPARE(cropped->timelineStart, SampleFrame{200});
+        QCOMPARE(audibleFrames(*cropped), SampleFrame{400});
+        QCOMPARE(other->sourceStart, SampleFrame{0});
+        QCOMPARE(audibleFrames(*other), SampleFrame{1'000});
+        QVERIFY(value.undo());
+        QCOMPARE(value.timelineSnapshot().events.front().sourceStart, SampleFrame{0});
+    }
+
+    void pasteTargetsSelectedTrackAndNeverSplitsUnrelatedTracks()
+    {
+        auto value = document();
+        QVERIFY(value.insertSource({"other.wav", 48'000, 2, 1'000}, 0, 4));
+        QVERIFY(value.copyEvent(1));
+        QVERIFY(value.pasteAt(500, 0));
+        auto snapshot = value.timelineSnapshot();
+        const auto other = std::find_if(snapshot.events.begin(), snapshot.events.end(), [](const auto& e) { return e.id == 2; });
+        QCOMPARE(other->trackIndex, 4);
+        QCOMPARE(other->timelineStart, SampleFrame{0});
+        QCOMPARE(audibleFrames(*other), SampleFrame{1'000});
+        QCOMPARE(std::count_if(snapshot.events.begin(), snapshot.events.end(), [](const auto& e) { return e.trackIndex == 4; }), 1);
+        QVERIFY(value.undo());
+        QVERIFY(value.pasteAt(0, 3));
+        snapshot = value.timelineSnapshot();
+        QCOMPARE(std::count_if(snapshot.events.begin(), snapshot.events.end(), [](const auto& e) { return e.trackIndex == 3; }), 1);
+    }
+
+    void processedClipReplacementRetainsOtherTracksAndAutomation()
+    {
+        auto value = document();
+        QVERIFY(value.insertSource({"other.wav", 48'000, 2, 1'000}, 0, 4));
+        QVERIFY(value.setEventGain(1, 0.5F));
+        QVERIFY(value.addEnvelopePoint(1, 0, 1.5F));
+        QVERIFY(value.replaceEventWithSource(1, {"clean.wav", 48'000, 2, 400}, 200, 600));
+        const auto snapshot = value.timelineSnapshot();
+        QCOMPARE(snapshot.events.size(), std::size_t{4});
+        const auto clean = std::find_if(snapshot.events.begin(), snapshot.events.end(), [](const auto& e) { return e.id == 1; });
+        QVERIFY(clean != snapshot.events.end());
+        QCOMPARE(clean->trackIndex, 0);
+        QCOMPARE(clean->timelineStart, SampleFrame{200});
+        QCOMPARE(clean->gain, 0.5F);
+        QCOMPARE(envelopeGainAt(*clean, 0), 1.5F);
+        const auto other = std::find_if(snapshot.events.begin(), snapshot.events.end(), [](const auto& e) { return e.id == 2; });
+        QCOMPARE(other->trackIndex, 4);
+        QCOMPARE(other->timelineStart, SampleFrame{0});
+        QCOMPARE(audibleFrames(*other), SampleFrame{1'000});
+        QVERIFY(value.undo());
+        QCOMPARE(value.timelineSnapshot().events.size(), std::size_t{2});
+    }
+
+    void sixTrackLimitsAreExplicitAndDoNotLimitDurationToOneHour()
+    {
+        auto value = document(48'000LL * 7'200);
+        QCOMPARE(value.totalFrames(), SampleFrame{345'600'000});
+        QVERIFY(!value.setTrackGain(6, 1));
+        QVERIFY(!value.setTrackGain(0, 2.1F));
+        QVERIFY(!value.moveEvent(1, 0, -1));
+        auto shared = std::make_shared<const AudioSource>(AudioSource{"fixture.wav", 48'000, 2, 1'000});
+        std::vector<AudioEvent> events;
+        for (std::size_t index = 0; index < 512; ++index) {
+            AudioEvent event{index + 1, shared, 0, 1'000, static_cast<SampleFrame>(index * 1'000)};
+            for (std::size_t point = 0; point < kMaxEnvelopePoints; ++point)
+                event.envelope.push_back({static_cast<SampleFrame>(point), 1.0F});
+            events.push_back(std::move(event));
+        }
+        QCOMPARE(AudioDocument::fromEvents(events).timelineSnapshot().events.size(), std::size_t{512});
+        auto excess = events.back(); excess.id = 513; excess.timelineStart += 1'000;
+        events.push_back(excess);
+        QVERIFY(AudioDocument::fromEvents(std::move(events)).timelineSnapshot().events.empty());
+    }
+
+    void sixTracksHaveAtomicHistoryAndMixedRateCoordinates()
+    {
+        auto value = AudioDocument::fromSource({"a.wav", 48'000, 1, 96'000});
+        QVERIFY(value.insertSource({"b.wav", 44'100, 2, 44'100}, 0, 1));
+        QCOMPARE(value.timelineSnapshot().sampleRate, 48'000U);
+        QCOMPARE(value.timelineSnapshot().channels, 2U);
+        QCOMPARE(value.totalFrames(), SampleFrame{96'000});
+        QVERIFY(!value.moveEvent(2, 0, 0));
+        QVERIFY(value.moveEvent(2, 48'000, 5));
+        QVERIFY(value.undo());
+        auto snapshot = value.timelineSnapshot();
+        const auto find = [&snapshot](EventId id) -> const AudioEvent& {
+            return *std::find_if(snapshot.events.begin(), snapshot.events.end(),
+                [id](const AudioEvent& event) { return event.id == id; });
+        };
+        QCOMPARE(find(2).trackIndex, 1);
+        QCOMPARE(find(2).timelineStart, SampleFrame{0});
+        QVERIFY(value.splitEventAt(2, 24'000));
+        snapshot = value.timelineSnapshot();
+        QCOMPARE(find(2).sourceEnd, SampleFrame{22'050});
+        QCOMPARE(find(3).sourceStart, SampleFrame{22'050});
+        QCOMPARE(find(3).trackIndex, 1);
+        QCOMPARE(audibleFrames(find(2)), SampleFrame{24'000});
+        QVERIFY(value.setTrackMuted(1, true));
+        QVERIFY(value.setTrackGain(1, 1.5F));
+        QVERIFY(value.clearTimeline());
+        QVERIFY(!value.timelineSnapshot().tracks[1].muted);
+        QVERIFY(value.undo());
+        QVERIFY(value.timelineSnapshot().tracks[1].muted);
+        QCOMPARE(value.timelineSnapshot().tracks[1].gain, 1.5F);
+        QVERIFY(value.undo());
+        QCOMPARE(value.timelineSnapshot().tracks[1].gain, 1.0F);
+    }
+
+    void rationalFrameMappingDoesNotOverflowOrAccumulateSplitRounding()
+    {
+        QCOMPARE(sourceToProjectFrames(44'100, 44'100, 48'000), SampleFrame{48'000});
+        QCOMPARE(projectToSourceFrames(24'000, 44'100, 48'000), SampleFrame{22'050});
+        QCOMPARE(sourceToProjectFrames(std::numeric_limits<SampleFrame>::max(), 1, 384'000),
+            std::numeric_limits<SampleFrame>::max());
+        auto value = AudioDocument::fromSource({"a.wav", 48'000, 2, 48'000});
+        QVERIFY(value.insertSource({"b.wav", 44'100, 2, 44'100}, 0, 1));
+        QVERIFY(value.splitEventAt(2, 123));
+        const auto events = value.timelineSnapshot().events;
+        SampleFrame sum = 0;
+        for (const auto& event : events) if (event.trackIndex == 1) sum += audibleFrames(event);
+        QCOMPARE(sum, SampleFrame{48'000});
+    }
+
     void selectionDoesNotChangeTimelineRevision()
     {
         auto value = document();
@@ -530,7 +659,7 @@ private slots:
         QCOMPARE(value.timelineSnapshot().events.front().envelope.size(),
                  std::size_t{2});
 
-        auto limited = document(1'000);
+        auto limited = document(2'000);
         for (std::size_t index = 0; index < kMaxEnvelopePoints; ++index) {
             QVERIFY(limited.addEnvelopePoint(
                 1, static_cast<SampleFrame>(index * 10), 1.0F));
@@ -630,8 +759,8 @@ private slots:
     void trimOfFullEnvelopeKeepsBoundaryAndDeterministicallyFitsLimit()
     {
         const auto source = std::make_shared<const AudioSource>(AudioSource{
-            "fixture.wav", 48'000, 2, 1'000});
-        AudioEvent event{1, source, 0, 1'000, 0};
+            "fixture.wav", 48'000, 2, 2'000});
+        AudioEvent event{1, source, 0, 2'000, 0};
         for (std::size_t index = 0; index < kMaxEnvelopePoints; ++index) {
             event.envelope.push_back({
                 static_cast<SampleFrame>(10 + index * 10),
@@ -641,8 +770,8 @@ private slots:
 
         auto first = AudioDocument::fromEvents({event});
         auto second = AudioDocument::fromEvents({event});
-        QVERIFY(first.trimEvent(1, 5, 1'000, 5));
-        QVERIFY(second.trimEvent(1, 5, 1'000, 5));
+        QVERIFY(first.trimEvent(1, 5, 2'000, 5));
+        QVERIFY(second.trimEvent(1, 5, 2'000, 5));
         const auto firstSnapshot = first.timelineSnapshot();
         const auto secondSnapshot = second.timelineSnapshot();
         const AudioEvent& trimmed = firstSnapshot.events.front();
@@ -657,7 +786,7 @@ private slots:
         }
         QCOMPARE(trimmed.envelope.front().offset, SampleFrame{0});
         QVERIFY(std::abs(trimmed.envelope.front().gain - 0.75F) < 0.0001F);
-        QCOMPARE(trimmed.envelope.back().offset, SampleFrame{635});
+        QCOMPARE(trimmed.envelope.back().offset, SampleFrame{1275});
         QCOMPARE(trimmed.envelope.back().gain, event.envelope.back().gain);
         QVERIFY(isValid(trimmed));
         for (SampleFrame offset = 0; offset < audibleFrames(trimmed);

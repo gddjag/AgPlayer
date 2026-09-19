@@ -519,6 +519,27 @@ TestCase {
         }
     }
 
+    function test_window_controls_only_reveal_near_top_right() {
+        var panel = windowedPresetPanel()
+        var host = panel.Window.window
+        host.requestActivate()
+        tryCompare(host, "active", true)
+        var surface = host.surfaceItem
+        var controls = findChild(surface, "immersiveWindowControls")
+        verify(controls)
+        mouseMove(surface, surface.width / 2, surface.height / 2)
+        tryCompare(controls, "opacity", 0)
+        compare(controls.enabled, false)
+        mouseMove(surface, surface.width - 60, 25)
+        tryCompare(controls, "opacity", 1)
+        compare(controls.enabled, true)
+        verify(findChild(controls, "immersiveReturnToWindowButton").visible)
+        verify(findChild(controls, "immersiveMinimizeButton").visible)
+        verify(findChild(controls, "immersiveFullscreenButton").visible)
+        mouseMove(surface, surface.width / 2, surface.height / 2)
+        tryCompare(controls, "opacity", 0)
+    }
+
     function test_shared_actions_reuse_one_state_source() {
         var mainActions = findChild(mainWindow, "experienceActions")
         var miniControls = findChild(miniWindow, "miniPlayerControls")

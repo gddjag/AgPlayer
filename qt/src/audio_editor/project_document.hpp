@@ -43,6 +43,7 @@ struct ProjectSourceRecord final {
     std::shared_ptr<const AudioSource> source;
     qint64 fileSize{-1};
     qint64 lastModifiedUtcMs{-1};
+    bool generatedMedia{};
 };
 
 enum class ProjectSourceIssueKind { Missing, IdentityMismatch, Unavailable };
@@ -62,6 +63,7 @@ struct ProjectSaveRequest final {
     ProjectExportSettings exportSettings;
     ProjectEditorSettings editorSettings;
     const std::vector<ProjectSourceRecord>* sourceRecords{};
+    std::vector<std::filesystem::path> generatedMediaPaths;
 };
 
 struct ProjectSaveResult final {
@@ -92,7 +94,7 @@ struct ProjectRelinkResult final {
 
 class ProjectDocument final {
 public:
-    [[nodiscard]] static constexpr int schemaVersion() noexcept { return 2; }
+    [[nodiscard]] static constexpr int schemaVersion() noexcept { return 3; }
     [[nodiscard]] static ProjectSaveResult save(
         const QString& path, const ProjectSaveRequest& request);
     [[nodiscard]] static ProjectLoadResult load(

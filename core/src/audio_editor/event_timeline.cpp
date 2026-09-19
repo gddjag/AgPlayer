@@ -2,66 +2,96 @@
 
 #include <algorithm>
 #include <limits>
+#include <unordered_set>
 
 namespace agplayer::editor {
 
 bool EventTimeline::insert(AudioEvent candidate)
 {
-    if (!isValid(candidate) || event(candidate.id) != nullptr
-        || candidate.timelineStart > std::numeric_limits<SampleFrame>::max()
-            - audibleFrames(candidate)
-        || overlaps(candidate)) {
-        return false;
-    }
-
-    const auto position = std::lower_bound(
-        events_.begin(), events_.end(), candidate.timelineStart,
-        [](const AudioEvent& existing, const SampleFrame timeline_start) {
-            return existing.timelineStart < timeline_start;
-        });
+    const auto rate = sample_rate_ ? sample_rate_ : (candidate.source ? candidate.source->sample_rate : 0);
+    candidate.timelineSampleRate = rate;
+    if (events_.size() >= kMaxTimelineEvents || !isValid(candidate)
+        || event(candidate.id) || candidate.timelineStart > std::numeric_limits<SampleFrame>::max() - audibleFrames(candidate)
+        || overlaps(candidate)) return false;
+    std::size_t points = candidate.envelope.size();
+    for (const auto& item : events_) points += item.envelope.size();
+    if (points > kMaxTimelineEnvelopePoints) return false;
+    const auto position = std::upper_bound(events_.begin(), events_.end(), candidate.timelineStart,
+        [](SampleFrame start, const AudioEvent& event) { return start < event.timelineStart; });
     events_.insert(position, std::move(candidate));
+    sample_rate_ = rate;
     ++revision_;
     return true;
 }
 
 bool EventTimeline::replace(std::vector<AudioEvent> events)
 {
+    if (events.size() > kMaxTimelineEvents) return false;
+    const auto rate = sample_rate_ ? sample_rate_ :
+        (events.empty() || !events.front().source ? 0 : events.front().source->sample_rate);
+    std::size_t points = 0;
+    for (auto& item : events) {
+        item.timelineSampleRate = rate;
+        points += item.envelope.size();
+        if (points > kMaxTimelineEnvelopePoints) return false;
+    }
     std::sort(events.begin(), events.end(),
               [](const AudioEvent& left, const AudioEvent& right) {
                   return left.timelineStart < right.timelineStart;
               });
-    for (std::size_t left = 0; left < events.size(); ++left) {
-        const AudioEvent& candidate = events[left];
+    std::array<SampleFrame, kTrackCount> lastEnds{};
+    std::unordered_set<EventId> ids;
+    for (const auto& candidate : events) {
         if (!isValid(candidate)
             || candidate.timelineStart > std::numeric_limits<SampleFrame>::max()
-                - audibleFrames(candidate)) {
+                - audibleFrames(candidate) || !ids.insert(candidate.id).second) {
             return false;
         }
-        for (std::size_t right = left + 1; right < events.size(); ++right) {
-            if (candidate.id == events[right].id
-                || (candidate.timelineStart < endFrame(events[right])
-                    && events[right].timelineStart < endFrame(candidate))) {
-                return false;
-            }
-        }
+        auto& end = lastEnds[static_cast<std::size_t>(candidate.trackIndex)];
+        if (candidate.timelineStart < end) return false;
+        end = endFrame(candidate);
     }
     events_.swap(events);
+    sample_rate_ = rate;
     ++revision_;
+    return true;
+}
+
+bool EventTimeline::restore(TimelineSnapshot state)
+{
+    if (state.channels == 0 || state.channels > 32
+        || !std::isfinite(state.legacyMasterGain) || state.legacyMasterGain < 0) return false;
+    for (const auto& track : state.tracks)
+        if (!std::isfinite(track.gain) || track.gain < 0 || track.gain > 2) return false;
+    EventTimeline candidate = *this;
+    candidate.sample_rate_ = state.sampleRate;
+    if (!candidate.replace(std::move(state.events))) return false;
+    candidate.channels_ = state.channels;
+    candidate.tracks_ = state.tracks;
+    candidate.legacy_master_gain_ = state.legacyMasterGain;
+    *this = std::move(candidate);
     return true;
 }
 
 bool EventTimeline::moveEvent(const EventId id, const SampleFrame timeline_start)
 {
+    const auto* found = event(id);
+    return found && moveEvent(id, timeline_start, found->trackIndex);
+}
+
+bool EventTimeline::moveEvent(const EventId id, const SampleFrame timeline_start, const int trackIndex)
+{
     const auto found = std::find_if(
         events_.begin(), events_.end(), [id](const AudioEvent& candidate) {
             return candidate.id == id;
         });
-    if (found == events_.end() || found->timelineStart == timeline_start) {
+    if (found == events_.end() || (found->timelineStart == timeline_start && found->trackIndex == trackIndex)) {
         return false;
     }
 
     AudioEvent candidate = *found;
     candidate.timelineStart = timeline_start;
+    candidate.trackIndex = trackIndex;
     return replaceEvent(id, std::move(candidate));
 }
 
@@ -115,12 +145,14 @@ std::vector<EventId> EventTimeline::eventsAt(const SampleFrame frame) const
 
 SampleFrame EventTimeline::totalFrames() const noexcept
 {
-    return events_.empty() ? 0 : endFrame(events_.back());
+    SampleFrame result = 0;
+    for (const auto& item : events_) result = std::max(result, endFrame(item));
+    return result;
 }
 
 TimelineSnapshot EventTimeline::snapshot() const
 {
-    return {events_, totalFrames(), revision_};
+    return {events_, totalFrames(), revision_, tracks_, sample_rate_, channels_, legacy_master_gain_};
 }
 
 bool EventTimeline::overlaps(const AudioEvent& candidate) const noexcept
@@ -131,7 +163,7 @@ bool EventTimeline::overlaps(const AudioEvent& candidate) const noexcept
     }
     for (const AudioEvent& existing : events_) {
         const SampleFrame existing_end = endFrame(existing);
-        if (candidate.timelineStart < existing_end
+        if (candidate.trackIndex == existing.trackIndex && candidate.timelineStart < existing_end
             && existing.timelineStart < candidate_end) {
             return true;
         }
@@ -157,7 +189,7 @@ bool EventTimeline::replaceEvent(const EventId id, AudioEvent candidate)
             continue;
         }
         const SampleFrame existing_end = endFrame(existing);
-        if (candidate.timelineStart < existing_end
+        if (candidate.trackIndex == existing.trackIndex && candidate.timelineStart < existing_end
             && existing.timelineStart < candidate_end) {
             return false;
         }

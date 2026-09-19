@@ -10,6 +10,7 @@ class LibraryModelTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void missingTitleFallsBackToFilenameWithoutChangingMetadata();
     void exposesRolesAndUpdatesFavorite();
     void playRowOnlyRequestsAvailableTracks();
     void trackIdUsesCanonicalPathAndFileIdentity();
@@ -38,6 +39,34 @@ private slots:
     void staleMetadataProbeCannotStealRecreatedTrackClaim();
     void metadataRefreshRejectsStaleClaimsAndPreservesUserState();
 };
+
+void LibraryModelTest::missingTitleFallsBackToFilenameWithoutChangingMetadata()
+{
+    QTemporaryDir temp;
+    LibraryModel model;
+    TrackRecord record;
+    record.trackId = QStringLiteral("untitled");
+    record.path = temp.filePath(QStringLiteral("Song.live.mix.flac"));
+    record.title = QStringLiteral(" \t ");
+    QVERIFY(model.append(record));
+    QCOMPARE(model.data(model.index(0, 0), LibraryModel::TitleRole).toString(),
+             QStringLiteral("Song.live.mix"));
+    QCOMPARE(model.trackForId(record.trackId).value(QStringLiteral("title")).toString(),
+             QStringLiteral("Song.live.mix"));
+    QCOMPARE(model.recordForId(record.trackId)->title, record.title);
+    const auto claim = model.beginMetadataRefresh(record.trackId);
+    QVERIFY(claim);
+    record.title = QStringLiteral("Actual title");
+    QCOMPARE(model.completeMetadataRefreshes({{*claim, record}}), 1);
+    QCOMPARE(model.data(model.index(0, 0), LibraryModel::TitleRole).toString(), record.title);
+    const auto emptyClaim = model.beginMetadataRefresh(record.trackId);
+    QVERIFY(emptyClaim);
+    record.title.clear();
+    QCOMPARE(model.completeMetadataRefreshes({{*emptyClaim, record}}), 1);
+    QCOMPARE(model.trackForId(record.trackId).value(QStringLiteral("title")).toString(),
+             QStringLiteral("Song.live.mix"));
+    QVERIFY(model.recordForId(record.trackId)->title.isEmpty());
+}
 
 void LibraryModelTest::insertBatchPreservesPrefixAndUpdatesShiftedIndexes()
 {

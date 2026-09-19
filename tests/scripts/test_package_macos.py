@@ -216,7 +216,9 @@ class PackageFlowTests(BundleFixture):
         (self.qt / "bin").mkdir(parents=True)
         (self.qt / "bin/macdeployqt").write_bytes(b"tool")
         for relative in ("platforms/libqcocoa.dylib", "platforms/libqoffscreen.dylib",
-                         "sqldrivers/libqsqlite.dylib", "sqldrivers/libqsqlpsql.dylib"):
+                         "sqldrivers/libqsqlite.dylib", "sqldrivers/libqsqlpsql.dylib",
+                         "permissions/libqdarwinmicrophonepermission.dylib",
+                         "permissions/libqdarwincamerapermission.dylib"):
             universal(self.qt / "plugins" / relative, filetype=6)
         self.output = self.root / "dist"
         self.commands = []
@@ -329,6 +331,38 @@ class PackageFlowTests(BundleFixture):
         with self.assertRaisesRegex(packaging.PackageError, "libqcocoa"):
             self.package()
         self.assertFalse(any("--sign" in args or "hdiutil" in args for args in self.commands))
+
+    def test_microphone_permission_plugin_is_deployed_without_other_permissions(self):
+        result = self.package()
+        plugins = Path(result["app"]) / "Contents/PlugIns/permissions"
+        self.assertTrue((plugins / "libqdarwinmicrophonepermission.dylib").is_file())
+        self.assertFalse((plugins / "libqdarwincamerapermission.dylib").exists())
+        deploy = next(args for args in self.commands if "-no-plugins" in args)
+        self.assertTrue(any("-executable=" in arg and "libqdarwinmicrophonepermission.dylib" in arg
+                            for arg in deploy))
+
+    def test_missing_microphone_permission_plugin_prevents_signing(self):
+        (self.qt / "plugins/permissions/libqdarwinmicrophonepermission.dylib").unlink()
+        with self.assertRaisesRegex(packaging.PackageError, "microphonepermission"):
+            self.package()
+        self.assertFalse(any("--sign" in args or "hdiutil" in args for args in self.commands))
+
+    def test_recording_entitlement_is_confined_to_main_app(self):
+        captured = {}
+        original_run = self.fake_run
+
+        def capture_entitlements(argv, **kwargs):
+            args = [str(value) for value in argv]
+            if "--entitlements" in args:
+                captured[Path(args[-1]).name] = plistlib.loads(
+                    Path(args[args.index("--entitlements") + 1]).read_bytes())
+            return original_run(argv, **kwargs)
+
+        self.fake_run = capture_entitlements
+        self.package(sign_identity="Developer ID Application: Example (1234567890)")
+        app_entitlements = next(value for name, value in captured.items() if name.endswith(".app"))
+        self.assertTrue(app_entitlements.get("com.apple.security.device.audio-input"))
+        self.assertNotIn("com.apple.security.device.audio-input", captured["AgSeparationWorker"])
 
     def test_invalid_bundle_is_not_signed_or_packaged(self):
         universal(self.worker, arches=("arm64",))

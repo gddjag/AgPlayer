@@ -235,12 +235,195 @@ bool confirmDiscardAndWait(AudioEditorController& controller)
         controller, controller.confirmDiscardAndOpen());
 }
 
+// Build the same explicit split/select workflow used by the six-track UI.
+// A temporal selection by itself no longer denotes a clip deletion/copy.
+bool selectClipRange(AudioEditorController& controller, qint64 start, qint64 end)
+{
+    for (const auto& value : controller.timelineEventViews()) {
+        const auto event = value.toMap();
+        const auto eventStart = event.value(QStringLiteral("timelineStart")).toLongLong();
+        const auto eventEnd = event.value(QStringLiteral("timelineEnd")).toLongLong();
+        if (start < eventStart || end > eventEnd || end <= start) continue;
+        QString id = event.value(QStringLiteral("id")).toString();
+        if (start > eventStart) {
+            if (!controller.splitEvent(id, start)) return false;
+            id = controller.selectedEventId();
+        }
+        if (end < eventEnd && !controller.splitEvent(id, end)) return false;
+        controller.selectEvent(id);
+        return controller.selectedEventId() == id;
+    }
+    return false;
+}
+
 } // namespace
 
 class AudioEditorControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void batchImportPrefersEmptyTracksThenUsesCollisionFreeOccupiedTrack()
+    {
+        QTemporaryDir directory;
+        const auto first = directory.filePath(QStringLiteral("first.wav"));
+        const auto shortSource = directory.filePath(QStringLiteral("short.wav"));
+        QVERIFY(writeMonoFloatWav(first, std::vector<float>(8'000, 0.1F)));
+        QVERIFY(writeMonoFloatWav(shortSource, std::vector<float>(4'000, 0.2F)));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(first)));
+        QVERIFY(controller.seekFrame(8'000));
+        QList<QUrl> batch;
+        for (int index = 0; index < 6; ++index) batch.append(QUrl::fromLocalFile(shortSource));
+        QVERIFY(controller.addFiles(batch));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.loading(), 15'000);
+        QCOMPARE(controller.timelineEventViews().size(), 7);
+        QCOMPARE(controller.importResults().size(), 6);
+        for (int index = 0; index < 6; ++index) {
+            const auto result = controller.importResults()[index].toMap();
+            QVERIFY2(result.value("success").toBool(), qPrintable(result.value("message").toString()));
+            QCOMPARE(result.value("trackIndex").toInt(), (index + 1) % 6);
+        }
+        for (const auto& item : controller.timelineEventViews()) {
+            const auto event = item.toMap();
+            if (event.value("id").toString() != QStringLiteral("1"))
+                QCOMPARE(event.value("timelineStart").toLongLong(), qint64{8'000});
+        }
+    }
+
+    void batchImportRejectsCollisionButContinuesWithShorterFile()
+    {
+        QTemporaryDir directory;
+        const auto source = directory.filePath(QStringLiteral("source.wav"));
+        const auto longSource = directory.filePath(QStringLiteral("long.wav"));
+        const auto shortSource = directory.filePath(QStringLiteral("short.wav"));
+        QVERIFY(writeMonoFloatWav(source, std::vector<float>(8'000, 0.1F)));
+        QVERIFY(writeMonoFloatWav(longSource, std::vector<float>(12'000, 0.1F)));
+        QVERIFY(writeMonoFloatWav(shortSource, std::vector<float>(4'000, 0.1F)));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QList<QUrl> batch;
+        for (int index = 0; index < 6; ++index) batch.append(QUrl::fromLocalFile(source));
+        QVERIFY(controller.addFiles(batch));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.loading(), 15'000);
+        for (const auto& value : controller.timelineEventViews()) {
+            const auto event = value.toMap();
+            QVERIFY(controller.moveEventToTrack(event.value("id").toString(), 16'000,
+                                                event.value("trackIndex").toInt()));
+        }
+        QVERIFY(controller.seekFrame(8'000));
+        QVERIFY(controller.addFiles({QUrl::fromLocalFile(longSource), QUrl::fromLocalFile(shortSource)}));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.loading(), 15'000);
+        QCOMPARE(controller.importResults().size(), 2);
+        QVERIFY(!controller.importResults()[0].toMap().value("success").toBool());
+        QVERIFY(controller.importResults()[1].toMap().value("success").toBool());
+        QCOMPARE(controller.importResults()[1].toMap().value("trackIndex").toInt(), 0);
+        QCOMPARE(controller.timelineEventViews().size(), 7);
+        QCOMPARE(controller.totalFrames(), qint64{24'000});
+    }
+
+    void batchImportPublishesEachSuccessBeforeCancelOrReplacement_data()
+    {
+        QTest::addColumn<bool>("replaceDocument");
+        QTest::newRow("cancel-keeps-imported") << false;
+        QTest::newRow("replacement-rejects-old-continuation") << true;
+    }
+
+    void batchImportPublishesEachSuccessBeforeCancelOrReplacement()
+    {
+        QFETCH(bool, replaceDocument);
+        QTemporaryDir directory;
+        const auto source = directory.filePath(QStringLiteral("source.wav"));
+        QVERIFY(writeMonoFloatWav(source, std::vector<float>(8'000, 0.1F)));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        int publishedResults = 0;
+        int publishedEvents = 0;
+        bool changed = false;
+        bool loadingAtSuccess = false;
+        connect(&controller, &AudioEditorController::importResultsChanged, &controller, [&] {
+            if (changed || controller.importResults().isEmpty()
+                || !controller.importResults().front().toMap().value("success").toBool()) return;
+            changed = true;
+            publishedResults = controller.importResults().size();
+            publishedEvents = controller.timelineEventViews().size();
+            loadingAtSuccess = controller.loading();
+            if (replaceDocument) QVERIFY(controller.createUntitledDocument(16'000, 2, 160));
+            else controller.cancelOperation();
+        });
+        const auto url = QUrl::fromLocalFile(source);
+        QVERIFY(controller.addFiles({url, url, url}));
+        QTRY_VERIFY_WITH_TIMEOUT(changed && !controller.loading(), 15'000);
+        QCOMPARE(publishedResults, 1);
+        QCOMPARE(publishedEvents, 1);
+        QVERIFY(loadingAtSuccess);
+        QTest::qWait(100);
+        QCOMPARE(controller.timelineEventViews().size(), 1);
+        QCOMPARE(controller.totalFrames(), replaceDocument ? qint64{160} : qint64{8'000});
+        if (replaceDocument) QVERIFY(controller.filePath().isEmpty());
+        else QCOMPARE(controller.filePath(), source);
+    }
+
+    void crossTrackMovesAndSelectedTrackPastePreserveOtherClips()
+    {
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(controller.createUntitledDocument(48'000, 2, 4'000));
+        QVERIFY(controller.splitEvent(1, 2'000));
+        QVERIFY(controller.moveEventToTrack(QStringLiteral("2"), 0, 1));
+        QVERIFY(controller.moveEventToTrack(QStringLiteral("1"), 500, 2));
+        QVERIFY(controller.undo());
+        auto events = controller.timelineEventViews();
+        const auto first = std::find_if(events.begin(), events.end(), [](const QVariant& v) { return v.toMap().value("id").toString() == "1"; });
+        QCOMPARE(first->toMap().value("trackIndex").toInt(), 0);
+        QCOMPARE(first->toMap().value("timelineStart").toLongLong(), qint64{0});
+        controller.selectEvent(QStringLiteral("1"));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.copy")));
+        controller.setSelectedTrack(5);
+        QVERIFY(controller.seekFrame(0));
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.paste")));
+        const auto pasted = controller.selectedEventId();
+        events = controller.timelineEventViews();
+        QCOMPARE(events.size(), 3);
+        const auto clone = std::find_if(events.begin(), events.end(), [&pasted](const QVariant& v) { return v.toMap().value("id").toString() == pasted; });
+        QVERIFY(clone != events.end());
+        QCOMPARE(clone->toMap().value("trackIndex").toInt(), 5);
+        QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
+        events = controller.timelineEventViews();
+        QCOMPARE(events.size(), 2);
+        for (const auto& event : events) QCOMPARE(event.toMap().value("timelineStart").toLongLong(), qint64{0});
+        QCOMPARE(controller.totalFrames(), qint64{2'000});
+    }
+
+    void sixTrackBatchImportAndGainUndo()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("source.wav");
+        QVERIFY(writeMonoFloatWav(path, std::vector<float>(8000, 0.125F)));
+        AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
+        QCOMPARE(controller.tracks().size(), 6);
+        const QUrl source = QUrl::fromLocalFile(path);
+        QVERIFY(controller.addFiles({source, QUrl::fromLocalFile(directory.filePath("missing.wav")), source, source}));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.loading(), 15000);
+        QCOMPARE(controller.timelineEventViews().size(), 3);
+        QCOMPARE(controller.importResults().size(), 4);
+        QCOMPARE(controller.channels(), 2);
+        for (int index = 0; index != 3; ++index) {
+            const auto clip = controller.timelineEventViews()[index].toMap();
+            QCOMPARE(clip.value("trackIndex").toInt(), index);
+            QCOMPARE(clip.value("timelineStart").toLongLong(), 0);
+        }
+        const auto history = controller.historyStateIdForTesting();
+        QVERIFY(controller.beginTrackGainGesture(1));
+        QVERIFY(controller.updateTrackGainGesture(1.2));
+        QVERIFY(controller.updateTrackGainGesture(1.5));
+        QCOMPARE(controller.historyStateIdForTesting(), history);
+        QVERIFY(controller.endTrackGainGesture());
+        QCOMPARE(controller.tracks()[1].toMap().value("gain").toDouble(), 1.5);
+        QVERIFY(controller.undo());
+        QCOMPARE(controller.tracks()[1].toMap().value("gain").toDouble(), 1.0);
+        QVERIFY(controller.beginTrackGainGesture(0));
+        QVERIFY(controller.updateTrackGainGesture(0.5));
+        QVERIFY(controller.cancelTrackGainGesture());
+        QCOMPARE(controller.tracks()[0].toMap().value("gain").toDouble(), 1.0);
+    }
     void defaultExportSettingsAreImmediatelyUsable()
     {
         AudioEditorController controller;
@@ -465,7 +648,7 @@ private slots:
         editor.deactivate();
     }
 
-    void multiChannelDocumentReportsUnsupportedRealtimeCapabilities()
+    void multiChannelSourceUsesStereoProjectRealtimeCapabilities()
     {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -474,14 +657,10 @@ private slots:
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
-        QCOMPARE(controller.channels(), 4);
-        QVERIFY(!controller.playbackSupported());
-        QVERIFY(!controller.timePitchSupported());
-        QVERIFY(!controller.formantPreservationSupported());
-        QVERIFY(!controller.bpmDetectionSupported());
-        QVERIFY(!controller.bpmBusy());
-        QVERIFY(!controller.playPause());
-        QVERIFY(!controller.errorMessage().isEmpty());
+        QCOMPARE(controller.channels(), 2);
+        QVERIFY(controller.playbackSupported());
+        QVERIFY(controller.timePitchSupported());
+        QVERIFY(controller.bpmDetectionSupported());
     }
 
     void clearingDocumentClearsStalePlaybackError()
@@ -777,7 +956,7 @@ private slots:
         QVERIFY(controller.timePitchPreviewActive());
     }
 
-    void droppedUrlsRequireExactlyOneLocalAudioSource()
+    void droppedUrlsBatchLocalSourcesOntoDistinctTracks()
     {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -786,12 +965,16 @@ private slots:
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
 
         QVERIFY(!controller.openDroppedUrls({}));
-        QVERIFY(!controller.errorMessage().isEmpty());
-        QVERIFY(!controller.openDroppedUrls({QUrl::fromLocalFile(source),
+        QVERIFY(!controller.hasDocument());
+        QVERIFY(controller.openDroppedUrls({QUrl::fromLocalFile(source),
                                              QUrl::fromLocalFile(source)}));
-        QVERIFY(!controller.errorMessage().isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.loading(), 15000);
+        QCOMPARE(controller.timelineEventViews().size(), 2);
+        QCOMPARE(controller.timelineEventViews()[0].toMap().value("trackIndex").toInt(), 0);
+        QCOMPARE(controller.timelineEventViews()[1].toMap().value("trackIndex").toInt(), 1);
         QVERIFY(controller.openDroppedUrls({QUrl::fromLocalFile(source)}));
-        QVERIFY(waitForDocumentLoad(controller));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.loading(), 15000);
+        QCOMPARE(controller.timelineEventViews().size(), 3);
         QCOMPARE(controller.filePath(), source);
     }
 
@@ -817,11 +1000,14 @@ private slots:
         AudioEditorController controller;
         QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
         QVERIFY(controller.setSelection(96, 288));
+        QVERIFY(selectClipRange(controller, 96, 288));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
         QCOMPARE(controller.totalFrames(), qint64{1'000});
         QVERIFY(controller.modified());
-        QCOMPARE(controller.selectionFrames(), qint64{0});
-        QVERIFY(!controller.loopEnabled());
+        QCOMPARE(controller.selectionFrames(), qint64{192});
+        QVERIFY(controller.loopEnabled());
+        QCOMPARE(controller.timelineEventViews().size(), 2);
+        QCOMPARE(controller.timelineEventViews()[1].toMap().value("timelineStart").toLongLong(), qint64{288});
     }
 
     void moveAndTrimUseCanonicalDocumentTimeline()
@@ -986,8 +1172,8 @@ private slots:
         QVERIFY(!controller.formantPreservationSupported());
         QVERIFY(!controller.exportSupported());
         QVERIFY(!controller.actionEnabled(QStringLiteral("editor.export")));
-        QCOMPARE(controller.originalBpm(), 0.0);
-        QCOMPARE(controller.targetBpm(), 0.0);
+        QCOMPARE(controller.originalBpm(), 120.0);
+        QCOMPARE(controller.targetBpm(), 120.0);
         QCOMPARE(controller.bpmResult(), 0.0);
         QVERIFY(controller.undo());
         QCOMPARE(controller.timelineEventViews().size(), 2);
@@ -1294,7 +1480,8 @@ private slots:
 
         QVERIFY(controller.beginEventGainGesture(id));
         QVERIFY(controller.updateEventGainGesture(0.25));
-        QVERIFY(firstStarted.tryAcquire(1, 5'000));
+        QTRY_VERIFY_WITH_TIMEOUT(firstStarted.available() > 0, 5'000);
+        QVERIFY(firstStarted.tryAcquire());
         QVERIFY(!controller.viewportChannelPeaks().isEmpty());
         QVERIFY(controller.updateEventGainGesture(0.5));
         QVERIFY(controller.updateEventGainGesture(0.75));
@@ -1462,9 +1649,9 @@ private slots:
         QCOMPARE(controller.historyStateIdForTesting(), history);
         QVERIFY(controller.trimEvent(QStringLiteral("1"), 0, 500,
                                      maximum - 500));
-        // Trim geometry is previewed locally by QML so its active pointer
-        // grab is not destroyed by a delegate rebuild mid-gesture.
-        QCOMPARE(documentChanges.count(), 0);
+        // Six-track previews update delegates while the fixed canvas retains
+        // the mouse grab. No document revision or history is committed yet.
+        QCOMPARE(documentChanges.count(), 1);
         QCOMPARE(controller.timelineEventViews().first().toMap()
                      .value(QStringLiteral("timelineEnd")).toLongLong(), maximum);
         QCOMPARE(controller.timelineRevisionForTesting(), revision);
@@ -1547,19 +1734,17 @@ private slots:
             QVERIFY(controller.historyStateIdForTesting() != before);
             QVERIFY(controller.undo());
         }
+        controller.selectEvent(QStringLiteral("1"));
         QVERIFY(controller.actionEnabled(QStringLiteral("editor.cropToSelection")));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.cropToSelection")));
-        QCOMPARE(controller.totalFrames(), qint64{600});
-        QCOMPARE(controller.selectionStart(), qint64{0});
-        QCOMPARE(controller.selectionEnd(), qint64{600});
+        QCOMPARE(controller.totalFrames(), qint64{800});
+        QCOMPARE(controller.selectionStart(), qint64{200});
+        QCOMPARE(controller.selectionEnd(), qint64{800});
         QVERIFY(controller.loopEnabled());
         const auto croppedEvent = controller.timelineEventViews().front().toMap();
-        const auto envelope = croppedEvent.value(QStringLiteral("envelope")).toList();
-        QCOMPARE(envelope.size(), 2);
-        QCOMPARE(envelope.front().toMap()
-                     .value(QStringLiteral("offset")).toLongLong(), qint64{0});
-        QCOMPARE(envelope.back().toMap()
-                     .value(QStringLiteral("offset")).toLongLong(), qint64{599});
+        QCOMPARE(croppedEvent.value(QStringLiteral("sourceStart")).toLongLong(), qint64{200});
+        QCOMPARE(croppedEvent.value(QStringLiteral("sourceEnd")).toLongLong(), qint64{800});
+        QCOMPARE(croppedEvent.value(QStringLiteral("timelineStart")).toLongLong(), qint64{200});
     }
 
     void cropFitsNewDocumentWhileSplitAndTrimPreserveViewport()
@@ -1569,10 +1754,11 @@ private slots:
         crop.viewport()->setViewportWidth(500.0);
         QVERIFY(crop.viewport()->setVisibleRange(100, 400));
         QVERIFY(crop.setSelection(200, 800));
+        crop.selectEvent(QStringLiteral("1"));
         QVERIFY(crop.triggerAction(QStringLiteral("editor.cropToSelection")));
-        QCOMPARE(crop.totalFrames(), qint64{600});
+        QCOMPARE(crop.totalFrames(), qint64{800});
         QCOMPARE(crop.viewport()->visibleStartFrame(), qint64{0});
-        QCOMPARE(crop.viewport()->visibleEndFrame(), qint64{600});
+        QCOMPARE(crop.viewport()->visibleEndFrame(), qint64{800});
 
         AudioEditorController split(AG_AUDIO_BACKEND_NULL);
         QVERIFY(split.createUntitledDocument(48'000, 2, 1'000));
@@ -1601,6 +1787,8 @@ private slots:
         QVERIFY(!controller.actionEnabled(QStringLiteral("editor.split")));
 
         QVERIFY(controller.seekMs(500));
+        QVERIFY(!controller.actionEnabled(QStringLiteral("editor.split")));
+        controller.selectEvent(QStringLiteral("1"));
         QVERIFY(controller.actionEnabled(QStringLiteral("editor.split")));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.split")));
         QVERIFY(!controller.actionEnabled(QStringLiteral("editor.merge")));
@@ -1627,6 +1815,7 @@ private slots:
         AudioEditorController controller;
         QVERIFY(controller.createUntitledDocument(48'000, 2, 1'000));
         QVERIFY(controller.setSelection(96, 288));
+        QVERIFY(selectClipRange(controller, 96, 288));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.copy")));
         QVERIFY(controller.actionEnabled(QStringLiteral("editor.paste")));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.cut")));
@@ -1745,30 +1934,41 @@ private slots:
         QVERIFY(events.front().toMap().value(QStringLiteral("mute")).toBool());
     }
 
-    void unselectedEventCommandsFallBackToTheTimeRangeWhileCropStaysRangeOnly()
+    void timeSelectionDoesNotImplicitlySelectClipsAndCropRequiresIntersection()
     {
         AudioEditorController fallback(AG_AUDIO_BACKEND_NULL);
         QVERIFY(fallback.createUntitledDocument(48'000, 2, 1'000));
         QVERIFY(fallback.splitEvent(1, 400));
         QVERIFY(fallback.setSelection(0, 400));
+        fallback.clearEventSelection();
         QVERIFY(fallback.selectedEventId().isEmpty());
-        QVERIFY(fallback.triggerAction(QStringLiteral("editor.deleteSelection")));
-        QCOMPARE(fallback.timelineEventViews().size(), 1);
-        QCOMPARE(fallback.timelineEventViews().front().toMap()
-                     .value(QStringLiteral("id")).toString(), QStringLiteral("2"));
+        const auto before = fallback.historyStateIdForTesting();
+        for (const auto& action : {"editor.deleteSelection", "editor.copy", "editor.cut"}) {
+            QVERIFY(!fallback.actionEnabled(QString::fromLatin1(action)));
+            QVERIFY(!fallback.triggerAction(QString::fromLatin1(action)));
+        }
+        QCOMPARE(fallback.historyStateIdForTesting(), before);
+        QCOMPARE(fallback.timelineEventViews().size(), 2);
 
         AudioEditorController crop(AG_AUDIO_BACKEND_NULL);
         QVERIFY(crop.createUntitledDocument(48'000, 2, 1'000));
         QVERIFY(crop.splitEvent(1, 400));
         QVERIFY(crop.setSelection(0, 400));
         crop.selectEvent(QStringLiteral("2"));
+        QVERIFY(!crop.triggerAction(QStringLiteral("editor.cropToSelection")));
+        QCOMPARE(crop.timelineEventViews().size(), 2);
+        QVERIFY(crop.setSelection(500, 800));
         QVERIFY(crop.triggerAction(QStringLiteral("editor.cropToSelection")));
-        QCOMPARE(crop.timelineEventViews().size(), 1);
+        QCOMPARE(crop.timelineEventViews().size(), 2);
         QCOMPARE(crop.timelineEventViews().front().toMap()
                      .value(QStringLiteral("id")).toString(), QStringLiteral("1"));
         QCOMPARE(crop.timelineEventViews().front().toMap()
                      .value(QStringLiteral("sourceEnd")).toLongLong(), qint64{400});
-        QVERIFY(crop.selectedEventId().isEmpty());
+        QCOMPARE(crop.timelineEventViews().back().toMap()
+                     .value(QStringLiteral("sourceStart")).toLongLong(), qint64{500});
+        QCOMPARE(crop.timelineEventViews().back().toMap()
+                     .value(QStringLiteral("timelineStart")).toLongLong(), qint64{500});
+        QCOMPARE(crop.selectedEventId(), QStringLiteral("2"));
     }
 
     void tailRemovalClampsViewportAndProjectSave_data()
@@ -1858,6 +2058,7 @@ private slots:
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(source)));
         QVERIFY(controller.setSelection(0, controller.totalFrames()));
+        controller.selectEvent(QStringLiteral("1"));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
         QCOMPARE(controller.totalFrames(), qint64{0});
         QCOMPARE(controller.viewport()->documentFrames(), qint64{0});
@@ -1921,6 +2122,7 @@ private slots:
         QVERIFY(!controller.modified());
 
         QVERIFY(controller.setSelection(split, total));
+        controller.selectEvent(QStringLiteral("2"));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
         QCOMPARE(controller.playheadFrame(), split);
         QCOMPARE(controller.viewport()->visibleEndFrame(), split);
@@ -2023,7 +2225,7 @@ private slots:
         QVERIFY(projectFile.open(QIODevice::ReadOnly));
         const QJsonObject root = QJsonDocument::fromJson(projectFile.readAll()).object();
         projectFile.close();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 2);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 3);
         QVERIFY(controller.trimEvent(1, 10, 900, 0));
         QVERIFY2(controller.triggerAction(QStringLiteral("editor.save")),
                  qPrintable(controller.errorMessage()));
@@ -2866,6 +3068,7 @@ private slots:
         QVERIFY(!controller.actionEnabled(QStringLiteral("editor.export")));
 
         QVERIFY(controller.setSelection(split, total));
+        controller.selectEvent(QStringLiteral("2"));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
         QVERIFY(controller.projectIssues().isEmpty());
         QVERIFY(controller.actionEnabled(QStringLiteral("editor.export")));
@@ -2926,6 +3129,7 @@ private slots:
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY(openProjectAndWait(controller, QUrl::fromLocalFile(project)));
         QVERIFY(controller.setSelection(split, controller.totalFrames()));
+        controller.selectEvent(QStringLiteral("2"));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
         for (int index = 1; index <= 257; ++index) {
             QVERIFY(controller.moveEvent(1, index));
@@ -2988,6 +3192,7 @@ private slots:
                      .value(QStringLiteral("kind")).toString(),
                  QStringLiteral("identityMismatch"));
         QVERIFY(controller.setSelection(split, controller.totalFrames()));
+        controller.selectEvent(QStringLiteral("2"));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.cut")));
         QVERIFY(controller.projectIssues().isEmpty());
         for (int index = 1; index <= 257; ++index) {
@@ -3180,6 +3385,7 @@ private slots:
         QVERIFY(controller.trimEvent(id, 0, frames / 4, 0));
         verifyLastGood();
         QVERIFY(controller.setSelection(0, frames / 8));
+        controller.selectEvent(id);
         QVERIFY(controller.triggerAction(QStringLiteral("editor.cropToSelection")));
         verifyLastGood();
         id = controller.timelineEventViews().front().toMap()
@@ -4252,6 +4458,7 @@ private slots:
         QSignalSpy waveformChanges(&controller, &AudioEditorController::waveformChanged);
 
         QVERIFY(controller.setSelection(96, 288));
+        QVERIFY(selectClipRange(controller, 96, 288));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
         QCOMPARE(controller.channelPeaks(), sourcePeaks);
         QVERIFY(!controller.busy());
@@ -4279,6 +4486,7 @@ private slots:
         const qint64 quarter = controller.totalFrames() / 4;
         QVERIFY(quarter > 0);
         QVERIFY(controller.setSelection(quarter, quarter * 2));
+        QVERIFY(selectClipRange(controller, quarter, quarter * 2));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
 
         controller.viewport()->setViewportWidth(120.0);
@@ -4333,6 +4541,7 @@ private slots:
         QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
         const qint64 quarter = controller.totalFrames() / 4;
         QVERIFY(controller.setSelection(quarter, quarter * 2));
+        QVERIFY(selectClipRange(controller, quarter, quarter * 2));
         QVERIFY(controller.triggerAction(QStringLiteral("editor.deleteSelection")));
         controller.setViewportWaveformTaskObserverForTesting(
             [&](const bool starting) {
@@ -4351,7 +4560,8 @@ private slots:
             });
 
         controller.viewport()->setViewportWidth(120.0);
-        QVERIFY(firstStarted.tryAcquire(1, 5'000));
+        QTRY_VERIFY_WITH_TIMEOUT(firstStarted.available() > 0, 5'000);
+        QVERIFY(firstStarted.tryAcquire());
         QVERIFY(controller.viewport()->setVisibleRange(quarter, quarter * 2));
         QVERIFY(controller.viewport()->setVisibleRange(quarter * 2,
                                                         controller.totalFrames()));
@@ -4399,7 +4609,8 @@ private slots:
             });
 
         controller.viewport()->setViewportWidth(120.0);
-        QVERIFY(firstStarted.tryAcquire(1, 5'000));
+        QTRY_VERIFY_WITH_TIMEOUT(firstStarted.available() > 0, 5'000);
+        QVERIFY(firstStarted.tryAcquire());
         QVERIFY(controller.viewport()->setVisibleRange(
             controller.totalFrames() / 4, controller.totalFrames() / 2));
         const quint64 pendingGeneration = controller.viewportWaveformGeneration();
@@ -4437,7 +4648,8 @@ private slots:
                 }
             });
         controller->viewport()->setViewportWidth(120.0);
-        QVERIFY(started.tryAcquire(1, 5'000));
+        QTRY_VERIFY_WITH_TIMEOUT(started.available() > 0, 5'000);
+        QVERIFY(started.tryAcquire());
 
         std::thread delayedRelease([&] {
             std::this_thread::sleep_for(std::chrono::milliseconds(150));
@@ -4471,6 +4683,7 @@ private slots:
         const QString originalPath = controller.filePath();
         const auto historyBefore = controller.historyStateIdForTesting();
 
+        controller.selectEvent(QStringLiteral("1"));
         QVERIFY(controller.reduceNoise());
         QCOMPARE(controller.state(), EditorSessionState::Processing);
         QVERIFY(controller.noiseReductionActive());
@@ -4483,7 +4696,12 @@ private slots:
         QVERIFY(QFileInfo::exists(controller.filePath()));
         const QString expectedMediaDirectory = QDir(temporary.path()).filePath(
             QStringLiteral("session.media"));
-        QCOMPARE(QFileInfo(controller.filePath()).absolutePath(),
+        QVERIFY(controller.save());
+        QVERIFY(QDir(expectedMediaDirectory).entryList(QDir::Files).size() > 0);
+        auto saved = agplayer::editor::ProjectDocument::load(project);
+        QVERIFY(saved.ok());
+        QVERIFY(saved.issues.empty());
+        QCOMPARE(QFileInfo(QString::fromStdWString(saved.sources[0].source->path.wstring())).absolutePath(),
                  QFileInfo(expectedMediaDirectory).absoluteFilePath());
         QVERIFY(controller.undo());
         QCOMPARE(controller.historyStateIdForTesting(), historyBefore);

@@ -188,6 +188,19 @@ bool copy_metadata(const std::filesystem::path& source,
 
 } // namespace
 
+bool outputOverwritesSource(const WriteRequest& request)
+{
+    const auto isOutput = [&](const std::filesystem::path& source) {
+        if (source.empty() || request.output_path.empty()) return false;
+        std::error_code error;
+        return std::filesystem::equivalent(request.output_path, source, error)
+            && !error;
+    };
+    if (isOutput(request.metadata_source_path)) return true;
+    return std::any_of(request.snapshot.events.begin(), request.snapshot.events.end(),
+        [&](const AudioEvent& event) { return event.source && isOutput(event.source->path); });
+}
+
 WriteResult DocumentWriter::write(
     const WriteRequest& request,
     const std::atomic_bool* cancelled,
@@ -196,6 +209,9 @@ WriteResult DocumentWriter::write(
     if (request.output_path.empty() || request.snapshot.events.empty()
         || (request.range && !request.range->valid())) {
         return {WriteError::InvalidRequest, "invalid write request", 0};
+    }
+    if (outputOverwritesSource(request)) {
+        return {WriteError::InvalidRequest, "output would overwrite a source file", 0};
     }
     const std::string codec = request.codec_name.empty()
         ? default_codec(request.output_path) : request.codec_name;

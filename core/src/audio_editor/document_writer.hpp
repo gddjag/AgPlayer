@@ -50,6 +50,9 @@ struct WriteResult final {
     [[nodiscard]] bool ok() const noexcept { return error == WriteError::None; }
 };
 
+// Check the original request before any stage replaces its source snapshot.
+[[nodiscard]] bool outputOverwritesSource(const WriteRequest& request);
+
 class DocumentWriter final {
 public:
     [[nodiscard]] WriteResult write(

@@ -40,6 +40,10 @@ class AudioDocument final {
 public:
     [[nodiscard]] static AudioDocument fromSource(AudioSource source);
     [[nodiscard]] static AudioDocument fromEvents(std::vector<AudioEvent> events);
+    [[nodiscard]] static AudioDocument fromSnapshot(TimelineSnapshot snapshot);
+    bool setProjectFormat(std::uint32_t sampleRate, std::uint32_t channels = 2);
+    bool setTrackMuted(int trackIndex, bool muted);
+    bool setTrackGain(int trackIndex, float gain);
 
     bool setSelection(Selection selection) noexcept;
     bool clearSelection() noexcept;
@@ -47,6 +51,7 @@ public:
     bool renameMarker(std::size_t index, std::string name);
     bool removeMarker(std::size_t index);
     bool moveEvent(EventId id, SampleFrame timelineStart);
+    bool moveEvent(EventId id, SampleFrame timelineStart, int trackIndex);
     bool trimEvent(EventId id, SampleFrame sourceStart, SampleFrame sourceEnd,
                    SampleFrame timelineStart);
     bool trimSharedBoundary(EventId leftId, EventId rightId,
@@ -55,6 +60,7 @@ public:
     bool clearTimeline();
     bool deleteSelection();
     bool cropToSelection();
+    bool cropEventToSelection(EventId id);
     bool silenceSelection();
     bool fadeIn();
     bool fadeOut();
@@ -74,11 +80,15 @@ public:
     bool silenceEvent(EventId id);
     bool fadeEvent(EventId id, bool fadeIn);
     bool pasteAt(SampleFrame playhead);
+    bool pasteAt(SampleFrame playhead, int trackIndex);
     bool duplicateEvent(EventId id, SampleFrame timelineStart);
     bool mergeEvents(EventId left, EventId right);
     bool replaceSelectionWithSource(AudioSource source);
+    bool replaceEventWithSource(EventId id, AudioSource source,
+                                SampleFrame start, SampleFrame end);
     bool insertSourceAtCursor(AudioSource source, SampleFrame cursor);
     bool insertSource(AudioSource source, SampleFrame timelineStart);
+    bool insertSource(AudioSource source, SampleFrame timelineStart, int trackIndex);
     bool undo();
     bool redo();
     void beginCoalescedEdit(EventId id) noexcept
@@ -107,13 +117,14 @@ private:
                                       EventId id, SampleFrame frame,
                                       EventId rightId);
     [[nodiscard]] static bool splitAtFrame(std::vector<AudioEvent>& events,
-                                           SampleFrame frame, EventId& nextId);
+                                           SampleFrame frame, EventId& nextId, int trackIndex = -1);
     [[nodiscard]] static bool sameParameters(const AudioEvent& left,
                                              const AudioEvent& right) noexcept;
     [[nodiscard]] bool splitSelectionBoundaries(
         std::vector<AudioEvent>& events, EventId& nextId) const;
     [[nodiscard]] std::vector<AudioEvent> selectedEvents() const;
     [[nodiscard]] bool applyCandidate(std::vector<AudioEvent> candidate);
+    [[nodiscard]] bool applySnapshot(TimelineSnapshot candidate);
     void normalizeEditorState() noexcept;
 
     EventTimeline timeline_;

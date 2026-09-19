@@ -5,6 +5,7 @@
 #include "../time_pitch_engine.hpp"
 
 #include <memory>
+#include <atomic>
 #include <string>
 
 namespace agplayer::editor {
@@ -29,7 +30,9 @@ public:
         TimelineSnapshot snapshot, const EditorPlaybackParameters& parameters,
         std::string& error,
         agplayer::TimePitchEngineFactory engine_factory =
-            &agplayer::create_time_pitch_engine);
+            &agplayer::create_time_pitch_engine,
+        const std::optional<Selection>& range = std::nullopt,
+        const std::atomic_bool* cancelled = nullptr);
 
     [[nodiscard]] const agplayer::MediaMetadata& metadata() const noexcept override;
     [[nodiscard]] ag_result read(agplayer::DecodedAudioBlock& block) noexcept override;
