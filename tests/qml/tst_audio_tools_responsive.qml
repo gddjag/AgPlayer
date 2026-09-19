@@ -94,8 +94,19 @@ TestCase {
             if (data.name === "metadata" && page.macStackedLayout) {
                 var metadataScroller = findChild(page, "metadataWorkbenchScroller")
                 metadataScroller.contentY = Math.max(0, metadataScroller.contentHeight - metadataScroller.height)
-            } else revealVertically(primaryAction)
-            inside(primaryAction, page)
+                var actionInPage = primaryAction.mapToItem(page, 0, 0)
+                var actionInScroller = primaryAction.mapToItem(metadataScroller, 0, 0)
+                verify(primaryAction.visible, "metadata action is hidden")
+                verify(actionInPage.y >= -1
+                       && actionInPage.y + primaryAction.height <= page.height + 1,
+                       "metadata action outside page after scrolling: " + actionInPage.y)
+                verify(actionInScroller.y >= -1
+                       && actionInScroller.y + primaryAction.height <= metadataScroller.height + 1,
+                       "metadata action clipped after scrolling: " + actionInScroller.y)
+            } else {
+                revealVertically(primaryAction)
+                inside(primaryAction, page)
+            }
             if (data.name === "editor") {
                 revealVertically(findChild(page, "editorPlaybackTransport"))
                 inside(findChild(page, "editorPlaybackTransport"), page)
