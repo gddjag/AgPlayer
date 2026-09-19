@@ -9,8 +9,15 @@ namespace {
 
 PeakBucket merged(const PeakBucket left, const PeakBucket right) noexcept
 {
+    const auto count = left.sampleCount + right.sampleCount;
+    const float meanSquare = count > 0 && left.meanSquare >= 0 && right.meanSquare >= 0
+        ? static_cast<float>((static_cast<double>(left.meanSquare) * left.sampleCount
+            + static_cast<double>(right.meanSquare) * right.sampleCount) / count) : -1.0F;
+    const float meanAbsolute = count > 0 && left.meanAbsolute >= 0 && right.meanAbsolute >= 0
+        ? static_cast<float>((static_cast<double>(left.meanAbsolute) * left.sampleCount
+            + static_cast<double>(right.meanAbsolute) * right.sampleCount) / count) : -1.0F;
     return {std::min(left.minimum, right.minimum),
-            std::max(left.maximum, right.maximum)};
+            std::max(left.maximum, right.maximum), meanSquare, count, meanAbsolute};
 }
 
 bool valid(const PeakBucket bucket) noexcept

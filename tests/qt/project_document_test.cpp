@@ -131,7 +131,7 @@ class ProjectDocumentTest final : public QObject {
         AudioDocument document = AudioDocument::fromEvents({first, second});
         document.addMarker({u8"前奏", 1'000});
         document.addMarker({u8"尾声", 39'000});
-        document.setSelection({500, 4'500});
+        document.setSelection({500, 4'500, 0});
 
         ProjectExportSettings settings;
         settings.codecName = QStringLiteral("flac");
@@ -169,6 +169,124 @@ class ProjectDocumentTest final : public QObject {
     }
 
 private slots:
+    void projectSaveRejectsSourceFileAliases()
+    {
+        QTemporaryDir temporary;
+        auto project = makeProject(temporary);
+        const auto before = readBytes(project.sourcePath);
+        QVERIFY(!ProjectDocument::save(project.sourcePath, request(project)).ok());
+        QCOMPARE(readBytes(project.sourcePath), before);
+        const auto alias = temporary.filePath(QStringLiteral("source-alias.agproj"));
+        std::error_code error;
+        std::filesystem::create_hard_link(nativePath(project.sourcePath), nativePath(alias), error);
+        if (error) QSKIP("hard links are unavailable");
+        QVERIFY(!ProjectDocument::save(alias, request(project)).ok());
+        QCOMPARE(readBytes(project.sourcePath), before);
+        QCOMPARE(readBytes(alias), before);
+    }
+
+    void generatedMediaSaveSurvivesSessionRemovalAndReusesArchive()
+    {
+        QTemporaryDir temporary;
+        auto project = makeProject(temporary);
+        auto saveRequest = request(project);
+        saveRequest.generatedMediaPaths.push_back(nativePath(project.sourcePath));
+        const auto before = project.document.timelineSnapshot();
+        QVERIFY(ProjectDocument::save(project.projectPath, saveRequest).ok());
+        const auto mediaPath = temporary.filePath(QStringLiteral("工程 测试.media"));
+        QCOMPARE(QDir(mediaPath).entryList(QDir::Files).size(), 1);
+        QVERIFY(ProjectDocument::save(project.projectPath, saveRequest).ok());
+        QCOMPARE(QDir(mediaPath).entryList(QDir::Files).size(), 1);
+        QCOMPARE(project.document.timelineSnapshot().events[0].source, before.events[0].source);
+        QCOMPARE(project.document.timelineSnapshot().revision, before.revision);
+        QVERIFY(QFile::remove(project.sourcePath));
+        auto loaded = ProjectDocument::load(project.projectPath);
+        QVERIFY2(loaded.ok(), qPrintable(loaded.message));
+        QVERIFY(loaded.issues.empty());
+        QVERIFY(QFileInfo(QString::fromStdWString(loaded.sources[0].source->path.wstring())).exists());
+        QVERIFY(loaded.sources[0].generatedMedia);
+        auto saveAsRequest = saveRequest;
+        saveAsRequest.document = loaded.document.get();
+        saveAsRequest.sourceRecords = &loaded.sources;
+        saveAsRequest.generatedMediaPaths.clear();
+        const auto saveAsPath = temporary.filePath(QStringLiteral("portable.agproj"));
+        QVERIFY(ProjectDocument::save(saveAsPath, saveAsRequest).ok());
+        QCOMPARE(QDir(temporary.filePath(QStringLiteral("portable.media"))).entryList(QDir::Files).size(), 1);
+        auto copied = ProjectDocument::load(saveAsPath);
+        QVERIFY(copied.ok());
+        QVERIFY(copied.issues.empty());
+        QVERIFY(QString::fromStdWString(copied.sources[0].source->path.wstring()).contains(QStringLiteral("portable.media")));
+        const auto savedJson = readBytes(project.projectPath);
+        QVERIFY(!ProjectDocument::save(project.projectPath, saveRequest).ok());
+        QCOMPARE(readBytes(project.projectPath), savedJson);
+        QCOMPARE(QDir(mediaPath).entryList(QDir::Files).size(), 1);
+    }
+
+    void failedProjectCommitRollsBackOnlyNewOwnedMedia()
+    {
+        QTemporaryDir temporary;
+        auto project = makeProject(temporary);
+        auto saveRequest = request(project);
+        saveRequest.generatedMediaPaths.push_back(nativePath(project.sourcePath));
+        const auto blocked = temporary.filePath(QStringLiteral("blocked.agproj"));
+        QVERIFY(QDir().mkdir(blocked));
+        const auto mediaPath = temporary.filePath(QStringLiteral("blocked.media"));
+        QVERIFY(QDir().mkdir(mediaPath));
+        const auto existing = QDir(mediaPath).filePath(QStringLiteral("keep.txt"));
+        QVERIFY(writeBytes(existing, "user media"));
+        QVERIFY(!ProjectDocument::save(blocked, saveRequest).ok());
+        QCOMPARE(QDir(mediaPath).entryList(QDir::Files), QStringList{QStringLiteral("keep.txt")});
+        QCOMPARE(readBytes(existing), QByteArray{"user media"});
+        QVERIFY(QFileInfo::exists(project.sourcePath));
+
+        const auto missing = temporary.filePath(QStringLiteral("missing.wav"));
+        QVERIFY(project.document.insertSource({nativePath(missing), 44'100, 2, 1'000}, 0, 3));
+        saveRequest.generatedMediaPaths.push_back(nativePath(missing));
+        const auto partial = temporary.filePath(QStringLiteral("partial.agproj"));
+        QVERIFY(!ProjectDocument::save(partial, saveRequest).ok());
+        QVERIFY(!QFileInfo::exists(partial));
+        QVERIFY(!QFileInfo::exists(temporary.filePath(QStringLiteral("partial.media"))));
+        QVERIFY(QFileInfo::exists(project.sourcePath));
+    }
+
+    void schemaThreeRoundTripsTracksAndMigratesLegacyGainWithoutClamping()
+    {
+        QTemporaryDir temporary;
+        auto project = makeProject(temporary);
+        QVERIFY(project.document.moveEvent(9, 0, 5));
+        QVERIFY(project.document.setTrackMuted(5, true));
+        QVERIFY(project.document.setTrackGain(5, 1.75F));
+        QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+        auto loaded = ProjectDocument::load(project.projectPath);
+        QVERIFY2(loaded.ok(), qPrintable(loaded.message));
+        auto state = loaded.document->timelineSnapshot();
+        QCOMPARE(state.tracks.size(), std::size_t{6});
+        QVERIFY(state.tracks[5].muted);
+        QCOMPARE(state.tracks[5].gain, 1.75F);
+        QVERIFY(std::any_of(state.events.begin(), state.events.end(), [](const AudioEvent& e) { return e.trackIndex == 5; }));
+
+        // Schema 2 has one globally non-overlapping track.
+        auto legacy = QJsonDocument::fromJson(readBytes(project.projectPath)).object();
+        legacy.insert(QStringLiteral("schemaVersion"), 2);
+        auto events = legacy.value(QStringLiteral("events")).toArray();
+        auto second = events[1].toObject();
+        second.insert(QStringLiteral("timelineStart"), QStringLiteral("30000"));
+        events[1] = second; legacy.insert(QStringLiteral("events"), events);
+        auto editor = legacy.value(QStringLiteral("editorSettings")).toObject();
+        editor.insert(QStringLiteral("trackGainDb"), 12.0);
+        editor.insert(QStringLiteral("trackMuted"), true);
+        editor.insert(QStringLiteral("trackSolo"), false);
+        legacy.insert(QStringLiteral("editorSettings"), editor);
+        QVERIFY(writeBytes(project.projectPath, QJsonDocument(legacy).toJson()));
+        loaded = ProjectDocument::load(project.projectPath);
+        QVERIFY2(loaded.ok(), qPrintable(loaded.message));
+        state = loaded.document->timelineSnapshot();
+        for (const auto& event : state.events) QCOMPARE(event.trackIndex, 0);
+        QVERIFY(state.tracks[0].muted);
+        QVERIFY(state.legacyMasterGain > 3.98F);
+        QCOMPARE(loaded.editorSettings.trackGainDb, 0.0);
+    }
+
     void initTestCase()
     {
         QVERIFY2(!fixturePath().isEmpty(), "decoder fixture is required");
@@ -202,7 +320,7 @@ private slots:
         }
 
         const QJsonObject root = QJsonDocument::fromJson(json).object();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 2);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 3);
         const QJsonArray events = root.value(QStringLiteral("events")).toArray();
         QCOMPARE(events[0].toObject().value(QStringLiteral("fadeInCurve")).toString(),
                  QStringLiteral("exponential"));
@@ -390,7 +508,7 @@ private slots:
         };
 
         QJsonObject newer = valid;
-        newer.insert(QStringLiteral("schemaVersion"), 3);
+        newer.insert(QStringLiteral("schemaVersion"), 4);
         rejects(newer);
 
         QVERIFY(writeBytes(project.projectPath, QByteArrayLiteral("{broken")));
@@ -1007,7 +1125,15 @@ private slots:
         const auto saveRejected = [&](std::vector<AudioEvent> events,
                                       std::vector<Marker> markers,
                                       const QString& row) {
+            const bool hadEvents = !events.empty();
             AudioDocument document = AudioDocument::fromEvents(std::move(events));
+            if (hadEvents && document.timelineSnapshot().events.empty()) {
+                // Capacity is now enforced at the model transaction boundary,
+                // before a save request can receive an oversized document.
+                QVERIFY(row == QStringLiteral("sources") || row == QStringLiteral("events") || row == QStringLiteral("envelope"));
+                QCOMPARE(readBytes(project.projectPath), previous);
+                return;
+            }
             for (const Marker& marker : markers) QVERIFY(document.addMarker(marker));
             ProjectSaveRequest oversized = baseline;
             oversized.document = &document;

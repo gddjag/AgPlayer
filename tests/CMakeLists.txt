@@ -25,6 +25,10 @@ set_tests_properties(application_file_open_test PROPERTIES
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
 add_test(NAME macos_target_contract_test
     COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/scripts/macos_target_contract_test.cmake)
+add_test(NAME update_endpoint_contract_test
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/scripts/update_endpoint_contract_test.cmake)
+add_test(NAME installer_association_contract_test
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/scripts/installer_association_contract_test.cmake)
 
 add_executable(visual_kick_response_test qt/visual_kick_response_test.cpp)
 add_executable(sonic_audio_parity_test qt/sonic_audio_parity_test.cpp)
@@ -1341,6 +1345,43 @@ set_tests_properties(separation_worker_process_test PROPERTIES
 )
 endif()
 
+add_executable(editor_recording_service_test
+    qt/editor_recording_service_test.cpp
+    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_recording_service.cpp"
+    "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_recording_service.hpp")
+set_target_properties(editor_recording_service_test PROPERTIES AUTOMOC ON)
+target_include_directories(editor_recording_service_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/qt/src" ${MINIAUDIO_INCLUDE_DIRS})
+target_link_libraries(editor_recording_service_test PRIVATE agplayer_core Qt6::Core Qt6::Test)
+add_test(NAME editor_recording_service_test COMMAND editor_recording_service_test)
+set_tests_properties(editor_recording_service_test PROPERTIES TIMEOUT 60
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+
+add_executable(six_track_waveform_test qt/six_track_waveform_test.cpp)
+set_target_properties(six_track_waveform_test PROPERTIES AUTOMOC ON)
+target_include_directories(six_track_waveform_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src" "${CMAKE_SOURCE_DIR}/core/src")
+target_link_libraries(six_track_waveform_test PRIVATE agplayer_qt Qt6::Test)
+add_test(NAME six_track_waveform_test COMMAND six_track_waveform_test)
+set_tests_properties(six_track_waveform_test PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+
+add_executable(six_track_recording_integration_test qt/six_track_recording_integration_test.cpp)
+set_target_properties(six_track_recording_integration_test PROPERTIES AUTOMOC ON)
+target_include_directories(six_track_recording_integration_test PRIVATE "${CMAKE_SOURCE_DIR}/qt/src" "${CMAKE_SOURCE_DIR}/core/src")
+target_link_libraries(six_track_recording_integration_test PRIVATE agplayer_qt Qt6::Test)
+add_dependencies(six_track_recording_integration_test decoder_fixture)
+add_test(NAME six_track_recording_integration_test COMMAND six_track_recording_integration_test)
+set_tests_properties(six_track_recording_integration_test PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;AGPLAYER_EDITOR_FIXTURE=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+
+add_executable(six_track_long_render_test core/six_track_long_render_test.cpp)
+set_target_properties(six_track_long_render_test PROPERTIES AUTOMOC ON)
+target_include_directories(six_track_long_render_test PRIVATE "${CMAKE_SOURCE_DIR}/core/src")
+target_link_libraries(six_track_long_render_test PRIVATE agplayer_core Qt6::Test)
+add_test(NAME six_track_long_render_test COMMAND six_track_long_render_test)
+set_tests_properties(six_track_long_render_test PROPERTIES TIMEOUT 240
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+
 add_executable(editor_viewport_test
     qt/editor_viewport_test.cpp
     "${CMAKE_SOURCE_DIR}/qt/src/audio_editor/editor_viewport.cpp"
@@ -1409,32 +1450,15 @@ set_tests_properties(project_document_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
-add_executable(qml_audio_editor_test
-    qt/qml_audio_editor_test_main.cpp
-)
-set_target_properties(qml_audio_editor_test PROPERTIES AUTOMOC ON)
-target_include_directories(qml_audio_editor_test PRIVATE
-    "${CMAKE_SOURCE_DIR}/qt/src"
-    "${CMAKE_SOURCE_DIR}/core/src"
-)
-target_link_libraries(qml_audio_editor_test PRIVATE
-    agplayer_qt
-    agplayer_app_qmlplugin
-    Qt6::Quick
-    Qt6::QuickControls2
-    Qt6::QuickTest
-)
-agplayer_enable_warnings(qml_audio_editor_test)
-add_dependencies(qml_audio_editor_test decoder_fixture)
 # Keep JUnit output at the CTest run level. A fixed per-test QTest path is
 # shared by concurrent Windows runs and can remain exclusively locked. CI
 # should use: ctest --output-junit <run-unique-path>
-add_test(NAME qml_audio_editor_test
-    COMMAND qml_audio_editor_test
-        -input "${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_editor.qml"
+add_test(NAME qml_six_track_workflow_test
+    COMMAND qml_audio_tools_test
+        -input "${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_six_track_workflow.qml"
         -o -,txt
 )
-set_tests_properties(qml_audio_editor_test PROPERTIES
+set_tests_properties(qml_six_track_workflow_test PROPERTIES
     TIMEOUT 120
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/app;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION
@@ -1786,11 +1810,19 @@ target_compile_definitions(qml_audio_tools_test PRIVATE
 agplayer_enable_warnings(qml_audio_tools_test)
 add_dependencies(qml_audio_tools_test decoder_fixture)
 
-add_test(NAME qml_audio_editor_native_input_test
+add_test(NAME qml_six_track_editor_test
+    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_six_track_editor.qml
+        -o ${CMAKE_BINARY_DIR}/qml-six-track-editor.txt,txt)
+set_tests_properties(qml_six_track_editor_test PROPERTIES
+    TIMEOUT 90 RESOURCE_LOCK qml_audio_tools_runtime
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+
+add_test(NAME qml_six_track_native_input_test
     COMMAND qml_audio_tools_test
-        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_audio_editor_native_input.qml
-        -o ${CMAKE_CURRENT_BINARY_DIR}/qml-audio-editor-native-input.xml,junitxml)
-set_tests_properties(qml_audio_editor_native_input_test PROPERTIES
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_six_track_native_input.qml
+        -o ${CMAKE_CURRENT_BINARY_DIR}/qml-six-track-native-input.xml,junitxml)
+set_tests_properties(qml_six_track_native_input_test PROPERTIES
     # Native Windows input can exceed 30 seconds in Debug while real fixture
     # playback and window activation complete.
     TIMEOUT 60
@@ -1876,6 +1908,82 @@ set_tests_properties(qml_vocal_separation_test PROPERTIES
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
+
+add_test(NAME qml_macos_separation_links_test
+    COMMAND qml_audio_tools_test
+        -o ${CMAKE_BINARY_DIR}/qml-macos-separation-links.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_macos_separation_links.qml)
+set_tests_properties(qml_macos_separation_links_test PROPERTIES
+    TIMEOUT 30
+    RESOURCE_LOCK qml_audio_tools_runtime
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_test(NAME qml_settings_cache_feedback_test
+    COMMAND qml_main_window_test
+        -o ${CMAKE_BINARY_DIR}/qml-settings-cache-feedback.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_settings_cache_feedback.qml)
+set_tests_properties(qml_settings_cache_feedback_test PROPERTIES
+    TIMEOUT 30
+    RESOURCE_LOCK qml_main_window_runtime
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_test(NAME qml_popup_sizing_test
+    COMMAND qml_main_window_test
+        -o ${CMAKE_BINARY_DIR}/qml-popup-sizing.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_popup_sizing.qml)
+set_tests_properties(qml_popup_sizing_test PROPERTIES
+    TIMEOUT 30
+    RESOURCE_LOCK qml_main_window_runtime
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+add_test(NAME qml_screen_fit_test
+    COMMAND qml_main_window_test
+        -o ${CMAKE_BINARY_DIR}/qml-screen-fit.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_screen_fit.qml)
+set_tests_properties(qml_screen_fit_test PROPERTIES
+    TIMEOUT 30
+    RESOURCE_LOCK qml_main_window_runtime
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
+foreach(responsive_suite IN ITEMS format audio_tools auxiliary)
+    if(responsive_suite STREQUAL "auxiliary")
+        set(responsive_runner qml_main_window_test)
+        set(responsive_lock qml_main_window_runtime)
+    else()
+        set(responsive_runner qml_audio_tools_test)
+        set(responsive_lock qml_audio_tools_runtime)
+    endif()
+    add_test(NAME qml_${responsive_suite}_responsive_test
+        COMMAND ${responsive_runner}
+            -o ${CMAKE_BINARY_DIR}/qml-${responsive_suite}-responsive.txt,txt
+            -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_${responsive_suite}_responsive.qml)
+    set_tests_properties(qml_${responsive_suite}_responsive_test PROPERTIES
+        TIMEOUT 60
+        RESOURCE_LOCK ${responsive_lock}
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+        ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+endforeach()
+
+if(WIN32)
+    set_property(TEST qml_popup_sizing_test qml_screen_fit_test
+        qml_settings_cache_feedback_test qml_macos_separation_links_test
+        qml_format_responsive_test qml_audio_tools_responsive_test
+        qml_auxiliary_responsive_test
+        APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=$ENV{SystemRoot}/Fonts")
+endif()
 
 add_test(NAME metadata_editor_layout_contract_test
     COMMAND "${AGPLAYER_POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass

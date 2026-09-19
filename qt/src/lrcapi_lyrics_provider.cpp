@@ -2,6 +2,9 @@
 
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -9,8 +12,11 @@
 #include <QRegularExpression>
 #include <QTimer>
 #include <QUrlQuery>
+#include <QUuid>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <utility>
 
 namespace {
@@ -21,7 +27,7 @@ constexpr qint64 kMaximumLyricsBytes = 512 * 1024;
 LyricsProvider::Source lrcApiSource()
 {
     return {QStringLiteral("lrcapi"), QStringLiteral("LrcAPI"),
-            QUrl(QStringLiteral("https://api.lrc.cx/lyrics")),
+            QUrl(QStringLiteral("https://api.lrc.cx/jsonapi")),
             QStringLiteral("HisAtri/LrcApi"), true};
 }
 
@@ -41,12 +47,18 @@ qint64 retryAfterMs(QNetworkReply* reply)
 
 QUrl requestUrl(const LyricsProvider::Track& track)
 {
-    QUrl url(QStringLiteral("https://api.lrc.cx/lyrics"));
+    QUrl url(QStringLiteral("https://api.lrc.cx/jsonapi"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("title"), track.title.trimmed());
     query.addQueryItem(QStringLiteral("artist"), track.artist.trimmed());
     if (!track.album.trimmed().isEmpty()) {
         query.addQueryItem(QStringLiteral("album"), track.album.trimmed());
+    }
+    if (track.forceRefresh) {
+        // LrcAPI's response cache key includes all query items. Keep the
+        // normal cache reusable, but explicitly re-search on manual refresh.
+        query.addQueryItem(QStringLiteral("_refresh"),
+                          QUuid::createUuid().toString(QUuid::WithoutBraces));
     }
     url.setQuery(query);
     return url;
@@ -59,11 +71,13 @@ bool containsTimestamp(const QString& lyrics)
     return timestamp.match(lyrics).hasMatch();
 }
 
-bool isTextResponse(QNetworkReply* reply)
+bool isJsonResponse(QNetworkReply* reply)
 {
+    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if (status >= 400) return true; // Map HTTP errors independently of their body format.
     const QString contentType = reply->header(QNetworkRequest::ContentTypeHeader)
                                     .toString().trimmed().toLower();
-    return contentType.isEmpty() || contentType.startsWith(QStringLiteral("text/"));
+    return contentType.isEmpty() || contentType.startsWith(QStringLiteral("application/json"));
 }
 
 bool looksLikeHtml(const QByteArray& body)
@@ -86,12 +100,12 @@ LrcApiLyricsProvider::LrcApiLyricsProvider(QNetworkAccessManager* manager,
 
 void LrcApiLyricsProvider::requestExact(const quint64 requestId, const Track& track)
 {
-    request(requestId, track, true);
+    request(requestId, track);
 }
 
 void LrcApiLyricsProvider::requestSearch(const quint64 requestId, const Track& track)
 {
-    request(requestId, track, false);
+    request(requestId, track);
 }
 
 void LrcApiLyricsProvider::cancel(const quint64 requestId)
@@ -103,8 +117,7 @@ void LrcApiLyricsProvider::cancel(const quint64 requestId)
     }
 }
 
-void LrcApiLyricsProvider::request(const quint64 requestId, const Track& track,
-                                   const bool exact)
+void LrcApiLyricsProvider::request(const quint64 requestId, const Track& track)
 {
     cancel(requestId);
     if (track.title.trimmed().isEmpty()) {
@@ -122,7 +135,14 @@ void LrcApiLyricsProvider::request(const quint64 requestId, const Track& track,
         ? QStringLiteral("dev") : QCoreApplication::applicationVersion();
     networkRequest.setRawHeader(
         "User-Agent", QStringLiteral("AgPlayer/%1").arg(version).toUtf8());
-    networkRequest.setRawHeader("Accept", "text/plain");
+    networkRequest.setRawHeader("Accept", "application/json");
+    if (track.forceRefresh) {
+        networkRequest.setAttribute(QNetworkRequest::CacheLoadControlAttribute,
+                                    QNetworkRequest::AlwaysNetwork);
+        networkRequest.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
+        networkRequest.setRawHeader("Cache-Control", "no-cache, no-store");
+        networkRequest.setRawHeader("Pragma", "no-cache");
+    }
 
     QNetworkReply* reply = manager_->get(networkRequest);
     reply->setReadBufferSize(kMaximumLyricsBytes + 1);
@@ -134,7 +154,7 @@ void LrcApiLyricsProvider::request(const quint64 requestId, const Track& track,
     connect(reply, &QNetworkReply::metaDataChanged, this,
             [this, reply] { consumeReply(reply); });
     connect(reply, &QNetworkReply::finished, this,
-            [this, reply, exact, track] { handleReply(reply, exact, track); });
+            [this, reply] { handleReply(reply); });
     QTimer::singleShot(requestTimeoutMs_, this,
                        [this, requestId, reply = QPointer<QNetworkReply>(reply)] {
         if (reply.isNull() || replies_.value(requestId) != reply) return;
@@ -149,7 +169,7 @@ void LrcApiLyricsProvider::consumeReply(QNetworkReply* reply)
     if (replies_.value(requestId) != reply) return;
     const qint64 declaredSize = reply->header(
         QNetworkRequest::ContentLengthHeader).toLongLong();
-    if (!isTextResponse(reply) || declaredSize > kMaximumLyricsBytes) {
+    if (!isJsonResponse(reply) || declaredSize > kMaximumLyricsBytes) {
         reply->setProperty("lyricsInvalidResponse", true);
         reply->abort();
         return;
@@ -164,8 +184,7 @@ void LrcApiLyricsProvider::consumeReply(QNetworkReply* reply)
     }
 }
 
-void LrcApiLyricsProvider::handleReply(QNetworkReply* reply, const bool exact,
-                                       const Track& track)
+void LrcApiLyricsProvider::handleReply(QNetworkReply* reply)
 {
     const quint64 requestId = reply->property("lyricsRequestId").toULongLong();
     if (replies_.value(requestId) != reply) {
@@ -204,24 +223,41 @@ void LrcApiLyricsProvider::handleReply(QNetworkReply* reply, const bool exact,
             QNetworkRequest::ContentLengthHeader).toLongLong();
         const qint64 remaining = kMaximumLyricsBytes + 1 - body.size();
         if (remaining > 0) body.append(reply->read(remaining));
-        if (!isTextResponse(reply) || declaredSize > kMaximumLyricsBytes
+        if (!isJsonResponse(reply) || declaredSize > kMaximumLyricsBytes
             || body.size() > kMaximumLyricsBytes || reply->bytesAvailable() > 0
             || looksLikeHtml(body)) {
             complete(requestId, Result::technicalError(
                 status, false, QStringLiteral("invalid-response")));
-        } else if (const QString text = QString::fromUtf8(body).trimmed();
-                   text.isEmpty()) {
-            complete(requestId, Result::notFound());
         } else {
-            Candidate candidate;
-            candidate.source = lrcApiSource();
-            candidate.title = track.title;
-            candidate.artist = track.artist;
-            candidate.album = track.album;
-            if (containsTimestamp(text)) candidate.syncedLyrics = text;
-            else candidate.plainLyrics = text;
-            if (exact) complete(requestId, Result::found(std::move(candidate)));
-            else complete(requestId, Result::search({std::move(candidate)}));
+            const QJsonDocument json = QJsonDocument::fromJson(body);
+            if (!json.isArray()) {
+                complete(requestId, Result::technicalError(
+                    status, false, QStringLiteral("invalid-response")));
+            } else {
+                QList<Candidate> candidates;
+                for (const QJsonValue value : json.array()) {
+                    if (!value.isObject()) continue;
+                    const QJsonObject object = value.toObject();
+                    Candidate candidate;
+                    candidate.source = lrcApiSource();
+                    candidate.title = object.value(QStringLiteral("title")).toString().trimmed();
+                    candidate.artist = object.value(QStringLiteral("artist")).toString().trimmed();
+                    candidate.album = object.value(QStringLiteral("album")).toString().trimmed();
+                    const double duration = object.value(QStringLiteral("duration")).toDouble();
+                    if (std::isfinite(duration) && duration > 0
+                        && duration < double(std::numeric_limits<qint64>::max())) {
+                        candidate.durationSeconds = std::llround(duration);
+                    }
+                    // Public deployment uses lrc; the open-source API uses lyrics.
+                    QString text = object.value(QStringLiteral("lrc")).toString().trimmed();
+                    if (text.isEmpty()) text = object.value(QStringLiteral("lyrics")).toString().trimmed();
+                    if (candidate.title.isEmpty() || text.isEmpty()) continue;
+                    if (containsTimestamp(text)) candidate.syncedLyrics = text;
+                    else candidate.plainLyrics = text;
+                    candidates.append(std::move(candidate));
+                }
+                complete(requestId, Result::search(std::move(candidates)));
+            }
         }
     }
     reply->deleteLater();

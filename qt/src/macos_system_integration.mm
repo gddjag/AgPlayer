@@ -15,11 +15,20 @@
 
 namespace {
 
+// Keep the portable media-matching test seam tied to the native SDK values.
+static_assert(NSEventModifierFlagShift == (1ULL << 17));
+static_assert(NSEventModifierFlagControl == (1ULL << 18));
+static_assert(NSEventModifierFlagOption == (1ULL << 19));
+static_assert(NSEventModifierFlagCommand == (1ULL << 20));
+static_assert(shiftKey == (1U << 9) && controlKey == (1U << 12)
+              && optionKey == (1U << 11) && cmdKey == (1U << 8));
+
 struct HotkeyRegistration {
     EventHotKeyRef carbonRef = nullptr;
     unsigned int mediaKey = 0;
     void* context = nullptr;
     agplayer::qt::macos::HotkeyCallback callback = nullptr;
+    unsigned int modifiers = 0;
 };
 
 std::map<int, HotkeyRegistration> carbonHotkeys;
@@ -149,7 +158,9 @@ CGEventRef mediaEventCallback(CGEventTapProxy, CGEventType type,
     const unsigned int state = static_cast<unsigned int>((data >> 8) & 0xff);
     if (state != 0x0aU) return event; // only key-down system media events
     for (const auto& [id, registration] : mediaHotkeys) {
-        if (registration.mediaKey == key) {
+        if (agplayer::qt::macos::mediaHotkeyMatches(
+                registration.mediaKey, registration.modifiers,
+                key, nativeEvent.modifierFlags)) {
             invoke(registration, id);
         }
     }
@@ -349,12 +360,13 @@ bool agplayer::qt::macos::registerHotkey(int id, unsigned int modifiers,
     return true;
 }
 
-bool agplayer::qt::macos::registerMediaHotkey(int id, unsigned int mediaKey,
+bool agplayer::qt::macos::registerMediaHotkey(int id, unsigned int modifiers,
+                                              unsigned int mediaKey,
                                               void* context, HotkeyCallback callback,
                                               QString* error)
 {
     if (!ensureMediaTap(error)) return false;
-    mediaHotkeys[id] = HotkeyRegistration{nullptr, mediaKey, context, callback};
+    mediaHotkeys[id] = HotkeyRegistration{nullptr, mediaKey, context, callback, modifiers};
     return true;
 }
 

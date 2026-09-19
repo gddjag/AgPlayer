@@ -1,4 +1,5 @@
 #include "settings_controller.hpp"
+#include "cache_janitor.hpp"
 #include "waveform_provider.hpp"
 #include "waveform_provider_test_access.hpp"
 #include "../../core/src/waveform_cache.hpp"
@@ -180,7 +181,7 @@ void WaveformProviderTest::displayModeChangeKeepsOneActiveAnalysis()
     QCOMPARE(agplayer::testing::waveform_provider_jobs_started(), 1U);
     QCOMPARE(ready.count(), 1);
     QVERIFY(!lastLayers(ready).value(QStringLiteral("_frequencyReady")).toBool());
-    QCOMPARE(QDir(cacheDirectory).entryList(
+    QCOMPARE(QDir(CacheJanitor::storageDirectory(cacheDirectory)).entryList(
                  {QStringLiteral("*.agwf")}, QDir::Files).size(), 1);
 }
 
@@ -319,10 +320,11 @@ void WaveformProviderTest::maximumDensityCacheLoadIsMeasuredWithoutDecode()
         warm.loadForTrack(QStringLiteral("warm"), fixturePath_, false);
         finishProviderAnalysis(warm);
     }
-    const auto entries = QDir(directory.path()).entryList({QStringLiteral("*.agwf")}, QDir::Files);
+    const QDir storage(CacheJanitor::storageDirectory(directory.path()));
+    const auto entries = storage.entryList({QStringLiteral("*.agwf")}, QDir::Files);
     QCOMPARE(entries.size(), 1);
     const auto source = std::filesystem::u8path(fixturePath_.toUtf8().constData());
-    const auto cache = std::filesystem::u8path(directory.filePath(entries.first()).toUtf8().constData());
+    const auto cache = std::filesystem::u8path(storage.filePath(entries.first()).toUtf8().constData());
     agplayer::WaveformCacheData data;
     QVERIFY(agplayer::WaveformCache::load_v4(cache, source, data));
     for (auto* layer : {&data.mix, &data.peak, &data.rms, &data.bass, &data.mid, &data.high})
@@ -428,7 +430,7 @@ void WaveformProviderTest::canceledRunningPrefetchDoesNotPublishCache()
     provider.prefetchTracks({fixturePath_});
     QTRY_COMPARE(agplayer::testing::waveform_provider_prefetch_jobs_started(), 1U);
     const bool publishedWhilePaused = !cached.isEmpty()
-        || !QDir(cachePath).entryList({QStringLiteral("*.agwf")}, QDir::Files).isEmpty();
+        || !QDir(CacheJanitor::storageDirectory(cachePath)).entryList({QStringLiteral("*.agwf")}, QDir::Files).isEmpty();
     provider.loadForTrack(QStringLiteral("next"), nextPath, true);
     finishProviderAnalysis(provider);
     QVERIFY(!publishedWhilePaused);
@@ -436,7 +438,7 @@ void WaveformProviderTest::canceledRunningPrefetchDoesNotPublishCache()
     QCOMPARE(ready.first().at(0).toString(), nextPath);
     QCOMPARE(cached.count(), 1);
     QCOMPARE(cached.first().at(0).toString(), nextPath);
-    QCOMPARE(QDir(cachePath).entryList({QStringLiteral("*.agwf")}, QDir::Files).size(), 1);
+    QCOMPARE(QDir(CacheJanitor::storageDirectory(cachePath)).entryList({QStringLiteral("*.agwf")}, QDir::Files).size(), 1);
 }
 
 void WaveformProviderTest::canceledCompletedPrefetchDoesNotPublishQueuedNotification()
@@ -454,14 +456,14 @@ void WaveformProviderTest::canceledCompletedPrefetchDoesNotPublishQueuedNotifica
     // Finish real decoding and saving, but leave its queued notification pending.
     WaveformProviderTestAccess::waitForAnalysis(provider);
     QCOMPARE(cached.count(), 0);
-    QCOMPARE(QDir(cachePath).entryList({QStringLiteral("*.agwf")}, QDir::Files).size(), 1);
+    QCOMPARE(QDir(CacheJanitor::storageDirectory(cachePath)).entryList({QStringLiteral("*.agwf")}, QDir::Files).size(), 1);
 
     provider.loadForTrack(QStringLiteral("next"), nextPath, true);
     finishProviderAnalysis(provider);
     QCOMPARE(cached.count(), 1);
     QCOMPARE(cached.first().at(0).toString(), nextPath);
     // A valid cache written before cancellation remains reusable.
-    QCOMPARE(QDir(cachePath).entryList({QStringLiteral("*.agwf")}, QDir::Files).size(), 2);
+    QCOMPARE(QDir(CacheJanitor::storageDirectory(cachePath)).entryList({QStringLiteral("*.agwf")}, QDir::Files).size(), 2);
 }
 
 QTEST_GUILESS_MAIN(WaveformProviderTest)

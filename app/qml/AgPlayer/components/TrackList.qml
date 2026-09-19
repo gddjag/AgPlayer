@@ -113,25 +113,14 @@ ListView {
         && root.thumbnailWindowVisible
     model: trackModel
 
-    FontMetrics {
-        id: trackMenuFontMetrics
-        font.family: Theme.fontPrimary
-        font.pixelSize: Theme.fontSizeBody
-    }
-
-    function fittedMenuWidth(labels, submenuLabels) {
-        var required = 120
-        for (var index = 0; index < labels.length; ++index)
-            required = Math.max(required,
-                                trackMenuFontMetrics.advanceWidth(labels[index]) + 24)
-        for (var submenuIndex = 0; submenuIndex < submenuLabels.length;
-             ++submenuIndex) {
-            required = Math.max(
-                        required,
-                        trackMenuFontMetrics.advanceWidth(
-                            submenuLabels[submenuIndex]) + 42)
+    function fittedMenuWidth(menu) {
+        var required = 0
+        for (var index = 0; index < menu.count; ++index) {
+            var item = menu.itemAt(index)
+            if (item && item.text !== undefined)
+                required = Math.max(required, item.implicitWidth)
         }
-        return Math.ceil(required)
+        return Math.ceil(required + menu.leftPadding + menu.rightPadding)
     }
 
     // Category navigation is user-directed.  Start each category at its top;
@@ -463,7 +452,6 @@ ListView {
     }
     ThemedDialog {
         id: trashConfirm
-        width: 360
         title: qsTr("彻底删除至回收站")
         modal: true
         anchors.centerIn: parent
@@ -479,14 +467,12 @@ ListView {
     }
     ThemedDialog {
         id: trashResultDialog
-        width: 520
         title: qsTr("部分文件未删除")
         modal: true
         anchors.centerIn: parent
         standardButtons: Dialog.Close
         contentItem: Label {
-            width: 480
-            wrapMode: Text.WordWrap
+            wrapMode: Text.Wrap
             color: Theme.primaryText
             text: qsTr("已移入回收站 %1 个，失败 %2 个。\n%3")
                 .arg(root.lastTrashResult.successCount || 0)
@@ -1103,7 +1089,8 @@ ListView {
         objectName: "emptyTrackResult"
         visible: root.count === 0
         x: (root.width - width) / 2
-        y: root.contentY + (root.height - height) / 2
+        // This label is a direct child of the view, not its scrolling content.
+        y: root.headerHeight + Math.max(0, (root.height - root.headerHeight - height) / 2)
         text: qsTr("未找到符合条件的歌曲")
         color: Theme.secondaryText; font.pixelSize: Theme.fontSizeBody; z: 5
     }
@@ -1111,12 +1098,7 @@ ListView {
     Menu {
         id: trackMenu
         objectName: "trackContextMenu"
-        width: root.fittedMenuWidth([
-            qsTr("播放"), qsTr("下一首播放"), qsTr("在文件夹中显示"),
-            qsTr("复制文件路径"), qsTr("打标签"),
-            qsTr("移动到指定文件夹"), qsTr("复制到指定文件夹"),
-            qsTr("从列表删除"), qsTr("彻底删除至回收站")
-        ], [qsTr("加入歌单"), qsTr("使用音频工具打开")])
+        width: root.fittedMenuWidth(trackMenu)
         palette.window: Theme.elevated
         palette.text: Theme.primaryText
         palette.button: Theme.elevated
@@ -1141,7 +1123,7 @@ ListView {
         SystemMenuItem { objectName: "trackMenuPlayNext"; text: qsTr("下一首播放"); enabled: trackMenu.targetTrackIds.length === 1; onTriggered: PlaybackController.queueNext(trackMenu.targetTrackId) }
         Menu {
             id: moveMenu
-            width: 154
+            width: root.fittedMenuWidth(moveMenu)
             palette.window: Theme.elevated
             palette.text: Theme.primaryText
             palette.button: Theme.elevated
@@ -1182,10 +1164,7 @@ ListView {
         Menu {
             id: audioToolsMenu
             objectName: "audioToolsTrackMenu"
-            width: root.fittedMenuWidth([
-                qsTr("音频编辑"), qsTr("格式转换"), qsTr("元数据修改"),
-                qsTr("文件名处理"), qsTr("无损鉴别")
-            ], [])
+            width: root.fittedMenuWidth(audioToolsMenu)
             title: qsTr("使用音频工具打开")
             palette.window: Theme.elevated
             palette.text: Theme.primaryText

@@ -1,5 +1,6 @@
 #include "transcoder.hpp"
 #include "ffmpeg_codec_support.hpp"
+#include "flac_stream_boundary.hpp"
 #include "transcode_probe.hpp"
 #include "transcode_verifier.hpp"
 
@@ -890,6 +891,8 @@ double scan_peak(const std::string& input_path,
                 break;
             }
 
+            const bool final_flac_frame = is_final_flac_frame(*dec.ctx,
+                *dec.fmt_ctx->streams[dec.stream_index], *in_frame);
             av_frame_unref(resampled);
             resampled->format = AV_SAMPLE_FMT_FLTP;
             resampled->sample_rate = dec.ctx->sample_rate;
@@ -921,6 +924,10 @@ double scan_peak(const std::string& input_path,
                 }
             }
             av_frame_unref(in_frame);
+            if (final_flac_frame) {
+                decoder_eof = true;
+                break;
+            }
         }
         if (peak < 0.0) break;
     }
@@ -1251,7 +1258,8 @@ ag_result run_transcode_pass(const std::string& input_path,
         return true;
     };
 
-    while (!is_cancelled(cancelled)) {
+    bool reached_flac_end = false;
+    while (!is_cancelled(cancelled) && !reached_flac_end) {
         const int read_ret = av_read_frame(dec.fmt_ctx, in_pkt);
         if (read_ret == AVERROR_EOF) break;
         if (read_ret < 0) {
@@ -1294,12 +1302,15 @@ ag_result run_transcode_pass(const std::string& input_path,
                 break;
             }
 
+            reached_flac_end = is_final_flac_frame(*dec.ctx,
+                *dec.fmt_ctx->streams[dec.stream_index], *in_frame);
             if (!convert_and_encode(in_frame)) {
                 av_frame_unref(in_frame);
                 failed = true;
                 break;
             }
             av_frame_unref(in_frame);
+            if (reached_flac_end) break;
         }
         if (failed) break;
     }
@@ -1321,7 +1332,7 @@ ag_result run_transcode_pass(const std::string& input_path,
     }
 
     // Flush decoder.
-    if (!failed) {
+    if (!failed && !reached_flac_end) {
         avcodec_send_packet(dec.ctx, nullptr);
         while (true) {
             const int recv_ret = avcodec_receive_frame(dec.ctx, in_frame);

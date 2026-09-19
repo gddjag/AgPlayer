@@ -8,10 +8,14 @@ Window {
     id: window
     objectName: "equalizerWindow"
     visible: false
-    width: 1080
-    height: 620
-    minimumWidth: 960
-    minimumHeight: 460
+    readonly property rect defaultWindowBounds:
+        WindowController.startupGeometryForAvailableArea(
+            Qt.rect(0, 0, 1080, 620),
+            WindowController.availableGeometryForWindow(window), true)
+    width: defaultWindowBounds.width
+    height: defaultWindowBounds.height
+    minimumWidth: Math.min(760, defaultWindowBounds.width)
+    minimumHeight: Math.min(420, defaultWindowBounds.height)
     flags: Qt.FramelessWindowHint
     color: "transparent"
     title: qsTr("18 段图形均衡器")
@@ -277,7 +281,9 @@ Window {
                 width: parent.width
                 height: parent.height - titleBar.height
                 contentWidth: width
-                contentHeight: body.height
+                // Compact content fills this viewport exactly. Multiplying
+                // its inverse scale back can create a fractional-pixel overflow.
+                contentHeight: window.spacious ? body.height * body.scale : height
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
                 interactive: contentHeight > height
@@ -289,8 +295,14 @@ Window {
 
                 Item {
                     id: body
-                    width: contentScroller.width
-                    height: window.spacious ? 857 : contentScroller.height
+                    // The compact console has a real minimum content budget;
+                    // scale its controls together, retaining native title chrome.
+                    scale: Math.max(0.01, Math.min(1,
+                        contentScroller.width / (window.spacious ? 1662 : 960),
+                        contentScroller.height / (window.spacious ? 857 : 400)))
+                    transformOrigin: Item.TopLeft
+                    width: contentScroller.width / scale
+                    height: window.spacious ? 857 : contentScroller.height / scale
 
                     Rectangle {
                         id: headerPanel
@@ -447,8 +459,7 @@ Window {
                             anchors.fill: parent
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
-                            contentWidth: window.spacious ? Math.max(width, 1510)
-                                                          : Math.max(width, 1028)
+                            contentWidth: width
                             contentHeight: height
                             ScrollBar.horizontal: ScrollBar {
                                 objectName: "equalizerBandScrollBar"
@@ -462,6 +473,10 @@ Window {
 
                                 Row {
                                     id: bandRow
+                                    readonly property real bandWidth:
+                                        Math.min(window.spacious ? 72 : 52,
+                                            Math.max(1, (bandFlickable.width - x * 2
+                                                        - (window.spacious ? 33 : 14)) / 19))
                                     x: window.spacious ? 30 : 26
                                     y: 0
                                     height: bandFlickable.height
@@ -474,7 +489,7 @@ Window {
 
                                         EqualizerBandSlider {
                                             required property int index
-                                            width: window.spacious ? 72 : 52
+                                            width: bandRow.bandWidth
                                             height: bandFlickable.height
                                             bandIndex: index
                                             frequencyLabel: window.bandLabels[index]
@@ -500,7 +515,7 @@ Window {
                                     Item { width: window.spacious ? 16 : 7; height: 1 }
 
                                     EqualizerBandSlider {
-                                        width: window.spacious ? 72 : 52
+                                        width: bandRow.bandWidth
                                         height: bandFlickable.height
                                         bandIndex: -1
                                         frequencyLabel: qsTr("前级")
@@ -854,9 +869,9 @@ Window {
         id: managePopup
         objectName: "equalizerManagePopup"
         x: Math.round((window.width - width) / 2)
-        y: 94
+        y: Math.min(94, Math.max(12, (window.height - height) / 2))
         width: Math.min(640, window.width - 48)
-        height: 390
+        height: Math.min(390, window.height - 24)
         padding: 18
         modal: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside

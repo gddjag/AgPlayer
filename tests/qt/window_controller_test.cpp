@@ -1,4 +1,4 @@
-#include "window_controller.hpp"
+﻿#include "window_controller.hpp"
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -21,6 +21,22 @@ class WindowControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void audioToolsUseCompactHeightWithoutOverridingCustomSizes()
+    {
+        WindowController windows;
+        for (const QSize size : {QSize(1280, 720), QSize(1440, 860), QSize(1920, 1040), QSize(3840, 2100)}) {
+            const QRect area(QPoint(100, 50), size);
+            const QRect requested(0, 0, 1672, 941);
+            const QRect compact = windows.audioToolsStartupGeometryForAvailableArea(requested, area, true);
+            QCOMPARE(compact.height(), qMin(800, size.height() * 72 / 100));
+            QVERIFY(area.contains(compact));
+            const QRect oldDefault = windows.startupGeometryForAvailableArea(requested, area, true);
+            QCOMPARE(windows.audioToolsStartupGeometryForAvailableArea(oldDefault, area, false), compact);
+            const QRect custom(area.topLeft() + QPoint(30, 30), QSize(900, 600).boundedTo(size - QSize(100, 100)));
+            QCOMPARE(windows.audioToolsStartupGeometryForAvailableArea(custom, area, false), custom);
+        }
+    }
+
     void applicationReactivationRestoresMinimizedPlayer()
     {
         QWindow mainWindow;
@@ -45,6 +61,12 @@ private slots:
     void init();
     void glassBackdropContractIsAbsent();
     void defaultListSizeMatchesReference();
+    void startupGeometryUsesComfortableWorkArea_data();
+    void startupGeometryUsesComfortableWorkArea();
+    void startupGeometryPreservesReasonableSavedChoices();
+    void startupClassicGroupFitsTheWorkAreaTogether();
+    void audioToolsStartupFitsWorkAreaAndKeepsUserGeometry_data();
+    void audioToolsStartupFitsWorkAreaAndKeepsUserGeometry();
     void availableGeometryForWindowUsesScreenWorkArea();
     void legacyListWidthsMigrateWithoutOverwritingIndependentSize();
     void dpiChangePreservesLogicalSizeAcrossScales();
@@ -53,6 +75,9 @@ private slots:
     void immersivePresentationHonorsDeferredShellRequestWithoutPersistingTemporaryState();
     void immersivePresentationDeferredRollingShellKeepsIndependentListHidden();
     void immersivePresentationRestoresMiniGeometry();
+    void immersiveWindowGeometryPersistsAcrossControllerLifetime();
+    void immersiveWindowGeometryIgnoresTemporaryWindowStates();
+    void immersiveWindowGeometryRehomesAnOfflineScreen();
     void immersivePresentationRestoresFirstRunIntegratedGeometryWithoutCreatingASetting();
     void immersivePresentationRestoresFirstRunMiniGeometryWithoutCreatingASetting();
     void immersivePresentationFirstRunGeometryPersistsAfterLaterUserMove();
@@ -64,6 +89,8 @@ private slots:
     void listWindowVisibilityCanBeToggled();
     void firstRunClassicListAppearsWhenLibraryBecomesAvailable();
     void rollingShellCannotShowIndependentList();
+    void searchActivatesTheWindowForItsShell_data();
+    void searchActivatesTheWindowForItsShell();
     void listAvailabilityDoesNotOverwriteUserVisibilityRequest();
     void listWindowMagneticSnappingToMainWindowEdges();
     void listWindowExplicitSnapToEachEdge();
@@ -115,6 +142,252 @@ private slots:
     void firstRunGeometryCentersOnPrimaryScreen();
     void closeBehaviorChoosesTrayOrOrderedShutdown();
 };
+
+void WindowControllerTest::searchActivatesTheWindowForItsShell_data()
+{
+    QTest::addColumn<int>("mode");
+    QTest::newRow("classic") << 0;
+    QTest::newRow("integrated") << 1;
+    QTest::newRow("rolling") << 2;
+}
+
+void WindowControllerTest::searchActivatesTheWindowForItsShell()
+{
+    QFETCH(int, mode);
+    QWindow mainWindow;
+    QWindow listWindow;
+    QWindow otherWindow;
+    WindowController windows;
+    windows.setWindows(&mainWindow, nullptr);
+    windows.setMainReady(true);
+    windows.setListWindow(&listWindow);
+    windows.setListWindowPanelAllowed(true);
+    windows.setMainWindowShellMode(mode);
+    windows.showMain();
+    otherWindow.show();
+    otherWindow.requestActivate();
+    QTRY_COMPARE(QGuiApplication::focusWindow(), &otherWindow);
+    QSignalSpy requested(&windows, &WindowController::searchRequested);
+    windows.activateSearch();
+    QCOMPARE(requested.count(), 1);
+    QWindow* expected = mode == 0 ? &listWindow : &mainWindow;
+    QTRY_COMPARE(QGuiApplication::focusWindow(), expected);
+    QCOMPARE(listWindow.isVisible(), mode == 0);
+}
+
+void WindowControllerTest::immersiveWindowGeometryPersistsAcrossControllerLifetime()
+{
+    const QRect available = QGuiApplication::primaryScreen()->availableGeometry();
+    const QRect initial(available.topLeft() + QPoint(15, 20), QSize(300, 200));
+    const QRect chosen(available.topLeft() + QPoint(45, 55), QSize(500, 350));
+    {
+        WindowController windows;
+        QWindow window;
+        window.setGeometry(initial);
+        bool restored = true;
+        QVERIFY(QMetaObject::invokeMethod(&windows, "restoreImmersiveWindowGeometry",
+            Q_RETURN_ARG(bool, restored), Q_ARG(QWindow*, &window)));
+        QVERIFY(!restored);
+        QCOMPARE(window.geometry(), initial);
+        QVERIFY(!QSettings().contains(QStringLiteral("windows/immersiveGeometry")));
+        window.showNormal();
+        QTRY_COMPARE(window.visibility(), QWindow::Windowed);
+        window.setGeometry(chosen);
+        QVERIFY(QMetaObject::invokeMethod(&windows, "persistImmersiveWindowGeometry",
+            Q_ARG(QWindow*, &window)));
+    }
+    QSettings().sync();
+    WindowController reopened;
+    QWindow window;
+    window.setGeometry(initial);
+    bool restored = false;
+    QVERIFY(QMetaObject::invokeMethod(&reopened, "restoreImmersiveWindowGeometry",
+        Q_RETURN_ARG(bool, restored), Q_ARG(QWindow*, &window)));
+    QVERIFY(restored);
+    QCOMPARE(window.geometry(), chosen);
+}
+
+void WindowControllerTest::immersiveWindowGeometryIgnoresTemporaryWindowStates()
+{
+    const QRect chosen(45, 55, 500, 350);
+    QSettings settings;
+    settings.setValue(QStringLiteral("windows/immersiveGeometry"), chosen);
+    WindowController windows;
+    QWindow window;
+    window.setGeometry(10, 20, 800, 500);
+    // Hidden, minimized, maximized and fullscreen geometry are not a normal
+    // user-selected size. Desktop mode is filtered by the QML host guard.
+    const QWindow::Visibility states[] = {QWindow::Hidden, QWindow::Minimized,
+                                         QWindow::Maximized, QWindow::FullScreen};
+    for (auto visibility : states) {
+        window.setVisibility(visibility);
+        QTRY_COMPARE(window.visibility(), visibility);
+        QVERIFY(QMetaObject::invokeMethod(&windows, "persistImmersiveWindowGeometry",
+            Q_ARG(QWindow*, &window)));
+        QCOMPARE(settings.value(QStringLiteral("windows/immersiveGeometry")).toRect(), chosen);
+    }
+}
+
+void WindowControllerTest::immersiveWindowGeometryRehomesAnOfflineScreen()
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("windows/immersiveGeometry"), QRect(40000, 40000, 1200, 800));
+    WindowController windows;
+    QWindow window;
+    window.setMinimumSize(QSize(300, 200));
+    bool restored = false;
+    QVERIFY(QMetaObject::invokeMethod(&windows, "restoreImmersiveWindowGeometry",
+        Q_RETURN_ARG(bool, restored), Q_ARG(QWindow*, &window)));
+    QVERIFY(restored);
+    bool visibleOnScreen = false;
+    for (QScreen* screen : QGuiApplication::screens())
+        visibleOnScreen |= screen->availableGeometry().contains(window.geometry());
+    QVERIFY(visibleOnScreen);
+
+    const QRect current = window.geometry();
+    settings.setValue(QStringLiteral("windows/immersiveGeometry"), QStringLiteral("invalid"));
+    QVERIFY(QMetaObject::invokeMethod(&windows, "restoreImmersiveWindowGeometry",
+        Q_RETURN_ARG(bool, restored), Q_ARG(QWindow*, &window)));
+    QVERIFY(!restored);
+    QCOMPARE(window.geometry(), current);
+}
+
+void WindowControllerTest::startupGeometryUsesComfortableWorkArea_data()
+{
+    QTest::addColumn<QRect>("available");
+    QTest::addColumn<QSize>("expectedBudget");
+    QTest::newRow("1280x720-taskbar") << QRect(0, 0, 1280, 680) << QSize(998, 530);
+    QTest::newRow("1280x800-dock-menu") << QRect(0, 24, 1280, 716) << QSize(998, 558);
+    QTest::newRow("1366x768-taskbar") << QRect(0, 0, 1366, 728) << QSize(1065, 567);
+    QTest::newRow("1440x900-dock-menu") << QRect(0, 24, 1440, 816) << QSize(1123, 636);
+    QTest::newRow("1536x864-taskbar") << QRect(0, 0, 1536, 824) << QSize(1198, 642);
+    QTest::newRow("1920x1080") << QRect(0, 0, 1920, 1040) << QSize(1497, 811);
+    QTest::newRow("2560x1440") << QRect(0, 0, 2560, 1400) << QSize(1996, 1092);
+    QTest::newRow("3840x2160") << QRect(0, 0, 3840, 2120) << QSize(2995, 1653);
+    // The same logical area at 200% scaling must yield the same geometry.
+    QTest::newRow("4k-at-200-percent") << QRect(0, 24, 1920, 1016) << QSize(1497, 792);
+}
+
+void WindowControllerTest::startupGeometryUsesComfortableWorkArea()
+{
+    QFETCH(QRect, available);
+    QFETCH(QSize, expectedBudget);
+    WindowController windows;
+    const QSize defaults[] = {QSize(863, 856), QSize(1386, 832), QSize(1386, 972)};
+    for (const QSize& preferred : defaults) {
+        QRect result;
+        QVERIFY(QMetaObject::invokeMethod(&windows, "startupGeometryForAvailableArea",
+            Q_RETURN_ARG(QRect, result), Q_ARG(QRect, QRect(QPoint(), preferred)),
+            Q_ARG(QRect, available), Q_ARG(bool, true)));
+        QCOMPARE(result.size(), preferred.boundedTo(expectedBudget));
+        QVERIFY(available.adjusted(24, 24, -24, -24).contains(result));
+        QVERIFY(qAbs(result.center().x() - available.center().x()) <= 1);
+        QVERIFY(qAbs(result.center().y() - available.center().y()) <= 1);
+    }
+}
+
+void WindowControllerTest::startupGeometryPreservesReasonableSavedChoices()
+{
+    WindowController windows;
+    const QRect available(0, 24, 1440, 816);
+    const QRect chosen(12, 40, 1330, 760); // Deliberately larger than first-run budget.
+    QRect result;
+    QVERIFY(QMetaObject::invokeMethod(&windows, "startupGeometryForAvailableArea",
+        Q_RETURN_ARG(QRect, result), Q_ARG(QRect, chosen), Q_ARG(QRect, available),
+        Q_ARG(bool, false)));
+    QCOMPARE(result, chosen);
+    QVERIFY(QMetaObject::invokeMethod(&windows, "startupGeometryForAvailableArea",
+        Q_RETURN_ARG(QRect, result), Q_ARG(QRect, QRect(0, 24, 1380, 780)),
+        Q_ARG(QRect, available), Q_ARG(bool, false)));
+    QCOMPARE(result.size(), QSize(1123, 636));
+    QVERIFY(QMetaObject::invokeMethod(&windows, "startupGeometryForAvailableArea",
+        Q_RETURN_ARG(QRect, result), Q_ARG(QRect, QRect(4000, 4000, 2400, 1600)),
+        Q_ARG(QRect, available), Q_ARG(bool, false)));
+    QCOMPARE(result.size(), QSize(1123, 636));
+    QVERIFY(available.adjusted(24, 24, -24, -24).contains(result));
+
+    QRect previousDefault(QPoint(), QSize(1267, 701));
+    previousDefault.moveCenter(available.center());
+    QCOMPARE(windows.startupGeometryForAvailableArea(previousDefault, available, false).size(),
+             QSize(1123, 636));
+    const QRect movedChoice = previousDefault.translated(20, 0);
+    QCOMPARE(windows.startupGeometryForAvailableArea(movedChoice, available, false), movedChoice);
+    QRect resizedChoice = previousDefault;
+    resizedChoice.setWidth(1257);
+    resizedChoice.moveCenter(available.center());
+    QCOMPARE(windows.startupGeometryForAvailableArea(resizedChoice, available, false), resizedChoice);
+
+    const QRect desktopArea(0, 0, 1920, 1040);
+    QRect originalProfessional(QPoint(), QSize(1386, 972));
+    originalProfessional.moveCenter(desktopArea.center());
+    QCOMPARE(windows.startupGeometryForAvailableArea(originalProfessional, desktopArea, false).size(),
+             QSize(1386, 811));
+}
+
+void WindowControllerTest::startupClassicGroupFitsTheWorkAreaTogether()
+{
+    QWindow main;
+    main.setGeometry(0, 0, 863, 266);
+    main.setMinimumSize(QSize(612, 232));
+    QWindow list;
+    list.setGeometry(0, 0, 960, 592);
+    list.setMinimumHeight(320);
+    WindowController windows;
+    windows.setWindows(&main, nullptr);
+    windows.setListWindow(&list);
+    const QRect area = main.screen()->availableGeometry();
+    const QRect group = main.geometry().united(list.geometry());
+    QVERIFY(area.adjusted(24, 24, -24, -24).contains(group));
+    QVERIFY(group.width() <= area.width() * 78 / 100);
+    QVERIFY(group.height() <= area.height() * 78 / 100);
+    QCOMPARE(main.height(), 266);
+    QVERIFY(list.height() >= 320);
+    QCOMPARE(list.y(), main.geometry().bottom() - 1);
+}
+
+void WindowControllerTest::audioToolsStartupFitsWorkAreaAndKeepsUserGeometry_data()
+{
+    QTest::addColumn<QRect>("saved");
+    QTest::addColumn<int>("windowKind");
+    QTest::newRow("tools-first-run") << QRect() << 0;
+    QTest::newRow("tools-old-oversize") << QRect(0, 0, 1672, 941) << 0;
+    QTest::newRow("tools-user-choice") << QRect(60, 100, 600, 500) << 0;
+    QTest::newRow("settings-first-run") << QRect() << 1;
+    QTest::newRow("settings-old-oversize") << QRect(0, 0, 1672, 941) << 1;
+    QTest::newRow("settings-user-choice") << QRect(60, 100, 600, 500) << 1;
+    QTest::newRow("immersive-old-oversize") << QRect(0, 0, 1672, 941) << 2;
+    QTest::newRow("immersive-user-choice") << QRect(60, 100, 600, 500) << 2;
+}
+
+void WindowControllerTest::audioToolsStartupFitsWorkAreaAndKeepsUserGeometry()
+{
+    QFETCH(QRect, saved);
+    QFETCH(int, windowKind);
+    const QString key = windowKind == 0 ? QStringLiteral("windows/audioToolsGeometry")
+                      : windowKind == 1 ? QStringLiteral("windows/settingsGeometry")
+                                        : QStringLiteral("windows/immersiveGeometry");
+    if (saved.isValid()) QSettings().setValue(key, saved);
+    QWindow main;
+    main.setGeometry(40, 40, 640, 360);
+    QWindow tools;
+    tools.setGeometry(0, 0, 1672, 941);
+    WindowController windows;
+    windows.setWindows(&main, nullptr);
+    if (windowKind == 0) windows.setAudioToolsWindow(&tools);
+    else if (windowKind == 1) windows.registerSettingsWindow(&tools);
+    else QVERIFY(windows.restoreImmersiveWindowGeometry(&tools));
+    const QRect area = tools.screen()->availableGeometry();
+    if (QByteArray(QTest::currentDataTag()).endsWith("user-choice")) {
+        QCOMPARE(tools.geometry(), saved);
+    } else {
+        const QSize expected = QSize(1672, 941).boundedTo(
+            QSize(area.width() * 78 / 100, area.height() * 78 / 100));
+        QCOMPARE(tools.size(), windowKind == 0
+            ? QSize(expected.width(), qMin(expected.height(), qMin(800, area.height() * 72 / 100)))
+            : expected);
+        QVERIFY(area.adjusted(24, 24, -24, -24).contains(tools.geometry()));
+    }
+}
 
 void WindowControllerTest::initTestCase()
 {
@@ -180,8 +453,10 @@ void WindowControllerTest::legacyListWidthsMigrateWithoutOverwritingIndependentS
         listWindow.setGeometry(20, 30, 960, 568);
         WindowController windows;
         windows.setListWindow(&listWindow);
-        const int boundedAlignedWidth = qMin(
-            960, listWindow.screen()->availableGeometry().width());
+        const int availableWidth = listWindow.screen()->availableGeometry().width();
+        const int migratedWidth = qMin(960, availableWidth);
+        const int boundedAlignedWidth = migratedWidth > availableWidth * 94 / 100
+            ? qMin(migratedWidth, availableWidth * 78 / 100) : migratedWidth;
         QCOMPARE(listWindow.width(), boundedAlignedWidth);
         QCOMPARE(listWindow.height(), 568);
         QCOMPARE(QSettings().value(QStringLiteral("windows/listGeometryVersion"))
@@ -581,36 +856,39 @@ void WindowControllerTest::switchingBackToClassicRestoresUserSize()
     mainWindow.setGeometry(20, 30, 700, 320);
 
     windows.setMainWindowShellMode(1);
+    const QSize available = mainWindow.screen()->availableGeometry().size();
+    const QSize defaultBudget(available.width() * 78 / 100, available.height() * 78 / 100);
     QCOMPARE(mainWindow.size(), QSize(1386, 832).boundedTo(
-                 mainWindow.screen()->availableGeometry().size()));
-    mainWindow.setGeometry(20, 40, 760, 700);
+                 defaultBudget));
+    // A deliberate non-fullscreen saved size remains independent of defaults.
+    mainWindow.setGeometry(20, 40, 720, 700);
 
     windows.setMainWindowShellMode(0);
     QCOMPARE(mainWindow.size(), QSize(700, 320).boundedTo(
                  mainWindow.screen()->availableGeometry().size()));
 
     windows.setMainWindowShellMode(1);
-    QCOMPARE(mainWindow.geometry(), QRect(20, 40, 760, 700));
+    QCOMPARE(mainWindow.geometry(), QRect(20, 40, 720, 700));
 
     windows.setMainWindowShellMode(2);
     QCOMPARE(mainWindow.size(), QSize(1386, 972).boundedTo(
-                 mainWindow.screen()->availableGeometry().size()));
-    mainWindow.setGeometry(30, 50, 760, 460);
+                 defaultBudget));
+    mainWindow.setGeometry(30, 50, 720, 460);
 
     windows.setMainWindowShellMode(0);
     QCOMPARE(mainWindow.size(), QSize(700, 320).boundedTo(
                  mainWindow.screen()->availableGeometry().size()));
     const QRect referenceClassicGeometry = mainWindow.geometry();
     windows.setMainWindowShellMode(2);
-    QCOMPARE(mainWindow.geometry(), QRect(30, 50, 760, 460));
+    QCOMPARE(mainWindow.geometry(), QRect(30, 50, 720, 460));
     QCOMPARE(QSettings().value(QStringLiteral("windows/mainGeometry")).toRect(),
              referenceClassicGeometry);
     QCOMPARE(QSettings().value(
                  QStringLiteral("windows/integratedMainGeometry")).toRect(),
-             QRect(20, 40, 760, 700));
+             QRect(20, 40, 720, 700));
     QCOMPARE(QSettings().value(
                  QStringLiteral("windows/rollingMainGeometry")).toRect(),
-             QRect(30, 50, 760, 460));
+             QRect(30, 50, 720, 460));
 }
 
 void WindowControllerTest::shellSwitchKeepsSecondaryScreenAndUserSizes()
@@ -712,9 +990,10 @@ void WindowControllerTest::switchingBackWithoutClassicGeometryUsesCompactDefault
 
     windows.setMainWindowShellMode(0);
 
+    const QSize available = mainWindow.screen()->availableGeometry().size();
     QCOMPARE(mainWindow.size(),
              QSize(863, 266).boundedTo(
-                 mainWindow.screen()->availableGeometry().size()));
+                 QSize(available.width() * 78 / 100, available.height() * 78 / 100)));
 }
 
 void WindowControllerTest::updatesExistingWindowObjectsAndFlags()
@@ -1432,7 +1711,10 @@ void WindowControllerTest::firstAttachedListAlignsWithMainWindow()
     QCOMPARE(listWindow.x(), mainWindow.x());
     QCOMPARE(listWindow.y(), mainWindow.geometry().bottom() - 1);
     QCOMPARE(listWindow.width(), mainWindow.width());
-    QCOMPARE(listWindow.height(), 570);
+    const int groupBudget = mainWindow.screen()->availableGeometry().height() * 78 / 100;
+    QCOMPARE(listWindow.height(), qMin(570, groupBudget - mainWindow.height() + 2));
+    QVERIFY(mainWindow.screen()->availableGeometry().contains(
+        mainWindow.geometry().united(listWindow.geometry())));
 }
 
 void WindowControllerTest::dockedGroupDoesNotClampMainMoveAtScreenEdge()

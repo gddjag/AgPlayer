@@ -17,7 +17,8 @@ Control {
     readonly property color neutralActionColor: Theme.elevated
     readonly property color actionBlue: Theme.accent
     readonly property bool compactLayout: width < 1500
-    readonly property real desktopWorkspaceWidth: 1012
+    readonly property real desktopWorkspaceWidth: 1440
+    readonly property bool narrowLayout: width < desktopWorkspaceWidth
 
     component AccentCheckBox: ThemedCheckBox {}
 
@@ -314,17 +315,12 @@ Control {
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: FilenameProcessor.apply(
             page.rules(), page.selectedIndices, conflictBox.currentValue)
-        ColumnLayout {
-            width: Math.min(420, page.width - 2 * Theme.spacing2Xl)
-            spacing: Theme.spacingMd
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: qsTr("覆盖策略会先备份目标文件；重命名成功后仍可安全撤销。是否继续？")
-                color: Theme.primaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: Theme.fontSizeBody
-            }
+        contentItem: Label {
+            wrapMode: Text.Wrap
+            text: qsTr("覆盖策略会先备份目标文件；重命名成功后仍可安全撤销。是否继续？")
+            color: Theme.primaryText
+            font.family: Theme.fontPrimary
+            font.pixelSize: Theme.fontSizeBody
         }
     }
 
@@ -354,9 +350,9 @@ Control {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: Theme.spacingLg
-                anchors.rightMargin: Theme.spacingLg
-                spacing: Theme.spacingMd
+                anchors.leftMargin: page.narrowLayout ? Theme.spacingSm : Theme.spacingLg
+                anchors.rightMargin: page.narrowLayout ? Theme.spacingSm : Theme.spacingLg
+                spacing: page.narrowLayout ? Theme.spacingSm : Theme.spacingMd
             ActionButton {
                 Layout.preferredWidth: 124
                 Layout.preferredHeight: Theme.controlHeightProminent
@@ -402,31 +398,58 @@ Control {
             }
         }
 
+        RowLayout {
+            id: compactTabs
+            objectName: "filenameCompactTabs"
+            property int currentIndex: 0
+            visible: page.narrowLayout
+            Layout.fillWidth: true
+            Layout.preferredHeight: visible ? Theme.controlHeightProminent : 0
+            Layout.maximumHeight: Layout.preferredHeight
+            ThemedTabButton {
+                objectName: "filenameCompactFilesTab"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                text: qsTr("已选择的文件（%1）").arg(FilenameProcessor.fileCount)
+                selected: compactTabs.currentIndex === 0
+                onClicked: compactTabs.currentIndex = 0
+            }
+            ThemedTabButton {
+                objectName: "filenameCompactRulesTab"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                text: qsTr("批量文件名处理")
+                selected: compactTabs.currentIndex === 1
+                onClicked: compactTabs.currentIndex = 1
+            }
+        }
+
         Flickable {
             id: workspaceScroller
             objectName: "filenameWorkspaceScroller"
             Layout.fillWidth: true
             Layout.fillHeight: true
-            contentWidth: Math.max(width, page.desktopWorkspaceWidth)
-            contentHeight: height
+            contentWidth: width
+            contentHeight: page.narrowLayout && compactTabs.currentIndex === 1
+                ? Math.max(height, rulesPanel.height + 300) : height
+            flickableDirection: Flickable.VerticalFlick
             clip: true
             boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.horizontal: ScrollBar {
-                policy: page.compactLayout ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-            }
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
             RowLayout {
                 width: workspaceScroller.contentWidth
-                height: workspaceScroller.height
+                height: workspaceScroller.contentHeight
                 spacing: Theme.spacingXs
 
             Rectangle {
                 id: filePanel
                 objectName: "filenameFilePanel"
-                Layout.fillWidth: false
+                visible: !page.narrowLayout || compactTabs.currentIndex === 0
+                Layout.fillWidth: page.narrowLayout
                 Layout.fillHeight: true
-                Layout.preferredWidth: Math.max(380, Math.round(page.width * 0.3711))
-                Layout.maximumWidth: Layout.preferredWidth
+                Layout.preferredWidth: page.narrowLayout ? 0 : Math.max(380, Math.round(page.width * 0.3711))
+                Layout.maximumWidth: page.narrowLayout ? 10000 : Layout.preferredWidth
                 color: page.panelColor
                 border.color: Theme.border
                 border.width: 1
@@ -584,16 +607,17 @@ Control {
 
             ColumnLayout {
                 id: rulesColumn
+                visible: !page.narrowLayout || compactTabs.currentIndex === 1
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: Math.max(620, page.width * 0.61)
+                Layout.preferredWidth: page.narrowLayout ? 0 : Math.max(620, page.width * 0.61)
                 spacing: 6
 
                 Rectangle {
                     id: rulesPanel
                     objectName: "filenameRulesPanel"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 259
+                    Layout.preferredHeight: page.narrowLayout ? 468 : 259
                     color: page.panelColor
                     border.color: Theme.border
                     border.width: 1
@@ -620,14 +644,16 @@ Control {
                             }
                         }
                         Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.border }
-                        RowLayout {
+                        GridLayout {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.leftMargin: 22
                             Layout.rightMargin: 12
                             Layout.topMargin: 8
                             Layout.bottomMargin: 12
-                            spacing: 12
+                            columns: page.narrowLayout ? 2 : 7
+                            rowSpacing: Theme.spacingMd
+                            columnSpacing: 12
 
                             ColumnLayout {
                                 Layout.preferredWidth: 220
@@ -678,7 +704,7 @@ Control {
                                 }
                             }
 
-                            Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
+                            Rectangle { visible: !page.narrowLayout; Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
 
                             ColumnLayout {
                                 Layout.preferredWidth: 220
@@ -729,7 +755,7 @@ Control {
                                 }
                             }
 
-                            Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
+                            Rectangle { visible: !page.narrowLayout; Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
 
                             ColumnLayout {
                                 Layout.fillWidth: true
@@ -793,7 +819,7 @@ Control {
                                 }
                             }
 
-                            Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
+                            Rectangle { visible: !page.narrowLayout; Layout.preferredWidth: 1; Layout.fillHeight: true; color: Theme.border }
 
                             GridLayout {
                                 Layout.preferredWidth: 280
@@ -1082,7 +1108,7 @@ Control {
             id: bottomBar
             objectName: "filenameBottomBar"
             Layout.fillWidth: true
-            Layout.preferredHeight: page.compactLayout ? 112 : 124
+            Layout.preferredHeight: page.narrowLayout ? 80 : page.compactLayout ? 112 : 124
             color: page.panelColor
             border.color: Theme.border
             border.width: 1
@@ -1090,7 +1116,7 @@ Control {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.topMargin: 32
+                anchors.topMargin: page.narrowLayout ? Theme.spacingSm : 32
                 anchors.bottomMargin: Theme.spacingSm
                 anchors.leftMargin: page.compactLayout ? Theme.spacingMd
                                                        : Theme.spacingLg
@@ -1123,6 +1149,7 @@ Control {
                         }
                         Item { Layout.fillWidth: true }
                         StatusGlyph {
+                            visible: !page.narrowLayout
                             status: 0
                             markSize: page.compactLayout ? 24 : 30
                             Layout.preferredWidth: markSize + 4
@@ -1155,6 +1182,7 @@ Control {
                         }
                         Item { Layout.fillWidth: true }
                         StatusGlyph {
+                            visible: !page.narrowLayout
                             status: 1
                             markSize: page.compactLayout ? 24 : 30
                             Layout.preferredWidth: markSize + 4
@@ -1183,6 +1211,7 @@ Control {
                         }
                         Item { Layout.fillWidth: true }
                         ThemedIcon {
+                            visible: !page.narrowLayout
                             source: Theme.icon("restore-line")
                             tint: Theme.cyan
                             sourceSize: Qt.size(page.compactLayout ? 28 : 32,
@@ -1250,6 +1279,7 @@ Control {
                 }
             }
             Label {
+                visible: !page.narrowLayout
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.leftMargin: 18

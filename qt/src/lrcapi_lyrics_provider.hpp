@@ -20,9 +20,9 @@ public:
     void cancel(quint64 requestId) override;
 
 private:
-    void request(quint64 requestId, const Track& track, bool exact);
+    void request(quint64 requestId, const Track& track);
     void consumeReply(QNetworkReply* reply);
-    void handleReply(QNetworkReply* reply, bool exact, const Track& track);
+    void handleReply(QNetworkReply* reply);
 
     QNetworkAccessManager* manager_ = nullptr;
     QHash<quint64, QNetworkReply*> replies_;

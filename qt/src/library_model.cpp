@@ -173,7 +173,9 @@ QVariant LibraryModel::data(const QModelIndex& index, int role) const
     case PathRole:
         return track.path;
     case TitleRole:
-        return track.title;
+        // Display fallback only: never write a filename into the metadata tag.
+        return track.title.trimmed().isEmpty()
+            ? QFileInfo(track.path).completeBaseName() : track.title;
     case ArtistRole:
         return track.artist;
     case AlbumRole:
@@ -707,12 +709,15 @@ int LibraryModel::reorderTracks(const QStringList& trackIds,
             break;
         }
     }
-    for (int index = 0; index < selected.size(); ++index) {
-        remaining.insert(destination + index, selected.at(index));
-    }
+    QList<TrackRecord> reordered;
+    reordered.reserve(tracks_.size());
+    for (int row = 0; row < destination; ++row) reordered.append(remaining.at(row));
+    reordered.append(selected);
+    for (int row = destination; row < remaining.size(); ++row)
+        reordered.append(remaining.at(row));
 
     beginResetModel();
-    tracks_ = std::move(remaining);
+    tracks_ = std::move(reordered);
     pathRows_.clear();
     trackRows_.clear();
     for (int row = 0; row < tracks_.size(); ++row) {
@@ -991,7 +996,7 @@ bool LibraryModel::updateTrackPath(const QString& trackId, const QString& newPat
                                        : QStringLiteral("missing");
     const QModelIndex changed = index(row, 0);
     emit dataChanged(changed, changed,
-                     {PathRole, AvailableRole, FileStatusRole,
+                     {PathRole, TitleRole, AvailableRole, FileStatusRole,
                       MetadataProbeAttemptedRole});
     emit flushRequested();
     return true;
@@ -1035,7 +1040,7 @@ bool LibraryModel::updateTrackPaths(const QHash<QString, QString>& paths)
         pathRows_.insert(key, row);
         const QModelIndex changed = index(row, 0);
         emit dataChanged(changed, changed,
-                         {PathRole, AvailableRole, FileStatusRole,
+                         {PathRole, TitleRole, AvailableRole, FileStatusRole,
                           MetadataProbeAttemptedRole});
     }
     emit flushRequested();

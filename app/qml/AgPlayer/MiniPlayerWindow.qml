@@ -9,8 +9,8 @@ Window {
     visible: false
     width: 588
     height: 186
-    minimumWidth: 588
-    minimumHeight: 186
+    minimumWidth: 480
+    minimumHeight: 160
     maximumHeight: 186
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
@@ -74,20 +74,9 @@ Window {
                         onCloseRequested: windows.requestClose()
                     }
 
-                    Image {
-                        source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                        sourceSize.width: 18
-                        sourceSize.height: 18
-                        Layout.preferredWidth: 18
-                        Layout.preferredHeight: 18
-                        fillMode: Image.PreserveAspectFit
-                    }
-                    Text {
-                        text: "AgPlayer"
-                        color: Theme.primaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: Theme.fontSizeCaption
-                        font.weight: Font.Medium
+                    Item {
+                        visible: Qt.platform.os !== "osx"
+                        Layout.preferredWidth: miniBrand.implicitWidth
                     }
                     Item { Layout.fillWidth: true }
 
@@ -160,6 +149,30 @@ Window {
                     }
                 }
 
+                RowLayout {
+                    id: miniBrand
+                    objectName: "miniTitleBrand"
+                    x: Qt.platform.os === "osx" ? (titleArea.width - width) / 2 : 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 1
+
+                    Image {
+                        source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                        sourceSize.width: 18
+                        sourceSize.height: 18
+                        Layout.preferredWidth: 18
+                        Layout.preferredHeight: 18
+                        fillMode: Image.PreserveAspectFit
+                    }
+                    Text {
+                        text: "AgPlayer"
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeCaption
+                        font.weight: Font.Medium
+                    }
+                }
+
                 DragHandler {
                     target: null
                     acceptedButtons: Qt.LeftButton
@@ -167,15 +180,24 @@ Window {
                 }
             }
 
-            MiniPlayerControls {
-                id: controls
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                playback: miniWindow.playback
-                windows: miniWindow.windows
-                waveformSession: miniWindow.waveformSession
-                waveformActive: miniWindow.visible
-                                && miniWindow.visibility !== Window.Minimized
+
+                MiniPlayerControls {
+                    id: controls
+                    readonly property real fitScale:
+                        Math.max(0.01, Math.min(1, parent.width / 584, parent.height / 150))
+                    width: parent.width / fitScale
+                    height: parent.height / fitScale
+                    scale: fitScale
+                    transformOrigin: Item.TopLeft
+                    playback: miniWindow.playback
+                    windows: miniWindow.windows
+                    waveformSession: miniWindow.waveformSession
+                    waveformActive: miniWindow.visible
+                                    && miniWindow.visibility !== Window.Minimized
+                }
             }
         }
     }

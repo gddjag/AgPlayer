@@ -272,8 +272,8 @@ TestCase {
             return shell("classicPlayerShell") === null
                    && shell("integratedPlayerShell") === null
         }, 1500)
-        compare(mainWindow.minimumWidth, 1180)
-        compare(mainWindow.minimumHeight, 720)
+        compare(mainWindow.minimumWidth, Math.min(1180, mainWindow.defaultWindowBounds.width))
+        compare(mainWindow.minimumHeight, Math.min(720, mainWindow.defaultWindowBounds.height))
     }
 
     function test_rolling_list_ignores_classic_thumbnail_switch() {
@@ -335,7 +335,7 @@ TestCase {
         compare(target.verticalAlignment, TextInput.AlignVCenter)
     }
 
-    function test_rolling_wrapped_controls_center_without_overflow() {
+    function test_rolling_controls_shrink_on_one_row_without_overflow() {
         var rolling = rollingWithFakes()
         var bottom = findChild(rolling, "rollingBottomBar")
         var flow = findChild(rolling, "rollingTempoControls")
@@ -345,10 +345,14 @@ TestCase {
             wait(0)
             var top = Number.POSITIVE_INFINITY
             var end = 0
+            var firstY = -1
             for (var i = 0; i < flow.children.length; ++i) {
                 var group = flow.children[i]
                 if (!group.visible || group.height <= 1) continue
                 var pos = group.mapToItem(bottom, 0, 0)
+                if (firstY < 0) firstY = pos.y
+                verify(Math.abs(pos.y - firstY) <= 1,
+                       "Narrow professional controls must remain on a single row")
                 var contentTop = Number.POSITIVE_INFINITY
                 var contentEnd = 0
                 for (var child of group.children) {
@@ -360,13 +364,25 @@ TestCase {
                                 - group.height / 2) <= 1,
                        "visible group contents, not only their container, must center vertically")
                 top = Math.min(top, pos.y)
-                end = Math.max(end, pos.y + group.height)
-                verify(pos.x >= 0 && pos.x + group.width <= bottom.width + 1)
-                verify(pos.y >= 0 && pos.y + group.height <= bottom.height + 1)
+                var corner = group.mapToItem(bottom, group.width, group.height)
+                end = Math.max(end, corner.y)
+                verify(pos.x >= 0 && corner.x <= bottom.width + 1)
+                verify(pos.y >= 0 && corner.y <= bottom.height + 1)
             }
             verify(Math.abs(top - (bottom.height - end)) <= 1,
-                   "all wrapped rows must have balanced top and bottom clearance")
+                   "the single control row must stay vertically centered")
         }
+        mainWindow.width = 1180
+        wait(0)
+        var scaledRow = findChild(rolling, "rollingControlRow")
+        verify(scaledRow && scaledRow.scale < 1,
+               "The whole control strip must adapt to the narrow window")
+        var speedPlus = findChild(rolling, "rollingSpeedPlus")
+        var beforeSpeed = fakePlayback.speedRatio
+        mouseClick(speedPlus, speedPlus.width / 2, speedPlus.height / 2)
+        compare(fakePlayback.speedRatio, beforeSpeed + 0.05)
+        if (visualFixtureOutput)
+            grabImage(bottom).save(visualFixtureOutput + "-professional-controls.png")
     }
 
     function test_classic_favorite_icon_is_compact() {
@@ -1487,11 +1503,11 @@ TestCase {
                "rolling transport belongs on the left side")
         var firstGroup = findChild(rolling, "rollingBeatGridSwitch").parent
         var lastGroup = findChild(rolling, "rollingShellActions")
-        verify(lastGroup.mapToItem(bottom, 0, 0).y
-               >= firstGroup.mapToItem(bottom, 0, firstGroup.height).y,
-                "narrow rolling controls wrap to a second row instead of clipping")
+        verify(Math.abs(lastGroup.mapToItem(bottom, 0, 0).y
+               - firstGroup.mapToItem(bottom, 0, 0).y) <= 1,
+                "narrow rolling controls scale together on the same row")
         var rightControls = findChild(rolling, "rollingTempoControls")
-        verify(rightControls && rightControls.height > 64)
+        verify(rightControls && rightControls.height <= 64)
         var boundedControlNames = [
             "rollingBeatGridSwitch", "rollingBeatGridGrouping",
             "rollingViewportBeats", "rollingZoomMinus", "rollingZoomPlus",

@@ -18,6 +18,9 @@ struct AudioFileAnalysis final {
     std::int64_t bit_rate{};
     std::vector<std::vector<float>> channel_peaks;
     std::vector<float> visual_mix_peaks;
+    // Mean channel energy per source bucket; avoids stereo phase cancellation.
+    std::vector<float> mean_square;
+    std::vector<float> mean_absolute;
     std::string message;
 };
 

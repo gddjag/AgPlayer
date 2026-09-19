@@ -519,6 +519,27 @@ TestCase {
         }
     }
 
+    function test_window_controls_only_reveal_near_top_right() {
+        var panel = windowedPresetPanel()
+        var host = panel.Window.window
+        host.requestActivate()
+        tryCompare(host, "active", true)
+        var surface = host.surfaceItem
+        var controls = findChild(surface, "immersiveWindowControls")
+        verify(controls)
+        mouseMove(surface, surface.width / 2, surface.height / 2)
+        tryCompare(controls, "opacity", 0)
+        compare(controls.enabled, false)
+        mouseMove(surface, surface.width - 60, 25)
+        tryCompare(controls, "opacity", 1)
+        compare(controls.enabled, true)
+        verify(findChild(controls, "immersiveReturnToWindowButton").visible)
+        verify(findChild(controls, "immersiveMinimizeButton").visible)
+        verify(findChild(controls, "immersiveFullscreenButton").visible)
+        mouseMove(surface, surface.width / 2, surface.height / 2)
+        tryCompare(controls, "opacity", 0)
+    }
+
     function test_shared_actions_reuse_one_state_source() {
         var mainActions = findChild(mainWindow, "experienceActions")
         var miniControls = findChild(miniWindow, "miniPlayerControls")
@@ -1112,6 +1133,55 @@ TestCase {
         compare(moveRegion.enabled, false)
     }
 
+    function test_recreated_immersive_window_restores_normal_geometry_data() {
+        return [
+            { tag: "windowed", hostMode: PlayerExperienceController.Windowed },
+            { tag: "fullscreen", hostMode: PlayerExperienceController.Fullscreen },
+            { tag: "desktop", hostMode: PlayerExperienceController.Desktop }
+        ]
+    }
+
+    function test_recreated_immersive_window_restores_normal_geometry(data) {
+        mainWindow.immersiveRenderingEnabled = false
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
+        var coordinator = findChild(mainWindow, "immersiveCoordinator")
+        tryCompare(coordinator, "attachedHostMode", PlayerExperienceController.Windowed, 2500)
+        var original = coordinator.fullscreenWindow
+        verify(original)
+        var area = WindowController.availableGeometryForWindow(original)
+        // Keep the user's chosen rectangle below the explicit 94% oversize
+        // migration threshold, but larger than the 78% first-run budget.
+        original.width = Math.min(Math.max(1120, original.minimumWidth), Math.floor(area.width * 0.90))
+        original.height = Math.min(Math.max(720, original.minimumHeight), Math.floor(area.height * 0.90))
+        original.x = area.x + Math.min(47, area.width - original.width)
+        original.y = area.y + Math.min(53, area.height - original.height)
+        var chosen = Qt.rect(original.x, original.y, original.width, original.height)
+
+        PlayerExperienceController.hostMode = data.hostMode
+        tryCompare(coordinator, "attachedHostMode", data.hostMode, 2500)
+        PlayerExperienceController.immersiveMode = PlayerExperienceController.Off
+        tryCompare(coordinator, "handoffPhase", 0, 5000)
+        tryCompare(coordinator, "attachedHostMode", -1, 5000)
+        // Recreate the actual QML window: an in-memory windowedGeometry cache
+        // alone must not satisfy restart persistence.
+        coordinator.surface = null
+        coordinator.fullscreenWindow = null
+        original.destroy()
+        wait(50)
+
+        PlayerExperienceController.immersiveMode = PlayerExperienceController.TerrainReactor
+        tryCompare(coordinator, "attachedHostMode", data.hostMode, 2500)
+        PlayerExperienceController.hostMode = PlayerExperienceController.Windowed
+        tryCompare(coordinator, "attachedHostMode", PlayerExperienceController.Windowed, 2500)
+        var reopened = coordinator.fullscreenWindow
+        verify(reopened)
+        compare(reopened.x, chosen.x)
+        compare(reopened.y, chosen.y)
+        compare(reopened.width, chosen.width)
+        compare(reopened.height, chosen.height)
+    }
+
     function test_desktop_and_fullscreen_roundtrip_preserves_windowed_geometry() {
         PlayerExperienceController.immersiveMode =
                 PlayerExperienceController.TerrainReactor
@@ -1122,10 +1192,11 @@ TestCase {
         var immersiveWindow = coordinator.fullscreenWindow
         verify(immersiveWindow)
 
-        immersiveWindow.x = 47
-        immersiveWindow.y = 53
-        immersiveWindow.width = 1120
-        immersiveWindow.height = 720
+        var area = WindowController.availableGeometryForWindow(immersiveWindow)
+        immersiveWindow.width = Math.min(Math.max(1120, immersiveWindow.minimumWidth), Math.floor(area.width * 0.90))
+        immersiveWindow.height = Math.min(Math.max(720, immersiveWindow.minimumHeight), Math.floor(area.height * 0.90))
+        immersiveWindow.x = area.x + Math.min(47, area.width - immersiveWindow.width)
+        immersiveWindow.y = area.y + Math.min(53, area.height - immersiveWindow.height)
         var windowed = Qt.rect(immersiveWindow.x, immersiveWindow.y,
                                immersiveWindow.width, immersiveWindow.height)
 

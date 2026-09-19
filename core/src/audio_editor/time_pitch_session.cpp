@@ -1,13 +1,10 @@
 #include "time_pitch_session.hpp"
 
-#include "audio_file_analyzer.hpp"
 #include "document_renderer.hpp"
-#include "../pitch_shifter.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
-#include <system_error>
+#include <utility>
 
 namespace agplayer::editor {
 namespace {
@@ -15,15 +12,6 @@ namespace {
 bool valid_bpm(const double value) noexcept
 {
     return std::isfinite(value) && value >= 20.0 && value <= 400.0;
-}
-
-std::filesystem::path render_path_for(const std::filesystem::path& output)
-{
-    const auto ticks = std::chrono::steady_clock::now()
-        .time_since_epoch().count();
-    return output.parent_path() / std::filesystem::u8path(
-        output.filename().u8string() + ".agplayer-time-pitch-"
-        + std::to_string(ticks) + ".wav");
 }
 
 } // namespace
@@ -92,62 +80,16 @@ TimePitchResult TimePitchSession::process(
     const std::atomic_bool* cancelled,
     std::function<void(float)> progress) const
 {
-    if (snapshot.events.empty() || output.empty()) {
-        return {false, "invalid time/pitch request", {}};
-    }
-    const auto rendered_path = render_path_for(output);
-    const auto cleanup = [&] {
-        std::error_code ignored;
-        std::filesystem::remove(rendered_path, ignored);
-        if (cancelled != nullptr && cancelled->load()) {
-            std::filesystem::remove(output, ignored);
-        }
-    };
-    const RenderResult rendered = DocumentRenderer{}.renderFloatWav(
-        snapshot, range, rendered_path, cancelled,
-        progress ? [progress](const float value) { progress(value * 0.30F); }
-                 : std::function<void(float)>{});
-    if (!rendered.success) {
-        cleanup();
-        return {false, rendered.message, {}};
-    }
-
-    const double speed_ratio = speed_percent_ / 100.0;
-    const int speed_pitch = keep_pitch_ ? 0 : static_cast<int>(std::lround(
-        1'200.0 * std::log2(speed_ratio)));
-    const int effective_pitch = std::clamp(
-        pitch_cents_ + speed_pitch, -1'200, 1'200);
-    const bool keep_tempo = keep_pitch_;
-    const double pitch_rate = std::pow(2.0, effective_pitch / 1'200.0);
-
-    agplayer::PitchShiftConfig config;
-    config.output_path = output.u8string();
-    config.output_codec_name = "pcm_f32le";
-    config.output_sample_rate = static_cast<int>(rendered.sample_rate);
-    config.pitch_cents = effective_pitch;
-    config.keep_tempo = keep_tempo;
-    config.tempo_ratio = keep_tempo ? speed_ratio : speed_ratio / pitch_rate;
-    config.vocal_protection = formant_preservation_;
-    std::string error;
-    const ag_result status = agplayer::pitch_shift(
-        rendered_path.u8string(), config, cancelled,
-        progress ? [progress](const float value) {
-            progress(0.30F + value * 0.70F);
-        } : std::function<void(float)>{}, error);
-    std::error_code ignored;
-    std::filesystem::remove(rendered_path, ignored);
-    if (status != AG_OK) {
-        std::filesystem::remove(output, ignored);
-        return {false, error.empty() ? "time/pitch processing failed" : error, {}};
-    }
-
-    const AudioFileAnalysis analysis = AudioFileAnalyzer::analyze(output, 64);
-    if (!analysis.success) {
-        std::filesystem::remove(output, ignored);
-        return {false, analysis.message, {}};
-    }
-    if (progress) progress(1.0F);
-    return {true, {}, analysis.source};
+    EditorPlaybackParameters parameters;
+    parameters.speed_ratio = speed_percent_ / 100.0;
+    parameters.keep_pitch = keep_pitch_;
+    parameters.pitch_cents = pitch_cents_;
+    parameters.formant_preservation = formant_preservation_;
+    const auto rendered = DocumentRenderer{}.renderFloatWav(
+        snapshot, range, output, cancelled, std::move(progress), parameters);
+    if (!rendered.success) return {false, rendered.message, {}};
+    return {true, {}, AudioSource{output, rendered.sample_rate,
+        rendered.channels, rendered.frames}};
 }
 
 } // namespace agplayer::editor

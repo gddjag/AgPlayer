@@ -211,7 +211,6 @@ private:
     struct RenderSnapshot {
         agplayer::terrain::AudioFeatures features;
         agplayer::VisualAudioFrameAnalyzer::Snapshot pcm;
-        agplayer::VisualAudioFrameAnalyzer::Batch pcmBatch;
         bool referenceAudio = false;
         quint64 visualResetRevision = 0;
         agplayer::terrain::RenderStyleSnapshot style;
@@ -257,11 +256,6 @@ private:
         agplayer::VisualAudioFrameAnalyzer& analyzer,
         agplayer::VisualTerrainResponse& response, const RenderSnapshot& snapshot,
         double wallDelta, agplayer::VisualSnareTrigger& snare);
-    static ReferenceAudioFrame advanceReferenceAudioFrames(
-        agplayer::VisualAudioFrameAnalyzer& analyzer,
-        agplayer::VisualTerrainResponse& response, const RenderSnapshot& snapshot,
-        double wallDelta, agplayer::VisualSnareTrigger& snare,
-        std::uint64_t& consumedSequence);
     static bool hasVisualPcmDiscontinuity(
         const agplayer::VisualAudioFrameAnalyzer::Snapshot& previous,
         const agplayer::VisualAudioFrameAnalyzer::Snapshot& next);
@@ -305,6 +299,7 @@ private:
     QMetaObject::Connection sourceDestroyedConnection_;
     QVector<QMetaObject::Connection> styleConnections_;
     QMetaObject::Connection windowVisibilityConnection_;
+    QMetaObject::Connection windowScreenConnection_;
     QPointer<QQuickWindow> trackedWindow_;
     agplayer::terrain::AudioFeatures liveFeatures_;
     quint64 visualResetRevision_ = 0;

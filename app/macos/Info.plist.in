@@ -13,6 +13,7 @@
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.music</string>
     <key>NSHighResolutionCapable</key><true/>
+    <key>NSMicrophoneUsageDescription</key><string>AgPlayer 需要访问麦克风，将您的录音添加到音频编辑轨道。</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>CFBundleDevelopmentRegion</key><string>zh_CN</string>
     <key>CFBundleLocalizations</key><array><string>zh_CN</string><string>en</string></array>

@@ -340,13 +340,31 @@ Item {
         }
     }
 
+    Item {
+        anchors.top: parent.top
+        anchors.right: parent.right
+        width: windowControls.width + 32
+        height: windowControls.height + 28
+        z: 30
+        HoverHandler {
+            id: windowControlsHover
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        }
+    }
+
     Row {
+        id: windowControls
+        objectName: "immersiveWindowControls"
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.rightMargin: 16
         anchors.topMargin: 14
         spacing: 8
         z: 20
+        opacity: windowControlsHover.hovered ? 1 : 0
+        visible: opacity > 0
+        enabled: windowControlsHover.hovered
+        Behavior on opacity { NumberAnimation { duration: 160 } }
 
         ToolButton {
             objectName: "immersiveReturnToWindowButton"

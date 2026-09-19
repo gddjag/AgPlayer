@@ -12,7 +12,7 @@
 namespace agplayer::lossless {
 
 inline constexpr std::string_view kAnalysisSchemaVersion = "1";
-inline constexpr std::string_view kAlgorithmVersion = "lossless-1.13";
+inline constexpr std::string_view kAlgorithmVersion = "lossless-1.17";
 inline constexpr std::string_view kParameterVersion = "lossless-params-16";
 inline constexpr std::string_view kInferenceDisclaimer =
     u8"\u7ed3\u679c\u4e3a\u4fe1\u53f7\u7279\u5f81\u63a8\u65ad\uff0c"
@@ -29,6 +29,7 @@ enum class Verdict {
     Inconclusive,
     AnalysisFailed,
     Cancelled,
+    KnownLossyEncoding,
 };
 
 [[nodiscard]] constexpr std::string_view verdictCode(const Verdict verdict) noexcept
@@ -44,6 +45,7 @@ enum class Verdict {
     case Verdict::Inconclusive: return "inconclusive";
     case Verdict::AnalysisFailed: return "analysis_failed";
     case Verdict::Cancelled: return "cancelled";
+    case Verdict::KnownLossyEncoding: return "known_lossy_encoding";
     }
     return "analysis_failed";
 }

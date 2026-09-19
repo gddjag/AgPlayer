@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio_document.hpp"
+#include "editor_playback_stream.hpp"
 
 #include <atomic>
 #include <filesystem>
@@ -25,7 +26,8 @@ public:
         const std::optional<Selection>& range,
         const std::filesystem::path& output_path,
         const std::atomic_bool* cancelled = nullptr,
-        std::function<void(float)> progress = {}) const;
+        std::function<void(float)> progress = {},
+        const EditorPlaybackParameters& parameters = {}) const;
 };
 
 } // namespace agplayer::editor

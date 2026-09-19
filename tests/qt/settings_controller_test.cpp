@@ -3,15 +3,18 @@
 #include "file_association_controller.hpp"
 #include "frequency_color_waveform_settings.hpp"
 #include "frequency_color_mix.hpp"
+#include "cache_janitor.hpp"
 
 #include <QByteArray>
 #include <QColor>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileDevice>
 #include <QKeySequence>
+#include <QProcess>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QScopeGuard>
@@ -90,6 +93,15 @@ private slots:
     void appearanceDefaultResetDoesNotTouchMediaSettingsOutsideEdit();
     void retiresLegacySmartPlaylists();
     void autoCleanCacheRemovesOldestFilesWhenOverLimit();
+    void clearingCachePreservesUserFiles();
+    void cacheOwnershipAndCoalescing();
+    void cacheRejectsLinkedStorage();
+    void coverCacheChecksContentAndPreservesLyrics();
+    void clearingCoversUsesProgramCacheNotSelectedDirectory();
+    void cacheActionsReportCompletionAndEmpty_data();
+    void cacheActionsReportCompletionAndEmpty();
+    void cacheActionsReportUnsafeStorage();
+    void cacheActionsReportLockedFileFailure();
     void supportsOnlyChineseAndEnglish();
     void editSessionCanCommitOrCancel();
     void rebindFileAssociationsEnablesRegistrationDuringEdit();
@@ -1294,12 +1306,11 @@ void SettingsControllerTest::autoCleanCacheRemovesOldestFilesWhenOverLimit()
     SettingsController settings;
     QSignalSpy trimSpy(&settings, &SettingsController::cacheTrimReport);
 
-    const QString cacheDir = QDir::tempPath()
-                             + QStringLiteral("/AgPlayer_cache_janitor_test");
-    QDir(cacheDir).removeRecursively();
-    QVERIFY(QDir().mkpath(cacheDir));
-
-    settings.setCacheDirectory(cacheDir);
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    settings.setCacheDirectory(temporary.path());
+    const QString cacheDir = CacheJanitor::storageDirectory(temporary.path(), true);
+    QVERIFY(!cacheDir.isEmpty());
     settings.setAutoCleanCache(true);
     settings.setCacheSizeLimitMB(100);
 
@@ -1314,22 +1325,282 @@ void SettingsControllerTest::autoCleanCacheRemovesOldestFilesWhenOverLimit()
         file.close();
     };
 
-    createFile(QStringLiteral("old.agwf"), 5);
-    createFile(QStringLiteral("mid.agwf"), 2);
-    createFile(QStringLiteral("new.agwf"), 0);
+    createFile(QStringLiteral("1111111111111111-average.agwf"), 5);
+    createFile(QStringLiteral("2222222222222222-average.agwf"), 2);
+    createFile(QStringLiteral("3333333333333333-average.agwf"), 0);
 
     settings.trimCacheNow();
 
-    QVERIFY(QFile::exists(cacheDir + QStringLiteral("/new.agwf")));
-    QVERIFY(QFile::exists(cacheDir + QStringLiteral("/mid.agwf")));
-    QVERIFY(!QFile::exists(cacheDir + QStringLiteral("/old.agwf")));
-
-    QCOMPARE(trimSpy.count(), 1);
+    QTRY_COMPARE(trimSpy.count(), 1);
+    QVERIFY(QFile::exists(cacheDir + QStringLiteral("/3333333333333333-average.agwf")));
+    QVERIFY(QFile::exists(cacheDir + QStringLiteral("/2222222222222222-average.agwf")));
+    QVERIFY(!QFile::exists(cacheDir + QStringLiteral("/1111111111111111-average.agwf")));
     const QList<QVariant> args = trimSpy.takeFirst();
     QVERIFY(args.at(0).toLongLong() >= 45LL * 1024 * 1024);
     QCOMPARE(args.at(1).toInt(), 1);
 
-    QDir(cacheDir).removeRecursively();
+}
+
+void SettingsControllerTest::clearingCachePreservesUserFiles()
+{
+    QTemporaryDir directory(QDir::tempPath() + QStringLiteral("/AgPlayer-user-files-XXXXXX"));
+    QVERIFY(directory.isValid());
+    const QString note = directory.filePath(QStringLiteral("my-music-project.txt"));
+    QFile file(note);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write("user data"), 9);
+    file.close();
+    QVERIFY(QDir().mkpath(directory.filePath(QStringLiteral("waveforms"))));
+    const QString nested = directory.filePath(QStringLiteral("waveforms/personal-note.txt"));
+    QVERIFY(QFile::copy(note, nested));
+    SettingsController settings;
+    settings.setAutoCleanCache(false);
+    settings.setCacheDirectory(directory.path());
+    settings.clearWaveformCache();
+    settings.clearAllCache();
+    QVERIFY2(QFile::exists(note), "A user-selected cache parent is not owned by AgPlayer");
+    QVERIFY(QFile::exists(nested));
+}
+
+void SettingsControllerTest::cacheOwnershipAndCoalescing()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString owned = CacheJanitor::storageDirectory(temporary.path(), true);
+    QVERIFY(!owned.isEmpty());
+    QVERIFY(owned.startsWith(temporary.path() + QLatin1Char('/')));
+    const QString waveform = owned + QStringLiteral("/0123456789abcdef-average.agwf");
+    QFile cache(waveform);
+    QVERIFY(cache.open(QIODevice::WriteOnly));
+    QVERIFY(cache.resize(2 * 1024 * 1024));
+    cache.close();
+    const QString note = owned + QStringLiteral("/personal-note.txt");
+    QVERIFY(QFile::copy(waveform, note));
+    SettingsController settings;
+    settings.setAutoCleanCache(false);
+    settings.setCacheDirectory(temporary.path());
+    QSignalSpy finished(&settings.cacheWatcher_, &QFutureWatcherBase::finished);
+    for (int i = 0; i < 100; ++i) settings.onWaveformCacheSaved();
+    QCOMPARE(finished.count(), 0); // no filesystem scan on the caller's stack
+    QTRY_COMPARE(settings.currentCacheSizeMB(), 2);
+    QCOMPARE(finished.count(), 1);
+    settings.clearAllCache();
+    QVERIFY(!QFile::exists(waveform));
+    QVERIFY(QFile::exists(note));
+    QTRY_COMPARE(settings.currentCacheSizeMB(), 0);
+    QFile marker(owned + QStringLiteral("/.owner"));
+    QVERIFY(marker.remove());
+    QVERIFY(CacheJanitor::storageDirectory(temporary.path(), true).isEmpty());
+    settings.clearAllCache();
+    QVERIFY(QFile::exists(note));
+}
+
+void SettingsControllerTest::coverCacheChecksContentAndPreservesLyrics()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    QVERIFY(QDir().mkpath(temporary.filePath(QStringLiteral("covers"))));
+    QVERIFY(QDir().mkpath(temporary.filePath(QStringLiteral("lyrics"))));
+    const QByteArray payload("generated cover content");
+    const QString digest = QString::fromLatin1(QCryptographicHash::hash(
+        payload, QCryptographicHash::Sha256).toHex());
+    const QString cover = temporary.filePath(QStringLiteral("covers/") + digest + QStringLiteral(".jpg"));
+    const QString unrelated = temporary.filePath(QStringLiteral("covers/my-picture.jpg"));
+    const QString wrongHash = temporary.filePath(QStringLiteral("covers/") + QString(64, QLatin1Char('0')) + QStringLiteral(".png"));
+    const QString lyrics = temporary.filePath(QStringLiteral("lyrics/manual-import.json"));
+    for (const QString& path : {cover, unrelated, wrongHash, lyrics}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write(payload), payload.size());
+    }
+    QCOMPARE(CacheJanitor::maintainCovers(temporary.path(), false).filesRemoved, 0);
+    std::atomic_bool cancelled{true};
+    QCOMPARE(CacheJanitor::maintainCovers(temporary.path(), true, &cancelled).filesRemoved, 0);
+    QVERIFY(QFile::exists(cover));
+    const auto report = CacheJanitor::maintainCovers(temporary.path(), true);
+    QCOMPARE(report.filesRemoved, 1);
+    QCOMPARE(report.bytesFreed, payload.size());
+    QVERIFY(!QFile::exists(cover));
+    QVERIFY(QFile::exists(unrelated));
+    QVERIFY(QFile::exists(wrongHash));
+    QVERIFY(QFile::exists(lyrics));
+}
+
+void SettingsControllerTest::clearingCoversUsesProgramCacheNotSelectedDirectory()
+{
+    QTemporaryDir selected;
+    QVERIFY(selected.isValid());
+    const QString appCache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    QVERIFY(!appCache.isEmpty());
+    QVERIFY(QDir().mkpath(QDir(appCache).filePath(QStringLiteral("covers"))));
+    QVERIFY(QDir().mkpath(QDir(appCache).filePath(QStringLiteral("lyrics"))));
+    QVERIFY(QDir().mkpath(selected.filePath(QStringLiteral("covers"))));
+    const QByteArray payload = QUuid::createUuid().toByteArray();
+    const QString digest = QString::fromLatin1(QCryptographicHash::hash(
+        payload, QCryptographicHash::Sha256).toHex());
+    const QString relative = QStringLiteral("covers/") + digest + QStringLiteral(".png");
+    const QString owned = QDir(appCache).filePath(relative);
+    const QString personal = selected.filePath(relative);
+    const QString lyrics = QDir(appCache).filePath(QStringLiteral("lyrics/") + digest + QStringLiteral(".json"));
+    const auto cleanup = qScopeGuard([&] { QFile::remove(owned); QFile::remove(lyrics); });
+    for (const QString& path : {owned, personal, lyrics}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::NewOnly));
+        QCOMPARE(file.write(payload), payload.size());
+    }
+    SettingsController settings;
+    settings.setAutoCleanCache(false);
+    settings.setCacheDirectory(selected.path());
+    settings.clearAllCache();
+    QTRY_VERIFY(!QFile::exists(owned));
+    QVERIFY(QFile::exists(personal));
+    QFile lyricFile(lyrics);
+    QVERIFY(lyricFile.open(QIODevice::ReadOnly));
+    QCOMPARE(lyricFile.readAll(), payload);
+}
+
+void SettingsControllerTest::cacheRejectsLinkedStorage()
+{
+#ifdef Q_OS_WIN
+    QTemporaryDir parent;
+    QTemporaryDir outside;
+    QVERIFY(parent.isValid() && outside.isValid());
+    const QString link = parent.filePath(QStringLiteral(".agplayer-cache-v1"));
+    if (!CreateSymbolicLinkW(reinterpret_cast<LPCWSTR>(link.utf16()),
+                             reinterpret_cast<LPCWSTR>(outside.path().utf16()),
+                             SYMBOLIC_LINK_FLAG_DIRECTORY | SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE)) {
+        // Junctions need no developer-mode privilege and exercise the Windows
+        // reparse-point path that an isSymLink-only check would miss.
+        QCOMPARE(QProcess::execute(QStringLiteral("cmd.exe"),
+            {QStringLiteral("/d"), QStringLiteral("/c"), QStringLiteral("mklink"),
+             QStringLiteral("/J"), QDir::toNativeSeparators(link),
+             QDir::toNativeSeparators(outside.path())}), 0);
+        QVERIFY(QFileInfo(link).isJunction());
+    }
+    const auto unlink = qScopeGuard([&] { RemoveDirectoryW(reinterpret_cast<LPCWSTR>(link.utf16())); });
+    QFile note(outside.filePath(QStringLiteral("0123456789abcdef.agwf")));
+    QVERIFY(note.open(QIODevice::WriteOnly));
+    QCOMPARE(note.write("user data"), 9);
+    note.close();
+    QVERIFY(CacheJanitor::storageDirectory(parent.path(), true).isEmpty());
+    QCOMPARE(CacheJanitor::clearWaveforms(parent.path()).filesRemoved, 0);
+    QCOMPARE(CacheJanitor::maintainCovers(link, true).filesRemoved, 0);
+    QVERIFY(note.exists());
+#else
+    QTemporaryDir parent;
+    QTemporaryDir outside;
+    QVERIFY(parent.isValid() && outside.isValid());
+    const QString link = parent.filePath(QStringLiteral(".agplayer-cache-v1"));
+    QVERIFY(QFile::link(outside.path(), link));
+    const auto unlink = qScopeGuard([&] { QFile::remove(link); });
+    QVERIFY(CacheJanitor::storageDirectory(parent.path(), true).isEmpty());
+    QCOMPARE(CacheJanitor::clearWaveforms(parent.path()).filesRemoved, 0);
+    QCOMPARE(CacheJanitor::maintainCovers(link, true).filesRemoved, 0);
+#endif
+}
+
+void SettingsControllerTest::cacheActionsReportCompletionAndEmpty_data()
+{
+    QTest::addColumn<int>("action");
+    QTest::newRow("waveforms") << 0;
+    QTest::newRow("covers") << 1;
+    QTest::newRow("all") << 2;
+}
+
+void SettingsControllerTest::cacheActionsReportCompletionAndEmpty()
+{
+    QFETCH(int, action);
+    QTemporaryDir selected;
+    QVERIFY(selected.isValid());
+    const QString storage = CacheJanitor::storageDirectory(selected.path(), true);
+    QVERIFY(!storage.isEmpty());
+    const QString appCache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    QVERIFY(QDir().mkpath(QDir(appCache).filePath(QStringLiteral("covers"))));
+    const QByteArray payload = QUuid::createUuid().toByteArray();
+    const QString digest = QString::fromLatin1(QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex());
+    const QString waveform = QDir(storage).filePath(QStringLiteral("0123456789abcdef.agwf"));
+    const QString cover = QDir(appCache).filePath(QStringLiteral("covers/") + digest + QStringLiteral(".png"));
+    const QString media = selected.filePath(QStringLiteral("personal.wav"));
+    const QString lyrics = selected.filePath(QStringLiteral("manual-lyrics.json"));
+    const QString model = selected.filePath(QStringLiteral("model.onnx"));
+    const auto cleanup = qScopeGuard([&] { QFile::remove(cover); });
+    QStringList files{media, lyrics, model};
+    if (action != 1) files.append(waveform);
+    if (action != 0) files.append(cover);
+    for (const QString& path : files) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::NewOnly));
+        QCOMPARE(file.write(payload), payload.size());
+    }
+    SettingsController settings;
+    settings.setAutoCleanCache(false);
+    settings.setCacheDirectory(selected.path());
+    QVERIFY2(settings.property("cacheClearStatus").isValid(), "Every clear action needs an observable result");
+    const auto clear = [&] {
+        if (action == 0) settings.clearWaveformCache();
+        else if (action == 1) settings.clearCoverCache();
+        else settings.clearAllCache();
+    };
+    clear();
+    QTRY_VERIFY(!settings.property("cacheClearBusy").toBool());
+    QCOMPARE(settings.property("cacheClearFailed").toBool(), false);
+    QVERIFY(settings.property("cacheClearStatus").toString().contains(
+        QStringLiteral("已清理 %1 个缓存文件").arg(action == 2 ? 2 : 1)));
+    QVERIFY(!QFile::exists(waveform));
+    QVERIFY(!QFile::exists(cover));
+    QVERIFY(QFile::exists(media) && QFile::exists(lyrics) && QFile::exists(model));
+    clear();
+    QTRY_VERIFY(!settings.property("cacheClearBusy").toBool());
+    QCOMPARE(settings.property("cacheClearFailed").toBool(), false);
+    QCOMPARE(settings.property("cacheClearStatus").toString(), QStringLiteral("没有可清理的缓存文件。"));
+}
+
+void SettingsControllerTest::cacheActionsReportUnsafeStorage()
+{
+    QTemporaryDir selected;
+    QVERIFY(selected.isValid());
+    const QString occupied = selected.filePath(QStringLiteral(".agplayer-cache-v1"));
+    QVERIFY(QDir().mkpath(occupied));
+    QFile personal(QDir(occupied).filePath(QStringLiteral("0123456789abcdef.agwf")));
+    QVERIFY(personal.open(QIODevice::WriteOnly));
+    QCOMPARE(personal.write("not owned"), 9);
+    personal.close();
+    SettingsController settings;
+    settings.setAutoCleanCache(false);
+    settings.setCacheDirectory(selected.path());
+    settings.clearWaveformCache();
+    QCOMPARE(settings.property("cacheClearFailed").toBool(), true);
+    QVERIFY(settings.property("cacheClearStatus").toString().contains(QStringLiteral("无法清理")));
+    QVERIFY(personal.exists());
+}
+
+void SettingsControllerTest::cacheActionsReportLockedFileFailure()
+{
+#ifdef Q_OS_WIN
+    QTemporaryDir selected;
+    QVERIFY(selected.isValid());
+    const QString storage = CacheJanitor::storageDirectory(selected.path(), true);
+    QVERIFY(!storage.isEmpty());
+    const QString locked = QDir(storage).filePath(QStringLiteral("0123456789abcdef.agwf"));
+    QFile file(locked);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QCOMPARE(file.write("generated"), 9);
+    file.close();
+    const HANDLE handle = CreateFileW(reinterpret_cast<LPCWSTR>(locked.utf16()), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    QVERIFY(handle != INVALID_HANDLE_VALUE);
+    const auto unlock = qScopeGuard([&] { CloseHandle(handle); });
+    SettingsController settings;
+    settings.setAutoCleanCache(false);
+    settings.setCacheDirectory(selected.path());
+    settings.clearWaveformCache();
+    QCOMPARE(settings.property("cacheClearFailed").toBool(), true);
+    QVERIFY(settings.property("cacheClearStatus").toString().contains(QStringLiteral("无法清理")));
+    QVERIFY(QFile::exists(locked));
+#else
+    QTest::qSkip("Windows file-sharing denial fixture", __FILE__, __LINE__);
+    return;
+#endif
 }
 
 void SettingsControllerTest::supportsOnlyChineseAndEnglish()

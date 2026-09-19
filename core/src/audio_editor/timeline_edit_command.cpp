@@ -63,6 +63,9 @@ std::optional<TimelineEditCommand> TimelineEditCommand::trim(
 std::optional<TimelineEditCommand> TimelineEditCommand::fromCandidate(
     const EventTimeline& timeline, std::vector<AudioEvent> candidate)
 {
+    EventTimeline validated = timeline;
+    if (!validated.replace(std::move(candidate))) return std::nullopt;
+    candidate = validated.snapshot().events;
     const TimelineSnapshot snapshot = timeline.snapshot();
     const std::vector<AudioEvent>& current = snapshot.events;
     std::vector<AudioEvent> before;
@@ -92,13 +95,55 @@ std::optional<TimelineEditCommand> TimelineEditCommand::fromCandidate(
                                std::move(after)};
 }
 
+std::optional<TimelineEditCommand> TimelineEditCommand::fromSnapshot(
+    const EventTimeline& timeline, TimelineSnapshot candidate)
+{
+    EventTimeline validated = timeline;
+    if (!validated.restore(std::move(candidate))) return std::nullopt;
+    auto after = validated.snapshot();
+    auto before = timeline.snapshot();
+    auto command = fromCandidate(timeline, after.events);
+    const bool metadataChanged = before.tracks != after.tracks
+        || before.sampleRate != after.sampleRate || before.channels != after.channels
+        || before.legacyMasterGain != after.legacyMasterGain;
+    if (!command && !metadataChanged) return std::nullopt;
+    if (!command) command = TimelineEditCommand{Kind::Generic, std::vector<AudioEvent>{}, std::vector<AudioEvent>{}};
+    if (metadataChanged) {
+        before.events = std::vector<AudioEvent>{};
+        after.events = std::vector<AudioEvent>{};
+        command->before_state_ = std::move(before);
+        command->after_state_ = std::move(after);
+    }
+    return command;
+}
+
 bool TimelineEditCommand::execute(EventTimeline& timeline) const
 {
+    if (after_state_) {
+        const auto current = timeline.snapshot();
+        if (current.tracks != before_state_->tracks || current.sampleRate != before_state_->sampleRate
+            || current.channels != before_state_->channels || current.legacyMasterGain != before_state_->legacyMasterGain) return false;
+        EventTimeline candidate = timeline;
+        if (!apply(candidate, before_, after_)) return false;
+        auto state = *after_state_; state.events = candidate.snapshot().events;
+        if (!candidate.restore(std::move(state))) return false;
+        timeline = std::move(candidate); return true;
+    }
     return apply(timeline, before_, after_);
 }
 
 bool TimelineEditCommand::undo(EventTimeline& timeline) const
 {
+    if (before_state_) {
+        const auto current = timeline.snapshot();
+        if (current.tracks != after_state_->tracks || current.sampleRate != after_state_->sampleRate
+            || current.channels != after_state_->channels || current.legacyMasterGain != after_state_->legacyMasterGain) return false;
+        EventTimeline candidate = timeline;
+        if (!apply(candidate, after_, before_)) return false;
+        auto state = *before_state_; state.events = candidate.snapshot().events;
+        if (!candidate.restore(std::move(state))) return false;
+        timeline = std::move(candidate); return true;
+    }
     return apply(timeline, after_, before_);
 }
 
@@ -117,7 +162,7 @@ bool TimelineEditCommand::apply(EventTimeline& timeline,
         }
         if (kind_ == Kind::Move) {
             return timeline.moveEvent(replacement.front().id,
-                                      replacement.front().timelineStart);
+                                      replacement.front().timelineStart, replacement.front().trackIndex);
         }
         return timeline.trimEvent(replacement.front().id,
                                   replacement.front().sourceStart,
@@ -219,6 +264,7 @@ bool TimelineEditCommand::sameEvent(const AudioEvent& left,
                                     const AudioEvent& right) noexcept
 {
     return left.id == right.id && left.source == right.source
+        && left.trackIndex == right.trackIndex && left.timelineSampleRate == right.timelineSampleRate
         && left.sourceStart == right.sourceStart && left.sourceEnd == right.sourceEnd
         && left.timelineStart == right.timelineStart && left.gain == right.gain
         && left.fadeIn == right.fadeIn && left.fadeOut == right.fadeOut

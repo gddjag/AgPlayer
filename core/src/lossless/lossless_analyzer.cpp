@@ -1215,6 +1215,20 @@ void add_evidence(AnalysisResult& result,
 
 void aggregate_verdict(AnalysisResult& result)
 {
+    // Stream metadata is factual even when silence/short content prevents
+    // signal forensics. Never infer an earlier source from the current codec.
+    if (is_lossy_codec(result.source.codec)) {
+        result.verdict = Verdict::KnownLossyEncoding;
+        result.confidence = AnalysisSupport::knownLossyCodec;
+        result.candidates.clear();
+        result.chain = {"原始格式未知", result.source.container};
+        result.warnings.push_back("当前为有损编码；无法仅凭此文件确定原始来源或是否经过多次转码。");
+        add_evidence(result, "known_lossy_codec", EvidenceFamily::CodecStructure,
+                     EvidenceDirection::SupportsLossySource, 1.0, "boolean",
+                     "当前流编解码器", 3,
+                     "当前音频流使用有损编解码器；这不等同于识别出更早的源文件。");
+        return;
+    }
     if (result.coverage.activeWindows < AnalysisThresholds::minimumActiveWindows
         || result.coverage.activeWindowRatio
                < AnalysisThresholds::minimumActiveWindowRatio) {
@@ -1266,7 +1280,6 @@ void aggregate_verdict(AnalysisResult& result)
         return;
     }
 
-    const bool known_lossy = is_lossy_codec(result.source.codec);
     const bool stable_cutoff = result.measurements.cutoffHz > 0.0
         && result.measurements.cutoffHz < result.spectrum.nyquistHz
                * AnalysisThresholds::stableCutoffRatio
@@ -1318,25 +1331,8 @@ void aggregate_verdict(AnalysisResult& result)
                 >= AnalysisThresholds::bitExpansionMinimumSpectralFlatness);
 
     if (polyphase_structure) {
-        add_evidence(result, "resampling_polyphase_grid", EvidenceFamily::Resampling,
-                     EvidenceDirection::Neutral,
-                     result.measurements.resamplingPhaseSourceRate, "Hz",
-                     "相位一致性>=0.995、强度>=0.02、>=4段、残差熵>=0.45、带外抑制>=35dB", 1,
-                     "检测到稳定周期结构；重采样与周期调制均可形成，不能单独确定升频历史。");
         result.candidates.push_back({"重采样或周期调制", 33,
             "周期、镜像和带外抑制仍可由同一种调制处理形成，候选不构成来源判定。"});
-    }
-    if (known_lossy) {
-        result.verdict = Verdict::SuspectedLossyTranscode;
-        result.confidence = AnalysisSupport::knownLossyCodec;
-        result.candidates.push_back({result.source.codec, 100,
-            "当前编解码器是文件事实；更早的编码历史仍无法恢复。"});
-        result.chain = {result.source.codec, result.source.container};
-        add_evidence(result, "known_lossy_codec", EvidenceFamily::CodecStructure,
-                     EvidenceDirection::SupportsLossySource, 1.0, "boolean",
-                     "当前流编解码器", 3,
-                     "当前音频流使用有损编解码器；这不等同于识别出更早的源文件。");
-        return;
     }
     if (supports_mdct_framing(result.measurements.mdctFrameWindow,
         result.measurements.mdctFrameCoherentPeakDb, result.measurements.mdctFramePeakZ,
@@ -2063,6 +2059,16 @@ AnalysisResult analyzeFile(const std::string& utf8Path,
             }
         }
         aggregate_verdict(result);
+        // Invalid decoded samples undermine waveform-based provenance, not
+        // the independently known current codec. Retain diagnostics, not a
+        // confident format-history chain from damaged sample data.
+        if (invalid_sample_count > 0 && result.verdict != Verdict::KnownLossyEncoding) {
+            result.verdict = Verdict::Inconclusive;
+            result.confidence = std::min(result.confidence, 25);
+            result.chain.clear();
+            result.candidates.clear();
+            result.warnings.push_back("音频包含非有限样本，来源鉴别证据受损；请使用完整原文件重新检测。");
+        }
         // Only after all evidence and verdict work may the display be resized.
         if (options.spectrumBins != result.spectrum.db.size()) {
             const auto analysis_db = std::move(result.spectrum.db);
@@ -2082,7 +2088,7 @@ AnalysisResult analyzeFile(const std::string& utf8Path,
                 return item.direction == EvidenceDirection::ContradictsConclusion
                     && item.severity >= 2;
             });
-        if (strong_counterevidence) {
+        if (strong_counterevidence && result.verdict != Verdict::KnownLossyEncoding) {
             if (result.verdict == Verdict::CredibleLossless
                 || result.verdict == Verdict::CredibleNativeDsd) {
                 result.verdict = Verdict::Inconclusive;

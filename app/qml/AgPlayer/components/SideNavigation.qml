@@ -219,7 +219,7 @@ Item {
     Menu {
         id: playlistMenu
         objectName: "playlistContextMenu"
-        width: 210
+        width: root.menuContentWidth(playlistMenu)
         palette.window: Theme.elevated
         palette.text: Theme.primaryText
         palette.button: Theme.elevated
@@ -269,7 +269,7 @@ Item {
     Menu {
         id: resourceFolderMenu
         objectName: "resourceFolderContextMenu"
-        width: 210
+        width: root.menuContentWidth(resourceFolderMenu)
         palette.window: Theme.elevated
         palette.text: Theme.primaryText
         palette.highlight: Theme.activeSelection
@@ -306,7 +306,6 @@ Item {
         objectName: "removeResourceFolderDialog"
         title: qsTr("移除资源文件夹")
         modal: true
-        width: 360
         anchors.centerIn: parent
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: {
@@ -680,10 +679,19 @@ Item {
         urlsSubmitter: root.submitResourceUrls
     }
 
+    function menuContentWidth(menu) {
+        var widest = 0
+        for (var i = 0; i < menu.count; ++i) {
+            var item = menu.itemAt(i)
+            if (item && item.text !== undefined)
+                widest = Math.max(widest, item.implicitWidth)
+        }
+        return Math.ceil(widest + menu.leftPadding + menu.rightPadding)
+    }
+
     component SystemMenuItem: MenuItem {
         id: systemMenuItem
-        width: 200
-        implicitWidth: 200
+        implicitWidth: implicitContentWidth + leftPadding + rightPadding
         implicitHeight: 34
         contentItem: Text {
             text: systemMenuItem.text

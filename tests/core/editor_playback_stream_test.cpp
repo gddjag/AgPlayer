@@ -17,7 +17,29 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <new>
 #include <vector>
+
+namespace {
+
+thread_local bool recordBufferAllocations = false;
+thread_local std::size_t bufferAllocations = 0;
+
+void* allocateBufferTestMemory(const std::size_t size)
+{
+    if (recordBufferAllocations) ++bufferAllocations;
+    if (void* const pointer = std::malloc(size == 0 ? 1 : size)) return pointer;
+    throw std::bad_alloc();
+}
+
+} // namespace
+
+void* operator new(const std::size_t size) { return allocateBufferTestMemory(size); }
+void* operator new[](const std::size_t size) { return allocateBufferTestMemory(size); }
+void operator delete(void* const pointer) noexcept { std::free(pointer); }
+void operator delete[](void* const pointer) noexcept { std::free(pointer); }
+void operator delete(void* const pointer, std::size_t) noexcept { std::free(pointer); }
+void operator delete[](void* const pointer, std::size_t) noexcept { std::free(pointer); }
 
 namespace {
 
@@ -206,12 +228,12 @@ std::filesystem::path writeRampFixture()
     return path;
 }
 
-std::filesystem::path writeAutomationOrderFixture()
+std::filesystem::path writeAutomationOrderFixture(const bool baked = false)
 {
     constexpr std::uint32_t sampleRate = 8'000U;
     constexpr std::uint32_t frames = 8'000U;
     const auto path = std::filesystem::temp_directory_path()
-        / "agplayer-editor-automation-order.wav";
+        / (baked ? "agplayer-editor-automation-baked.wav" : "agplayer-editor-automation-order.wav");
     std::ofstream stream(path, std::ios::binary | std::ios::trunc);
     stream.write("RIFF", 4); writeU32(stream, 36U + frames * 4U);
     stream.write("WAVEfmt ", 8); writeU32(stream, 16U); writeU16(stream, 3U);
@@ -219,15 +241,15 @@ std::filesystem::path writeAutomationOrderFixture()
     writeU32(stream, sampleRate * 4U); writeU16(stream, 4U);
     writeU16(stream, 32U); stream.write("data", 4);
     writeU32(stream, frames * 4U);
-    const float sample = 0.5F;
     for (std::uint32_t frame = 0; frame < frames; ++frame) {
+        const float sample = baked && frame == 4'000 ? 0.0F : 0.5F;
         stream.write(reinterpret_cast<const char*>(&sample), sizeof(sample));
     }
     require(stream.good(), "could not write automation-order fixture");
     return path;
 }
 
-void automationRunsAfterTimePitchInRealtimeStream()
+void automationRunsBeforeTimePitchInRealtimeStream()
 {
     using namespace agplayer::editor;
     const auto path = writeAutomationOrderFixture();
@@ -246,19 +268,19 @@ void automationRunsAfterTimePitchInRealtimeStream()
     const auto samples = readAll(*stream);
     require(samples.size() > 3'500U && samples.size() < 4'500U,
             "automation-order stream duration mismatch");
-    const std::size_t mapped = samples.size() / 2U;
-    float localMinimum = 1.0F;
-    for (std::size_t index = mapped > 8U ? mapped - 8U : 0U;
-         index < std::min(samples.size(), mapped + 9U); ++index) {
-        localMinimum = std::min(localMinimum, std::abs(samples[index]));
-    }
-    require(localMinimum < 0.05F,
-            "time/pitch swallowed a post-process one-frame gain notch");
-    require(std::abs(samples[mapped - 32U]) > 0.25F
-                && std::abs(samples[mapped + 32U]) > 0.25F,
-            "post-time/pitch automation damaged neighboring audio");
+    const auto bakedPath = writeAutomationOrderFixture(true);
+    const auto bakedSource = std::make_shared<const AudioSource>(
+        AudioSource{bakedPath, 8'000, 1, 8'000});
+    auto bakedStream = EditorPlaybackStream::create(
+        TimelineSnapshot{{AudioEvent{1, bakedSource, 0, 8'000, 0}}, 8'000, 1},
+        parameters, error);
+    require(bakedStream != nullptr, "baked automation stream creation failed");
+    const auto bakedSamples = readAll(*bakedStream);
+    require(samples == bakedSamples,
+            "clip automation must enter TimePitch exactly like source PCM");
     std::error_code ignored;
     std::filesystem::remove(path, ignored);
+    std::filesystem::remove(bakedPath, ignored);
 }
 
 std::chrono::nanoseconds renderMutedEventTimeline(
@@ -313,13 +335,13 @@ void sequentialAutomationCursorSearchRemainsNearLinear()
         }
         return best;
     };
-    const auto small = fastest(100'000U);
-    const auto large = fastest(400'000U);
+    const auto small = fastest(1'000U);
+    const auto large = fastest(4'000U);
     if (large >= small * 10) {
         std::cerr << "automation event lookup rescanned the timeline per "
-                     "output block (100k="
+                     "output block (1k="
                   << std::chrono::duration_cast<std::chrono::microseconds>(small).count()
-                  << "us, 400k="
+                  << "us, 4k="
                   << std::chrono::duration_cast<std::chrono::microseconds>(large).count()
                   << "us)\n";
         std::exit(1);
@@ -366,7 +388,9 @@ void awkward44100OffsetsRemainSampleExact()
     require(analysis.success, "sample-exact fixture analysis failed");
     const float frame45 = static_cast<float>(45 * 100 - 10'000) / 32'768.0F;
 
-    auto trimmedDocument = AudioDocument::fromSource(analysis.source);
+    auto legacySnapshot = AudioDocument::fromSource(analysis.source).timelineSnapshot();
+    legacySnapshot.channels = 1;
+    auto trimmedDocument = AudioDocument::fromSnapshot(legacySnapshot);
     const auto eventId = trimmedDocument.timelineSnapshot().events.front().id;
     require(trimmedDocument.trimEvent(eventId, 45, 100, 0),
             "sample-exact event trim failed");
@@ -381,7 +405,7 @@ void awkward44100OffsetsRemainSampleExact()
             "awkward event source offset skipped one PCM frame");
 
     auto seekStream = EditorPlaybackStream::create(
-        AudioDocument::fromSource(analysis.source).timelineSnapshot(), neutral,
+        legacySnapshot, neutral,
         error);
     require(seekStream && seekStream->seek(1) == AG_OK
                 && seekStream->read(block) == AG_OK && block.frames > 0,
@@ -431,6 +455,7 @@ void multiEventProcessingAndDecodeFailuresAreCovered()
     gained.gain = 0.25F;
     auto snapshot = AudioDocument::fromEvents(
         {shaped, muted, gained}).timelineSnapshot();
+    snapshot.channels = 1; // Existing mono-project frame regression.
     EditorPlaybackParameters neutral;
     std::string error;
     auto stream = EditorPlaybackStream::create(snapshot, neutral, error);
@@ -467,12 +492,101 @@ void multiEventProcessingAndDecodeFailuresAreCovered()
 
 } // namespace
 
+void playbackBuffersAreReused(const bool benchmarkOnly)
+{
+    using namespace agplayer::editor;
+    // Muted events use the real timeline and time/pitch engine, without file
+    // decoder allocations obscuring the work-buffer allocation measurement.
+    // Reuse one output block across mono/stereo and neutral/processed streams.
+    agplayer::DecodedAudioBlock block;
+    for (const auto format : {std::pair{44'100U, 1U}, std::pair{48'000U, 2U}}) {
+        for (const double speed : {1.0, 0.75}) {
+            constexpr SampleFrame totalFrames = 4'096 * 1'024;
+            auto source = std::make_shared<AudioSource>();
+            source->path = "unused-muted-source.wav";
+            source->sample_rate = format.first;
+            source->channels = format.second;
+            source->total_frames = totalFrames;
+            AudioEvent event{1, source, 0, totalFrames, 0};
+            event.mute = true;
+            EditorPlaybackParameters parameters;
+            parameters.speed_ratio = speed;
+            parameters.keep_pitch = true;
+            std::string error;
+            auto stream = EditorPlaybackStream::create(
+                TimelineSnapshot{{event}, totalFrames, 1}, parameters, error);
+            require(stream != nullptr, "buffer reuse stream creation failed");
+            for (int warmup = 0; warmup < 16; ++warmup) {
+                require(stream->read(block) == AG_OK && block.frames > 0,
+                        "buffer reuse warmup failed");
+            }
+            bufferAllocations = 0;
+            recordBufferAllocations = true;
+            const auto start = std::chrono::steady_clock::now();
+            ag_result result = AG_OK;
+            std::size_t reads = 0;
+            for (; reads < 512; ++reads) {
+                result = stream->read(block);
+                if (result != AG_OK || block.frames == 0) break;
+            }
+            const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - start).count();
+            recordBufferAllocations = false;
+            const std::size_t allocations = bufferAllocations;
+            std::cout << "editor buffers rate=" << format.first
+                      << " channels=" << format.second << " speed=" << speed
+                      << " reads=" << reads << " allocations=" << allocations
+                      << " elapsed_us=" << elapsed << '\n';
+            require(result == AG_OK && reads == 512,
+                    "buffer reuse measured reads failed");
+            if (!benchmarkOnly) {
+                require(allocations == 0,
+                        "steady editor reads allocated new work buffers");
+            }
+            const auto capacity = block.samples.capacity();
+            std::int64_t nextFrame = block.timestamp_frame
+                + static_cast<std::int64_t>(block.frames);
+            do {
+                require(stream->read(block) == AG_OK,
+                        "buffer reuse EOF read failed");
+                require(block.timestamp_frame == nextFrame,
+                        "buffer reuse changed frame timestamps");
+                require(block.samples.size() == block.frames * format.second,
+                        "buffer reuse retained samples from the previous format");
+                require(std::all_of(block.samples.begin(), block.samples.end(),
+                                    [](float sample) { return sample == 0.0F; }),
+                        "buffer reuse exposed stale PCM instead of silence");
+                nextFrame += static_cast<std::int64_t>(block.frames);
+            } while (!block.end_of_stream);
+            if (!benchmarkOnly) {
+                require(block.samples.capacity() >= capacity,
+                        "EOF discarded the reusable output allocation");
+            }
+            require(block.samples.empty() && block.frames == 0,
+                    "EOF retained a previous audio block");
+            require(stream->seek(0) == AG_OK && stream->read(block) == AG_OK
+                        && block.frames > 0 && !block.end_of_stream
+                        && block.timestamp_frame == 0,
+                    "buffer reuse failed to restart after EOF seek");
+        }
+    }
+}
+
 int main(int argc, char** argv)
 {
     using namespace agplayer::editor;
     require(argc == 2, "fixture path argument missing");
+    if (std::string(argv[1]) == "--buffer-benchmark") {
+        playbackBuffersAreReused(true);
+        return 0;
+    }
+    if (std::string(argv[1]) == "--buffer-reuse-regression") {
+        playbackBuffersAreReused(false);
+        return 0;
+    }
+    playbackBuffersAreReused(false);
     formantPreserverRestoresControlledSpectralCentroids();
-    automationRunsAfterTimePitchInRealtimeStream();
+    automationRunsBeforeTimePitchInRealtimeStream();
     sequentialAutomationCursorSearchRemainsNearLinear();
     automationCursorRepositionsAfterBackwardSeek();
     awkward44100OffsetsRemainSampleExact();

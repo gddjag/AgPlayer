@@ -1,4 +1,5 @@
 #include "decoder.hpp"
+#include "flac_stream_boundary.hpp"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -631,8 +632,16 @@ public:
         for (;;) {
             const int receive_result = avcodec_receive_frame(codec_context_, frame_);
             if (receive_result == 0) {
+                const bool final_flac_frame = is_final_flac_frame(*codec_context_,
+                    *format_context_->streams[audio_stream_index_], *frame_);
                 const ag_result convert_result = convert_frame(block);
                 av_frame_unref(frame_);
+                if (final_flac_frame) {
+                    // The parser may have included trailer bytes in its last
+                    // packet. Discard those only after all declared PCM exists.
+                    avcodec_flush_buffers(codec_context_);
+                    input_eof_ = true;
+                }
                 if (convert_result != AG_OK) {
                     return convert_result;
                 }
@@ -709,8 +718,14 @@ public:
         for (;;) {
             const int receive_result = avcodec_receive_frame(codec_context_, frame_);
             if (receive_result == 0) {
+                const bool final_flac_frame = is_final_flac_frame(*codec_context_,
+                    *format_context_->streams[audio_stream_index_], *frame_);
                 const ag_result convert_result = convert_analysis_frame(block);
                 av_frame_unref(frame_);
+                if (final_flac_frame) {
+                    avcodec_flush_buffers(codec_context_);
+                    input_eof_ = true;
+                }
                 return convert_result;
             }
             if (receive_result == AVERROR_EOF) {

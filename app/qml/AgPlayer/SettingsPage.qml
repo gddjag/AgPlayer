@@ -24,6 +24,7 @@ Item {
     property string searchText: ""
     property bool editResolved: true
     property var hostWindow
+    readonly property bool compact: width < 840
     property alias programmaticScroll: settingsScroll.programmaticScroll
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
@@ -67,7 +68,10 @@ Item {
         if (event.modifiers & Qt.AltModifier) parts.push("Alt")
         if (event.modifiers & Qt.ShiftModifier) parts.push("Shift")
         if (event.modifiers & Qt.MetaModifier) parts.push("Meta")
-        let keyText = event.text ? event.text.toUpperCase() : ""
+        // Generated text may be an Option symbol or a dead-key composition.
+        // Store the key identity, with modifiers recorded separately above.
+        let keyText = event.key >= Qt.Key_Space && event.key <= Qt.Key_AsciiTilde
+                ? String.fromCharCode(event.key) : ""
         if (event.key === Qt.Key_Space) keyText = "Space"
         else if (event.key === Qt.Key_Tab) keyText = "Tab"
         else if (event.key === Qt.Key_Escape) keyText = "Esc"
@@ -211,7 +215,7 @@ Item {
         title: qsTr("确认清空缓存")
         standardButtons: Dialog.Yes | Dialog.No
         contentItem: Label {
-            text: qsTr("确定要一键清空全部缓存吗？此操作不可撤销。")
+            text: qsTr("仅清理可重建的波形和封面缓存，不删除歌词。确定继续吗？")
             color: Theme.textPrimary
             wrapMode: Text.Wrap
         }
@@ -330,7 +334,7 @@ Item {
                 id: settingsSidebar
                 objectName: "settingsSidebar"
                 property string designRole: "settingsCategoryRail"
-                Layout.preferredWidth: 184
+                Layout.preferredWidth: root.compact ? 152 : 184
                 Layout.fillHeight: true
                 color: "transparent"
 
@@ -418,15 +422,23 @@ Item {
                 Layout.fillHeight: true
                 clip: true
                 contentWidth: availableWidth
+                contentHeight: settingsContentColumn.height * settingsContentColumn.scale
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                 ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
                 ColumnLayout {
                     id: settingsContentColumn
                     objectName: "settingsContentColumn"
-                    width: Math.min(760, Math.max(0,
-                                                  settingsScroll.availableWidth - 48))
-                    x: Math.max(24, (settingsScroll.availableWidth - width) / 2)
+                    readonly property real sideMargin: root.compact ? 12 : 24
+                    readonly property real viewportWidth:
+                        Math.max(1, settingsScroll.availableWidth - 2 * sideMargin)
+                    // Keep dense setting rows legible and in bounds while the
+                    // existing vertical viewport handles longer sections.
+                    width: Math.min(760, Math.max(560, viewportWidth))
+                    scale: Math.min(1, viewportWidth / width)
+                    transformOrigin: Item.TopLeft
+                    x: Math.max(sideMargin,
+                                (settingsScroll.availableWidth - width * scale) / 2)
                     spacing: 6
 
                     GeneralSection {
@@ -2382,8 +2394,18 @@ Item {
                     }
                 }
 
+                Text {
+                    objectName: "cacheDirectoryScopeHint"
+                    Layout.fillWidth: true
+                    text: qsTr("波形使用所选目录下的专用子目录，封面使用程序缓存目录；清理不删除歌词或旧的未标记波形文件。")
+                    color: Theme.secondaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizeCaption
+                    wrapMode: Text.WordWrap
+                }
+
                 SettingRow {
-                    label: qsTr("缓存上限")
+                    label: qsTr("波形缓存上限")
                     RowLayout {
                         anchors.fill: parent
                         spacing: 8
@@ -2413,15 +2435,9 @@ Item {
                 }
 
                 SettingSwitch {
-                    text: qsTr("缓存自动清理（超出上限自动删旧文件，默认开启）")
+                    text: qsTr("波形缓存自动清理（超出上限删除旧波形，默认开启）")
                     checked: SettingsController.autoCleanCache
                     onToggled: SettingsController.autoCleanCache = checked
-                }
-
-                SettingSwitch {
-                    text: qsTr("退出自动清理临时转码文件（默认开启）")
-                    checked: SettingsController.cleanTempOnExit
-                    onToggled: SettingsController.cleanTempOnExit = checked
                 }
 
                 SettingRow {
@@ -2448,6 +2464,7 @@ Item {
                         objectName: "clearWaveformCacheButton"
                         Layout.preferredWidth: 90
                         text: qsTr("波形缓存")
+                        enabled: !SettingsController.cacheClearBusy
                         onClicked: SettingsController.clearWaveformCache()
                     }
 
@@ -2455,14 +2472,8 @@ Item {
                         objectName: "clearCoverCacheButton"
                         Layout.preferredWidth: 90
                         text: qsTr("封面缓存")
+                        enabled: !SettingsController.cacheClearBusy
                         onClicked: SettingsController.clearCoverCache()
-                    }
-
-                    ThemedButton {
-                        objectName: "clearTempCacheButton"
-                        Layout.preferredWidth: 108
-                        text: qsTr("转码临时文件")
-                        onClicked: SettingsController.clearTempFiles()
                     }
 
                     ThemedButton {
@@ -2470,8 +2481,20 @@ Item {
                         Layout.preferredWidth: 90
                         danger: true
                         text: qsTr("全部缓存")
+                        enabled: !SettingsController.cacheClearBusy
                         onClicked: clearCacheConfirmDialog.open()
                     }
+                }
+
+                Text {
+                    objectName: "cacheClearStatusText"
+                    Layout.fillWidth: true
+                    visible: text.length > 0
+                    text: SettingsController.cacheClearStatus
+                    color: SettingsController.cacheClearFailed ? Theme.error : Theme.secondaryText
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.fontSizeBody
+                    wrapMode: Text.Wrap
                 }
 
                 Item { Layout.fillHeight: true }

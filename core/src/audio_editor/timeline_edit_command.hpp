@@ -23,6 +23,8 @@ public:
         SampleFrame sourceEnd, SampleFrame timelineStart);
     [[nodiscard]] static std::optional<TimelineEditCommand> fromCandidate(
         const EventTimeline& timeline, std::vector<AudioEvent> candidate);
+    [[nodiscard]] static std::optional<TimelineEditCommand> fromSnapshot(
+        const EventTimeline& timeline, TimelineSnapshot candidate);
 
     [[nodiscard]] bool execute(EventTimeline& timeline) const;
     [[nodiscard]] bool undo(EventTimeline& timeline) const;
@@ -53,6 +55,8 @@ private:
     Kind kind_;
     std::vector<AudioEvent> before_;
     std::vector<AudioEvent> after_;
+    std::optional<TimelineSnapshot> before_state_;
+    std::optional<TimelineSnapshot> after_state_;
 };
 
 } // namespace agplayer::editor

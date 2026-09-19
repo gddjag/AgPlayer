@@ -269,7 +269,12 @@ Rectangle {
         id: playerShellMenu
         objectName: "playerShellMenu"
         parent: root.Window.window ? root.Window.window.contentItem : root
-        width: Math.max(120, implicitContentWidth + leftPadding + rightPadding)
+        width: {
+            var required = 0
+            for (var index = 0; index < count; ++index)
+                required = Math.max(required, itemAt(index).implicitWidth)
+            return Math.ceil(required + leftPadding + rightPadding)
+        }
 
         background: Rectangle {
             color: Theme.surfaceElevated

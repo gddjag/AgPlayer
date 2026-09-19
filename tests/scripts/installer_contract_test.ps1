@@ -107,8 +107,19 @@ if ($installer -notmatch '(?m)^UninstallDisplayName=\{#AppName\}\r?$') {
     throw "Installed Apps must display only AgPlayer"
 }
 
-if ($installer -notmatch 'Name:\s*"\{autodesktop\}\\\{#AppName\}";\s*Filename:\s*"\{app\}\\\{#AppExeName\}";[^\r\n]*WorkingDir:\s*"\{app\}";[^\r\n]*IconFilename:\s*"\{app\}\\\{#AppExeName\}";[^\r\n]*AppUserModelID:\s*"AgPlayer\.Desktop"') {
+if ($installer -notmatch 'Name:\s*"\{autodesktop\}\\\{#AppName\}";\s*Filename:\s*"\{app\}\\\{#AppExeName\}";[^\r\n]*WorkingDir:\s*"\{app\}";[^\r\n]*IconFilename:\s*"\{app\}\\desktop-install-icon\.ico";[^\r\n]*AppUserModelID:\s*"AgPlayer\.Desktop"') {
     throw "Desktop shortcut must be created unconditionally"
+}
+if ($installer -notmatch 'Source: "\.\.\\assets\\brand\\desktop-install-icon\.ico"; DestDir: "\{app\}"' -or
+    -not (Test-Path -LiteralPath (Join-Path $repo 'assets/brand/desktop-install-icon.ico'))) {
+    throw "Desktop shortcut must ship its independent icon"
+}
+if ($installer -notmatch 'Name: "\{group\}\\\{#AppName\}";[^\r\n]*IconFilename: "\{app\}\\\{#AppExeName\}"') {
+    throw "Start menu icon must use the executable shell icon"
+}
+$shellResource = Get-Content -Raw -LiteralPath (Join-Path $repo 'app/agplayer.rc.in')
+if ($shellResource -notmatch 'IDI_AGPLAYER_ICON ICON "@CMAKE_SOURCE_DIR@/assets/brand/desktop-install-icon\.ico"') {
+    throw "Executable and taskbar icon must use the approved desktop artwork"
 }
 if ($installer -match '\[InstallDelete\]' -or
     $installer -match 'RegDeleteKeyIncludingSubkeys') {
@@ -152,6 +163,13 @@ try {
     $iconSourceImage.Dispose()
 }
 $appCmake = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $repo 'app\CMakeLists.txt')
+if ($appCmake -notmatch 'assets/brand/desktop-install-icon\.ico') {
+    throw "Qt must embed the same system application icon for Windows and macOS"
+}
+$applicationSource = Get-Content -Raw -LiteralPath (Join-Path $repo 'app/main.cpp')
+if ($applicationSource -notmatch 'const QIcon applicationIcon\(QStringLiteral\(\s*":/qt/qml/AgPlayer/assets/brand/desktop-install-icon\.ico"') {
+    throw "Qt application icon must match the installed app rather than override it with old artwork"
+}
 if ($appCmake -notmatch 'agplayer\.rc') {
     throw "AgPlayer.exe must embed the icon resource for Explorer and taskbar"
 }
@@ -174,7 +192,7 @@ $mainSource = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $repo 'app
 if ($mainSource -notmatch 'setWindowIcon') {
     throw "QApplication must publish the branded window icon"
 }
-if ($mainSource -notmatch 'assets/brand/agplayer\.ico') {
+if ($mainSource -notmatch 'assets/brand/desktop-install-icon\.ico') {
     throw "Runtime and taskbar must use the same multi-size Windows icon"
 }
 if ($mainSource -notmatch 'SetCurrentProcessExplicitAppUserModelID') {

@@ -138,7 +138,15 @@ Item {
     Menu {
         id: tagMenu
         objectName: "tagContextMenu"
-        width: 190
+        width: {
+            var required = 0
+            for (var index = 0; index < count; ++index) {
+                var item = itemAt(index)
+                if (item && item.text !== undefined)
+                    required = Math.max(required, item.implicitWidth)
+            }
+            return Math.ceil(required + leftPadding + rightPadding)
+        }
         palette.window: Theme.elevated
         palette.text: Theme.primaryText
         palette.highlight: Theme.activeSelection
@@ -242,8 +250,6 @@ Item {
         title: qsTr("删除标签")
         modal: true
         parent: root.Overlay.overlay
-        width: Math.min(296, parent && parent.width > 32 ? parent.width - 32 : 296)
-        contentWidth: width - leftPadding - rightPadding
         anchors.centerIn: parent
         standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: {
@@ -257,16 +263,12 @@ Item {
                 root.removeTagRequested(removedKey)
             }
         }
-        contentItem: Item {
-            implicitHeight: removeTagWarning.implicitHeight
-            Label {
-                id: removeTagWarning
-                objectName: "removeTagWarning"
-                width: removeTagDialog.contentWidth
-                text: qsTr("确定删除这个标签？此操作只解除标签关系，不删除歌曲或磁盘文件。")
-                color: Theme.primaryText
-                wrapMode: Text.Wrap
-            }
+        contentItem: Label {
+            id: removeTagWarning
+            objectName: "removeTagWarning"
+            text: qsTr("确定删除这个标签？此操作只解除标签关系，不删除歌曲或磁盘文件。")
+            color: Theme.primaryText
+            wrapMode: Text.Wrap
         }
         background: Rectangle {
             color: Theme.elevated
@@ -620,8 +622,7 @@ Item {
 
     component TagMenuItem: MenuItem {
         id: menuItem
-        width: 185
-        implicitWidth: 185
+        implicitWidth: Math.ceil(contentItem.implicitWidth + leftPadding + rightPadding)
         implicitHeight: 34
         contentItem: Text {
             text: menuItem.text

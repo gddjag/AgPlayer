@@ -292,6 +292,7 @@ bool LosslessTaskModel::matchesFilter(const QVariantMap& task,
     }
     if (filter == QStringLiteral("transcode")) {
         return verdict == QStringLiteral("suspected_lossy_transcode")
+            || verdict == QStringLiteral("known_lossy_encoding")
             || verdict == QStringLiteral("suspected_lossy_upsample");
     }
     if (filter == QStringLiteral("upsample")) {

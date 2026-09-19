@@ -6,6 +6,10 @@
 #include <QStringList>
 #include <QVariant>
 #include <QVariantMap>
+#include <QFutureWatcher>
+#include <QThreadPool>
+#include <QTimer>
+#include "cache_janitor.hpp"
 
 #include "frequency_color_waveform_settings.hpp"
 
@@ -184,6 +188,9 @@ class SettingsController final : public QObject {
     Q_PROPERTY(int cacheSizeLimitMB READ cacheSizeLimitMB WRITE setCacheSizeLimitMB
                    NOTIFY cacheSizeLimitMBChanged)
     Q_PROPERTY(int currentCacheSizeMB READ currentCacheSizeMB NOTIFY currentCacheSizeMBChanged)
+    Q_PROPERTY(bool cacheClearBusy READ cacheClearBusy NOTIFY cacheClearStateChanged)
+    Q_PROPERTY(bool cacheClearFailed READ cacheClearFailed NOTIFY cacheClearStateChanged)
+    Q_PROPERTY(QString cacheClearStatus READ cacheClearStatus NOTIFY cacheClearStateChanged)
 
     // About
     Q_PROPERTY(QString version READ version CONSTANT)
@@ -288,6 +295,9 @@ public:
     bool cleanTempOnExit() const noexcept;
     int cacheSizeLimitMB() const noexcept;
     int currentCacheSizeMB() const noexcept;
+    bool cacheClearBusy() const noexcept { return cacheClearBusy_; }
+    bool cacheClearFailed() const noexcept { return cacheClearFailed_; }
+    QString cacheClearStatus() const { return cacheClearStatus_; }
 
     // About getters
     QString version() const;
@@ -482,6 +492,7 @@ signals:
     void cacheSizeLimitMBChanged();
     void currentCacheSizeMBChanged();
     void cacheTrimReport(qint64 bytesFreed, int filesRemoved);
+    void cacheClearStateChanged();
 
 private:
     UpdateChecker* updateChecker_ = nullptr;
@@ -498,7 +509,10 @@ private:
     void applyCommittedEffects();
     void recalculateCacheSize();
     void enforceCacheSizeLimit();
-    static qint64 directorySizeBytes(const QString& path);
+    void requestCacheMaintenance(bool trim);
+    void startCacheMaintenance();
+    bool beginCacheClear();
+    void finishCacheClear(const CacheJanitor::TrimReport& report, bool cancelled = false);
     static QString defaultMusicDirectory();
     static QString resolveTestCacheDirectory(const QString& cacheLocation,
                                              const QString& tempLocation,
@@ -601,4 +615,18 @@ private:
     bool cleanTempOnExit_ = true;
     int cacheSizeLimitMB_ = 10 * 1024;
     int currentCacheSizeMB_ = 0;
+    QTimer cacheMaintenanceTimer_;
+    QThreadPool cacheWorkerPool_;
+    QFutureWatcher<CacheJanitor::TrimReport> cacheWatcher_;
+    std::shared_ptr<std::atomic_bool> cacheCancelled_;
+    QString cacheActiveDirectory_;
+    bool cacheMaintenancePending_ = false;
+    bool cacheTrimPending_ = false;
+    bool cacheTaskActive_ = false;
+    bool cacheClearCoversPending_ = false;
+    bool cacheActiveClearCovers_ = false;
+    bool cacheClearBusy_ = false;
+    bool cacheClearFailed_ = false;
+    QString cacheClearStatus_;
+    CacheJanitor::TrimReport cacheClearReport_;
 };

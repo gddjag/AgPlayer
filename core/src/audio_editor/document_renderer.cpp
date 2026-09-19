@@ -56,158 +56,60 @@ bool isCancelled(const std::atomic_bool* cancelled) noexcept
 RenderResult DocumentRenderer::renderFloatWav(
     const TimelineSnapshot& snapshot, const std::optional<Selection>& range,
     const std::filesystem::path& outputPath, const std::atomic_bool* cancelled,
-    std::function<void(float)> progress) const
+    std::function<void(float)> progress,
+    const EditorPlaybackParameters& parameters) const
 {
-    if (outputPath.empty() || snapshot.events.empty() || snapshot.totalFrames <= 0
-        || (range && (!range->valid() || range->end > snapshot.totalFrames))) {
-        return {false, 0, 0, 0, "invalid render request"};
-    }
+    if (outputPath.empty()) return {false, 0, 0, 0, "invalid render request"};
     if (isCancelled(cancelled)) return {false, 0, 0, 0, "cancelled"};
-    if (!isValid(snapshot.events.front())) {
-        return {false, 0, 0, 0, "invalid or unsupported timeline event"};
-    }
-    const AudioSource& source = *snapshot.events.front().source;
-    if (source.sample_rate == 0 || source.channels == 0 || source.channels > 8) {
-        return {false, 0, 0, 0, "document has no valid audio format"};
-    }
-    SampleFrame previousEnd = 0;
-    for (const AudioEvent& event : snapshot.events) {
-        if (!isValid(event) || event.source->sample_rate != source.sample_rate
-            || event.source->channels != source.channels
-            || event.speedRatio != 1.0 || event.pitchSemitone != 0
-            || event.timelineStart < previousEnd
-            || audibleFrames(event) > snapshot.totalFrames - event.timelineStart) {
-            return {false, 0, 0, 0, "invalid or unsupported timeline event"};
-        }
-        previousEnd = event.timelineStart + audibleFrames(event);
-    }
-    const SampleFrame renderStart = range ? range->start : 0;
-    const SampleFrame renderEnd = range ? range->end : snapshot.totalFrames;
-    const SampleFrame frameCount = range ? range->end - range->start
-                                         : snapshot.totalFrames;
-    const std::uint64_t bytesPerFrame = static_cast<std::uint64_t>(source.channels)
-        * sizeof(float);
-    if (frameCount <= 0
-        || static_cast<std::uint64_t>(frameCount)
-            > std::numeric_limits<std::uint32_t>::max() / bytesPerFrame
-        || source.sample_rate > std::numeric_limits<std::uint32_t>::max()
-            / source.channels / sizeof(float)) {
+    std::string error;
+    auto playback = EditorPlaybackStream::create(snapshot, parameters, error,
+        &agplayer::create_time_pitch_engine, range, cancelled);
+    if (!playback) return {false, 0, 0, 0, error};
+    const auto sampleRate = static_cast<std::uint32_t>(playback->metadata().sample_rate);
+    const auto channels = static_cast<std::uint32_t>(playback->metadata().channels);
+    const std::uint64_t bytesPerFrame = channels * sizeof(float);
+    const SampleFrame inputFrames = range ? range->end - range->start : snapshot.totalFrames;
+    const long double estimatedFrames = std::ceil(
+        static_cast<long double>(inputFrames) / parameters.speed_ratio);
+    constexpr auto maxDataBytes = std::numeric_limits<std::uint32_t>::max() - 36U;
+    if (estimatedFrames > static_cast<long double>(maxDataBytes / bytesPerFrame))
         return {false, 0, 0, 0, "WAV render exceeds 4 GiB"};
-    }
-    const std::uint64_t bytes = static_cast<std::uint64_t>(frameCount)
-        * bytesPerFrame;
     std::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
-    if (!output || !writeHeader(output, source.sample_rate,
-                                static_cast<std::uint16_t>(source.channels),
-                                static_cast<std::uint32_t>(bytes))) {
+    if (!output || !writeHeader(output, sampleRate,
+        static_cast<std::uint16_t>(channels), 0))
         return {false, 0, 0, 0, "cannot create render file"};
-    }
-    const auto fail = [&](const std::string& message, const SampleFrame rendered) {
-        output.close(); std::error_code ignored; std::filesystem::remove(outputPath, ignored);
-        return RenderResult{false, rendered, source.sample_rate, source.channels, message};
-    };
-    constexpr SampleFrame kBlockFrames = 4'096;
     SampleFrame rendered = 0;
-    std::vector<float> silence(static_cast<std::size_t>(kBlockFrames)
-                               * source.channels, 0.0F);
-    const auto reportProgress = [&] {
-        if (progress) {
-            progress(static_cast<float>(rendered)
-                     / static_cast<float>(frameCount));
-        }
+    const auto fail = [&](const std::string& message) {
+        output.close();
+        std::error_code ignored;
+        std::filesystem::remove(outputPath, ignored);
+        return RenderResult{false, rendered, sampleRate, channels, message};
     };
-    const auto writeSilence = [&](SampleFrame frames) -> bool {
-        while (frames > 0) {
-            if (isCancelled(cancelled)) return false;
-            const auto count = static_cast<std::size_t>(
-                std::min(frames, kBlockFrames));
-            output.write(reinterpret_cast<const char*>(silence.data()),
-                         static_cast<std::streamsize>(count * bytesPerFrame));
-            if (!output) return false;
-            rendered += static_cast<SampleFrame>(count);
-            frames -= static_cast<SampleFrame>(count);
-            reportProgress();
-        }
-        return true;
-    };
-    const auto writeEvent = [&](const AudioEvent& event,
-                                const SampleFrame timelineStart,
-                                const SampleFrame timelineEnd) -> bool {
-        const SampleFrame frames = timelineEnd - timelineStart;
-        if (event.mute) return writeSilence(frames);
-        agplayer::Decoder decoder;
-        if (decoder.open(event.source->path.u8string(),
-                         static_cast<int>(source.sample_rate),
-                         static_cast<int>(source.channels)) != AG_OK) {
-            return false;
-        }
-        const SampleFrame eventOffset = timelineStart - event.timelineStart;
-        const SampleFrame sourceStart = event.sourceStart + eventOffset;
-        if (decoder.seekFrame(sourceStart) != AG_OK) {
-            return false;
-        }
-        SampleFrame eventRendered = 0;
-        agplayer::DecodedAudioBlock block;
-        while (eventRendered < frames) {
-            if (isCancelled(cancelled) || decoder.read(block) != AG_OK) return false;
-            if (block.frames == 0) {
-                if (block.end_of_stream) return false;
-                continue;
-            }
-            constexpr std::size_t begin = 0;
-            const auto available = static_cast<SampleFrame>(block.frames - begin);
-            const auto take = static_cast<std::size_t>(std::min(
-                frames - eventRendered, available));
-            if (take == 0) continue;
-            float* samples = block.samples.data() + begin * source.channels;
-            for (std::size_t frame = 0; frame < take; ++frame) {
-                const SampleFrame localOffset = eventOffset + eventRendered
-                    + static_cast<SampleFrame>(frame);
-                const float gain = eventAmplitudeGainAt(event, localOffset);
-                if (gain != 1.0F) {
-                    for (std::uint32_t channel = 0; channel < source.channels;
-                         ++channel) {
-                        samples[frame * source.channels + channel] *= gain;
-                    }
-                }
-            }
-            output.write(reinterpret_cast<const char*>(samples),
-                         static_cast<std::streamsize>(take * bytesPerFrame));
-            if (!output) return false;
-            eventRendered += static_cast<SampleFrame>(take);
-            rendered += static_cast<SampleFrame>(take);
-            reportProgress();
-        }
-        return true;
-    };
-
-    SampleFrame cursor = renderStart;
-    for (const AudioEvent& event : snapshot.events) {
-        const SampleFrame eventEnd = event.timelineStart + audibleFrames(event);
-        if (eventEnd <= renderStart) continue;
-        if (event.timelineStart >= renderEnd) break;
-        const SampleFrame eventStart = std::max(event.timelineStart, renderStart);
-        if (cursor < eventStart && !writeSilence(eventStart - cursor)) {
-            return fail(isCancelled(cancelled) ? "cancelled" : "render write failed",
-                        rendered);
-        }
-        const SampleFrame intersectionStart = std::max(cursor, eventStart);
-        const SampleFrame intersectionEnd = std::min(eventEnd, renderEnd);
-        if (intersectionStart < intersectionEnd
-            && !writeEvent(event, intersectionStart, intersectionEnd)) {
-            return fail(isCancelled(cancelled) ? "cancelled"
-                                               : "cannot render source event",
-                        rendered);
-        }
-        cursor = intersectionEnd;
+    agplayer::DecodedAudioBlock block;
+    for (;;) {
+        if (isCancelled(cancelled)) return fail("cancelled");
+        const auto status = playback->read(block);
+        if (status != AG_OK) return fail(status == AG_CANCELLED ? "cancelled"
+            : "cannot render source event");
+        if (block.frames > maxDataBytes / bytesPerFrame - static_cast<std::uint64_t>(rendered))
+            return fail("WAV render exceeds 4 GiB");
+        output.write(reinterpret_cast<const char*>(block.samples.data()),
+            static_cast<std::streamsize>(block.samples.size() * sizeof(float)));
+        if (!output) return fail("render write failed");
+        rendered += static_cast<SampleFrame>(block.frames);
+        if (progress) progress(static_cast<float>(std::min<long double>(
+            0.999L, rendered / std::max(1.0L, estimatedFrames))));
+        if (block.end_of_stream) break;
     }
-    if (cursor < renderEnd && !writeSilence(renderEnd - cursor)) {
-        return fail(isCancelled(cancelled) ? "cancelled" : "render write failed",
-                    rendered);
-    }
-    if (!output) return fail("render write failed", rendered);
+    if (isCancelled(cancelled)) return fail("cancelled");
+    output.seekp(0);
+    if (!writeHeader(output, sampleRate, static_cast<std::uint16_t>(channels),
+        static_cast<std::uint32_t>(static_cast<std::uint64_t>(rendered) * bytesPerFrame)))
+        return fail("render write failed");
+    output.flush();
+    if (!output) return fail("render write failed");
     if (progress) progress(1.0F);
-    return {true, rendered, source.sample_rate, source.channels, {}};
+    return {true, rendered, sampleRate, channels, {}};
 }
 
 } // namespace agplayer::editor

@@ -10,6 +10,23 @@ TestCase {
     SignalSpy { id: searchSpy; target: WindowController; signalName: "searchRequested" }
     Component { id: losslessPage; LosslessIdentifyPage { width: 1100; height: 700 } }
     Component { id: title; TitleBar { width: 860; height: Theme.titleBarHeight; showBrand: true } }
+    Component { id: settingsPage; SettingsPage { width: 1040; height: 720 } }
+    Component { id: listPage; ListWindow { width: 1000; height: 620 } }
+    Component { id: mini; MiniPlayerWindow {} }
+
+    function test_miniBrandStaysCenteredOnMac() {
+        if (Qt.platform.os !== "osx") skip("macOS title alignment")
+        const window = createTemporaryObject(mini, null, { visible: true })
+        verify(window)
+        const brand = findChild(window, "miniTitleBrand")
+        verify(brand)
+        for (const width of [480, 588, 900]) {
+            window.width = width
+            tryVerify(function() {
+                return brand.width > 0 && Math.abs(brand.x + brand.width / 2 - brand.parent.width / 2) < 1
+            })
+        }
+    }
 
     function init() {
         WindowController.hideAudioTools()
@@ -51,6 +68,66 @@ TestCase {
             bar.grabToImage(function(result) { saved = result.saveToFile(visualFixtureOutput) })
             tryVerify(function() { return saved }, 5000)
         }
+    }
+
+    function test_searchShortcutFocusesVisibleShell_data() {
+        return [
+            {tag: "classic-default", mode: 0, combo: "Ctrl + F", key: Qt.Key_F, modifiers: Qt.ControlModifier, target: "librarySearchFilter"},
+            {tag: "integrated-default", mode: 1, combo: "Ctrl + F", key: Qt.Key_F, modifiers: Qt.ControlModifier, target: "integratedSearchFilter"},
+            {tag: "rolling-default", mode: 2, combo: "Ctrl + F", key: Qt.Key_F, modifiers: Qt.ControlModifier, target: "rollingSearchFilter"},
+            {tag: "classic-custom", mode: 0, combo: "Ctrl + Shift + J", key: Qt.Key_J, modifiers: Qt.ControlModifier | Qt.ShiftModifier, target: "librarySearchFilter"},
+            {tag: "integrated-custom", mode: 1, combo: "Ctrl + Shift + J", key: Qt.Key_J, modifiers: Qt.ControlModifier | Qt.ShiftModifier, target: "integratedSearchFilter"},
+            {tag: "rolling-custom", mode: 2, combo: "Ctrl + Shift + J", key: Qt.Key_J, modifiers: Qt.ControlModifier | Qt.ShiftModifier, target: "rollingSearchFilter"}
+        ]
+    }
+
+    function test_searchShortcutFocusesVisibleShell(data) {
+        const oldMode = SettingsController.playerShellMode
+        const oldShortcut = SettingsController.hkSearch
+        const filter = findChild(main, "filterModel")
+        const oldSearch = filter.searchText
+        let list = null
+        try {
+            SettingsController.playerShellMode = data.mode
+            SettingsController.hkSearch = data.combo
+            filter.searchText = "search probe"
+            list = createTemporaryObject(listPage, null, {filterModel: filter, visible: data.mode === 0})
+            verify(list)
+            const targetRoot = data.mode === 0 ? list : main
+            tryVerify(function() { return findChild(targetRoot, data.target) !== null })
+            const search = findChild(targetRoot, data.target)
+            const field = findChild(search, "librarySearchField")
+            verify(field && field.visible)
+            // The QML harness owns the actual list window separately from the
+            // controller's native-window fixture. Activate the current host.
+            targetRoot.requestActivate()
+            targetRoot.contentItem.forceActiveFocus()
+            wait(100)
+            searchSpy.clear()
+            verify(nativeDropHelper.sendKey(targetRoot, data.key, data.modifiers))
+            tryCompare(searchSpy, "count", 1)
+            tryCompare(field, "activeFocus", true, 1000)
+            compare(field.selectedText, "search probe")
+            wait(50)
+            compare(searchSpy.count, 1)
+            if (data.mode !== 0) verify(!list.visible)
+        } finally {
+            SettingsController.hkSearch = oldShortcut
+            SettingsController.playerShellMode = oldMode
+            filter.searchText = oldSearch
+            if (list) list.close()
+            main.requestActivate()
+        }
+    }
+
+    function test_shortcutCaptureUsesKeyCodeInsteadOfGeneratedText() {
+        const page = createTemporaryObject(settingsPage, main.contentItem)
+        verify(page)
+        compare(page.shortcutText({key: Qt.Key_D, modifiers: Qt.AltModifier, text: "∂"}), "Alt + D")
+        compare(page.shortcutText({key: Qt.Key_E, modifiers: Qt.AltModifier, text: ""}), "Alt + E")
+        compare(page.shortcutText({key: Qt.Key_F, modifiers: Qt.ControlModifier, text: "\u0006"}), "Ctrl + F")
+        compare(page.shortcutText({key: Qt.Key_A, modifiers: Qt.ControlModifier | Qt.ShiftModifier, text: "A"}), "Ctrl + Shift + A")
+        compare(page.shortcutText({key: Qt.Key_MediaPlay, modifiers: Qt.ShiftModifier, text: ""}), "Shift + MediaPlayPause")
     }
 
     function test_selectedFileEntersRealLosslessQueue() {

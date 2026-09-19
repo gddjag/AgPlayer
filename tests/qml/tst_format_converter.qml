@@ -214,8 +214,8 @@ TestCase {
         }
         verify(tasks.width > 0 && tasks.height > 0)
         compare(page.compactLayout, data.w < 1500)
-        if (page.compactLayout)
-            verify(settings.width <= 40.5)
+        verify(findChild(settings, "formatSettingsScroll").visible,
+               "Conversion options remain available at compact widths")
 
         const bottomItems = ["converterParallelJobsGroup", "formatSummaryCard",
                              "convertAllButton", "cancelAllButton"]
@@ -493,7 +493,10 @@ TestCase {
         const convert = findChild(page, "convertAllButton")
         const table = findChild(page, "formatTaskTableView")
         verify(taskPanel && settingsPanel && addFile && convert && table)
-        tryCompare(settingsPanel, "width", 40, 1000)
+        tryVerify(function() {
+            return settingsPanel.width >= 340
+                    && findChild(settingsPanel, "formatSettingsScroll").visible
+        }, 1000)
         verify(addFile.visible && convert.visible)
         const addPosition = addFile.mapToItem(testCase, 0, 0)
         const convertPosition = convert.mapToItem(testCase, 0, 0)

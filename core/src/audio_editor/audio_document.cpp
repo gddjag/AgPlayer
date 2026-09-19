@@ -38,10 +38,10 @@ std::optional<std::vector<EnvelopePoint>> reframedEnvelope(
     const AudioEvent& event, const SampleFrame newSourceStart,
     const SampleFrame newSourceEnd)
 {
-    const SampleFrame newFrames = newSourceEnd - newSourceStart;
+    const SampleFrame newFrames = projectOffsetAt(event, newSourceEnd) - projectOffsetAt(event, newSourceStart);
     if (newFrames <= 0) return std::nullopt;
-    const SampleFrame oldOffsetAtNewStart = newSourceStart - event.sourceStart;
-    const SampleFrame oldOffsetAtNewEnd = newSourceEnd - event.sourceStart;
+    const SampleFrame oldOffsetAtNewStart = projectOffsetAt(event, newSourceStart);
+    const SampleFrame oldOffsetAtNewEnd = projectOffsetAt(event, newSourceEnd);
     std::vector<EnvelopePoint> result;
     result.reserve(event.envelope.size() + 1U);
 
@@ -93,9 +93,9 @@ bool reframeEvent(AudioEvent& event, const SampleFrame newSourceStart,
         return false;
     }
     const SampleFrame oldFrames = audibleFrames(event);
-    const SampleFrame sliceStart = newSourceStart - event.sourceStart;
-    const SampleFrame sliceEnd = newSourceEnd - event.sourceStart;
-    const SampleFrame newFrames = newSourceEnd - newSourceStart;
+    const SampleFrame sliceStart = projectOffsetAt(event, newSourceStart);
+    const SampleFrame sliceEnd = projectOffsetAt(event, newSourceEnd);
+    const SampleFrame newFrames = sliceEnd - sliceStart;
     const auto envelope = reframedEnvelope(
         event, newSourceStart, newSourceEnd);
     if (!envelope) return false;
@@ -127,7 +127,7 @@ void appendSourceEnvelope(const AudioEvent& event,
 {
     result.push_back({event.sourceStart, envelopeGainAt(event, 0)});
     for (const EnvelopePoint& point : event.envelope) {
-        result.push_back({event.sourceStart + point.offset, point.gain});
+        result.push_back({event.sourceStart + sourceOffsetAt(event, point.offset), point.gain});
     }
 }
 
@@ -176,9 +176,10 @@ float sourceEnvelopeGainAt(const std::vector<SourceEnvelopePoint>& points,
 
 std::vector<EnvelopePoint> reframeSharedEnvelope(
     const std::vector<SourceEnvelopePoint>& points,
-    const SampleFrame sourceStart, const SampleFrame sourceEnd)
+    const AudioEvent& event)
 {
-    const SampleFrame frames = sourceEnd - sourceStart;
+    const SampleFrame sourceStart = event.sourceStart, sourceEnd = event.sourceEnd;
+    const SampleFrame frames = audibleFrames(event);
     std::vector<EnvelopePoint> result;
     result.reserve(points.size() + 1U);
     const float startGain = sourceEnvelopeGainAt(points, sourceStart);
@@ -187,7 +188,8 @@ std::vector<EnvelopePoint> reframeSharedEnvelope(
         if (point.sourceFrame <= sourceStart || point.sourceFrame >= sourceEnd) {
             continue;
         }
-        const SampleFrame offset = point.sourceFrame - sourceStart;
+        const SampleFrame offset = projectOffsetAt(event, point.sourceFrame);
+        if (offset >= frames) continue;
         if (!result.empty() && result.back().offset == offset) {
             result.back().gain = point.gain;
         } else {
@@ -196,7 +198,7 @@ std::vector<EnvelopePoint> reframeSharedEnvelope(
     }
     const SampleFrame lastOffset = frames - 1;
     const float lastGain = sourceEnvelopeGainAt(points,
-                                                sourceStart + lastOffset);
+                                                sourceStart + sourceOffsetAt(event, lastOffset));
     if (!result.empty() && result.back().offset == lastOffset) {
         result.back().gain = lastGain;
     } else if (lastGain != 1.0F
@@ -210,7 +212,8 @@ std::vector<EnvelopePoint> reframeSharedEnvelope(
 bool sameSharedBoundaryParameters(const AudioEvent& left,
                                   const AudioEvent& right) noexcept
 {
-    return left.source == right.source && left.gain == right.gain
+    return left.trackIndex == right.trackIndex && left.timelineSampleRate == right.timelineSampleRate
+        && left.source == right.source && left.gain == right.gain
         && left.speedRatio == right.speedRatio
         && left.pitchSemitone == right.pitchSemitone && left.mute == right.mute;
 }
@@ -219,7 +222,7 @@ bool sameSharedBoundaryParameters(const AudioEvent& left,
 
 bool operator==(const Selection& left, const Selection& right) noexcept
 {
-    return left.start == right.start && left.end == right.end;
+    return left.start == right.start && left.end == right.end && left.trackIndex == right.trackIndex;
 }
 
 bool operator==(const Marker& left, const Marker& right) noexcept
@@ -247,10 +250,8 @@ bool reframeSharedBoundary(AudioEvent& left, AudioEvent& right,
                          leftTimelineStart + audibleFrames(left))) {
         return false;
     }
-    left.envelope = reframeSharedEnvelope(envelope, left.sourceStart,
-                                          left.sourceEnd);
-    right.envelope = reframeSharedEnvelope(envelope, right.sourceStart,
-                                           right.sourceEnd);
+    left.envelope = reframeSharedEnvelope(envelope, left);
+    right.envelope = reframeSharedEnvelope(envelope, right);
     return isValid(left) && isValid(right);
 }
 
@@ -284,15 +285,70 @@ std::vector<std::shared_ptr<const AudioSource>> AudioDocument::retainedSources()
 
 AudioDocument AudioDocument::fromEvents(std::vector<AudioEvent> events)
 {
+    TimelineSnapshot state;
+    state.events = std::move(events);
+    return fromSnapshot(std::move(state));
+}
+
+AudioDocument AudioDocument::fromSnapshot(TimelineSnapshot state)
+{
     AudioDocument document;
     EventId highest{};
-    for (const AudioEvent& event : events) {
+    for (const AudioEvent& event : state.events) {
         if (event.id == std::numeric_limits<EventId>::max()) return {};
         highest = std::max(highest, event.id);
     }
-    if (!document.timeline_.replace(std::move(events))) return {};
+    if (!document.timeline_.restore(std::move(state))) return {};
     document.next_event_id_ = highest + 1;
     return document;
+}
+
+bool AudioDocument::setProjectFormat(std::uint32_t sampleRate, std::uint32_t channels)
+{
+    auto state = timeline_.snapshot();
+    if (!state.events.empty() || sampleRate == 0 || channels == 0 || channels > 32) return false;
+    state.sampleRate = sampleRate; state.channels = channels;
+    return applySnapshot(std::move(state));
+}
+
+bool AudioDocument::setTrackMuted(int trackIndex, bool muted)
+{
+    if (trackIndex < 0 || trackIndex >= static_cast<int>(kTrackCount)) return false;
+    auto state = timeline_.snapshot();
+    state.tracks[static_cast<std::size_t>(trackIndex)].muted = muted;
+    return applySnapshot(std::move(state));
+}
+
+bool AudioDocument::cropEventToSelection(EventId id)
+{
+    if (!hasValidSelection()) return false;
+    const auto* event = timeline_.event(id);
+    if (!event || (selection_->trackIndex >= 0 && selection_->trackIndex != event->trackIndex)) return false;
+    const auto start = std::max(selection_->start, event->timelineStart);
+    const auto end = std::min(selection_->end, event->timelineStart + audibleFrames(*event));
+    if (end <= start) return false;
+    const auto sourceStart = event->sourceStart + sourceOffsetAt(*event, start - event->timelineStart);
+    const auto sourceEnd = event->sourceStart + sourceOffsetAt(*event, end - event->timelineStart);
+    return trimEvent(id, sourceStart, sourceEnd, event->timelineStart + projectOffsetAt(*event, sourceStart));
+}
+
+bool AudioDocument::setTrackGain(int trackIndex, float gain)
+{
+    if (trackIndex < 0 || trackIndex >= static_cast<int>(kTrackCount)
+        || !std::isfinite(gain) || gain < 0 || gain > 2) return false;
+    auto state = timeline_.snapshot();
+    state.tracks[static_cast<std::size_t>(trackIndex)].gain = gain;
+    return applySnapshot(std::move(state));
+}
+
+bool AudioDocument::moveEvent(EventId id, SampleFrame start, int trackIndex)
+{
+    auto candidate = timeline_.snapshot().events;
+    const auto found = std::find_if(candidate.begin(), candidate.end(),
+        [id](const AudioEvent& event) { return event.id == id; });
+    if (found == candidate.end()) return false;
+    found->timelineStart = start; found->trackIndex = trackIndex;
+    return applyCandidate(std::move(candidate));
 }
 
 bool AudioDocument::setSelection(const Selection selection) noexcept
@@ -389,10 +445,10 @@ bool AudioDocument::splitAt(std::vector<AudioEvent>& events, const EventId id,
     const AudioEvent original = *found;
     AudioEvent left = original;
     AudioEvent right = original;
-    const SampleFrame sourceSplit = found->sourceStart + (frame - found->timelineStart);
+    const SampleFrame sourceSplit = found->sourceStart + sourceOffsetAt(*found, frame - found->timelineStart);
     if (!reframeEvent(left, original.sourceStart, sourceSplit,
                       original.timelineStart)
-        || !reframeEvent(right, sourceSplit, original.sourceEnd, frame)) {
+        || !reframeEvent(right, sourceSplit, original.sourceEnd, original.timelineStart + audibleFrames(left))) {
         return false;
     }
     right.id = rightId;
@@ -402,17 +458,19 @@ bool AudioDocument::splitAt(std::vector<AudioEvent>& events, const EventId id,
 }
 
 bool AudioDocument::splitAtFrame(std::vector<AudioEvent>& events,
-                                 const SampleFrame frame, EventId& nextId)
+                                 const SampleFrame frame, EventId& nextId, const int trackIndex)
 {
+    std::vector<EventId> toSplit;
     for (const AudioEvent& event : events) {
+        if (trackIndex >= 0 && event.trackIndex != trackIndex) continue;
         const SampleFrame end = event.timelineStart + audibleFrames(event);
-        if (frame == event.timelineStart || frame == end) return true;
         if (frame > event.timelineStart && frame < end) {
-            if (nextId == std::numeric_limits<EventId>::max()) return false;
-            if (!splitAt(events, event.id, frame, nextId)) return false;
-            ++nextId;
-            return true;
+            toSplit.push_back(event.id);
         }
+    }
+    for (const auto id : toSplit) {
+        if (nextId == std::numeric_limits<EventId>::max() || !splitAt(events, id, frame, nextId)) return false;
+        ++nextId;
     }
     return true;
 }
@@ -429,8 +487,9 @@ bool AudioDocument::splitEventAt(const EventId id, const SampleFrame frame)
 
 bool AudioDocument::clearTimeline()
 {
-    if (timeline_.snapshot().events.empty()) return false;
-    return applyCandidate({});
+    auto state = timeline_.snapshot();
+    state.events.clear(); state.tracks = {}; state.legacyMasterGain = 1.0F;
+    return applySnapshot(std::move(state));
 }
 
 bool AudioDocument::hasValidSelection() const noexcept
@@ -447,7 +506,8 @@ std::vector<AudioEvent> AudioDocument::selectedEvents() const
     std::vector<AudioEvent> selected;
     for (const AudioEvent& event : candidate) {
         const SampleFrame end = event.timelineStart + audibleFrames(event);
-        if (event.timelineStart >= selection_->start && end <= selection_->end) {
+        if ((selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+            && event.timelineStart >= selection_->start && end <= selection_->end) {
             selected.push_back(event);
         }
     }
@@ -458,8 +518,8 @@ bool AudioDocument::splitSelectionBoundaries(
     std::vector<AudioEvent>& events, EventId& nextId) const
 {
     if (!hasValidSelection()) return false;
-    return splitAtFrame(events, selection_->start, nextId)
-        && splitAtFrame(events, selection_->end, nextId);
+    return splitAtFrame(events, selection_->start, nextId, selection_->trackIndex)
+        && splitAtFrame(events, selection_->end, nextId, selection_->trackIndex);
 }
 
 bool AudioDocument::deleteSelection()
@@ -467,13 +527,13 @@ bool AudioDocument::deleteSelection()
     if (!hasValidSelection()) return false;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     EventId candidateId = next_event_id_;
-    if (!splitAtFrame(candidate, selection_->start, candidateId)
-        || !splitAtFrame(candidate, selection_->end, candidateId)) return false;
+    if (!splitSelectionBoundaries(candidate, candidateId)) return false;
     const auto oldSize = candidate.size();
     candidate.erase(std::remove_if(candidate.begin(), candidate.end(),
         [this](const AudioEvent& event) {
             const SampleFrame end = event.timelineStart + audibleFrames(event);
-            return event.timelineStart >= selection_->start && end <= selection_->end;
+            return (selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+                && event.timelineStart >= selection_->start && end <= selection_->end;
         }), candidate.end());
     if (candidate.size() == oldSize || !applyCandidate(std::move(candidate))) return false;
     next_event_id_ = candidateId;
@@ -484,17 +544,20 @@ bool AudioDocument::deleteSelection()
 bool AudioDocument::cropToSelection()
 {
     if (!hasValidSelection()) return false;
+    const int selectionTrack = selection_->trackIndex;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     EventId candidateId = next_event_id_;
     if (!splitSelectionBoundaries(candidate, candidateId)) return false;
     candidate.erase(std::remove_if(candidate.begin(), candidate.end(),
         [this](const AudioEvent& event) {
             const SampleFrame end = event.timelineStart + audibleFrames(event);
-            return event.timelineStart < selection_->start || end > selection_->end;
+            return (selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+                && (event.timelineStart < selection_->start || end > selection_->end);
         }), candidate.end());
     if (candidate.empty()) return false;
     for (AudioEvent& event : candidate) {
-        event.timelineStart -= selection_->start;
+        if (selection_->trackIndex >= 0 && event.trackIndex != selection_->trackIndex) continue;
+        if (selection_->trackIndex < 0) event.timelineStart -= selection_->start;
         const SampleFrame lastOffset = audibleFrames(event) - 1;
         const float firstGain = envelopeGainAt(event, 0);
         const float lastGain = envelopeGainAt(event, lastOffset);
@@ -508,7 +571,7 @@ bool AudioDocument::cropToSelection()
     }
     if (!applyCandidate(std::move(candidate))) return false;
     next_event_id_ = candidateId;
-    selection_ = Selection{0, timeline_.totalFrames()};
+    if (selectionTrack < 0) selection_ = Selection{0, timeline_.totalFrames()};
     return true;
 }
 
@@ -520,7 +583,8 @@ bool AudioDocument::silenceSelection()
     if (!splitSelectionBoundaries(candidate, candidateId)) return false;
     for (AudioEvent& event : candidate) {
         const SampleFrame end = event.timelineStart + audibleFrames(event);
-        if (event.timelineStart >= selection_->start && end <= selection_->end) {
+        if ((selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+            && event.timelineStart >= selection_->start && end <= selection_->end) {
             event.mute = true;
         }
     }
@@ -538,7 +602,8 @@ bool AudioDocument::fadeIn()
     for (AudioEvent& event : candidate) {
         const SampleFrame frames = audibleFrames(event);
         const SampleFrame end = event.timelineStart + frames;
-        if (event.timelineStart >= selection_->start && end <= selection_->end) {
+        if ((selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+            && event.timelineStart >= selection_->start && end <= selection_->end) {
             event.fadeIn = frames - event.fadeOut;
         }
     }
@@ -556,7 +621,8 @@ bool AudioDocument::fadeOut()
     for (AudioEvent& event : candidate) {
         const SampleFrame frames = audibleFrames(event);
         const SampleFrame end = event.timelineStart + frames;
-        if (event.timelineStart >= selection_->start && end <= selection_->end) {
+        if ((selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+            && event.timelineStart >= selection_->start && end <= selection_->end) {
             event.fadeOut = frames - event.fadeIn;
         }
     }
@@ -699,12 +765,12 @@ bool AudioDocument::cutSelection()
     if (copied.empty()) return false;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     EventId candidateId = next_event_id_;
-    if (!splitAtFrame(candidate, selection_->start, candidateId)
-        || !splitAtFrame(candidate, selection_->end, candidateId)) return false;
+    if (!splitSelectionBoundaries(candidate, candidateId)) return false;
     candidate.erase(std::remove_if(candidate.begin(), candidate.end(),
         [this](const AudioEvent& event) {
             const SampleFrame end = event.timelineStart + audibleFrames(event);
-            return event.timelineStart >= selection_->start && end <= selection_->end;
+            return (selection_->trackIndex < 0 || event.trackIndex == selection_->trackIndex)
+                && event.timelineStart >= selection_->start && end <= selection_->end;
         }), candidate.end());
     if (!applyCandidate(std::move(candidate))) return false;
     clipboard_ = copied;
@@ -773,7 +839,12 @@ bool AudioDocument::fadeEvent(const EventId id, const bool fadeIn)
 
 bool AudioDocument::pasteAt(const SampleFrame playhead)
 {
-    if (clipboard_.empty() || playhead < 0) return false;
+    return pasteAt(playhead, -1);
+}
+
+bool AudioDocument::pasteAt(const SampleFrame playhead, const int trackIndex)
+{
+    if (clipboard_.empty() || playhead < 0 || trackIndex < -1 || trackIndex >= static_cast<int>(kTrackCount)) return false;
     const SampleFrame origin = clipboard_.front().timelineStart;
     std::vector<AudioEvent> candidate = timeline_.snapshot().events;
     std::vector<AudioEvent> clones;
@@ -791,6 +862,10 @@ bool AudioDocument::pasteAt(const SampleFrame playhead)
             return false;
         }
         AudioEvent clone = original;
+        if (trackIndex >= 0) {
+            clone.trackIndex += trackIndex - clipboard_.front().trackIndex;
+            if (clone.trackIndex < 0 || clone.trackIndex >= static_cast<int>(kTrackCount)) return false;
+        }
         clone.id = candidateId++;
         clone.timelineStart = playhead + offset;
         const SampleFrame cloneFrames = audibleFrames(clone);
@@ -812,7 +887,7 @@ bool AudioDocument::pasteAt(const SampleFrame playhead)
                 [clone, cloneEnd](const AudioEvent& existing) {
                     const SampleFrame existingEnd = existing.timelineStart
                         + audibleFrames(existing);
-                    return clone.timelineStart < existingEnd
+                    return clone.trackIndex == existing.trackIndex && clone.timelineStart < existingEnd
                         && existing.timelineStart < cloneEnd;
                 });
         });
@@ -820,11 +895,17 @@ bool AudioDocument::pasteAt(const SampleFrame playhead)
         const SampleFrame clipboardFrames = clipboardEnd - origin;
         if (clipboardFrames <= 0
             || playhead > std::numeric_limits<SampleFrame>::max()
-                - clipboardFrames
-            || !splitAtFrame(candidate, playhead, candidateId)) {
+                - clipboardFrames) {
             return false;
         }
+        std::array<bool, kTrackCount> splitTracks{};
+        for (const auto& clone : clones) {
+            auto& split = splitTracks[static_cast<std::size_t>(clone.trackIndex)];
+            if (!split && !splitAtFrame(candidate, playhead, candidateId, clone.trackIndex)) return false;
+            split = true;
+        }
         for (AudioEvent& event : candidate) {
+            if (std::none_of(clones.begin(), clones.end(), [&event](const AudioEvent& clone) { return clone.trackIndex == event.trackIndex; })) continue;
             if (event.timelineStart < playhead) continue;
             if (event.timelineStart > std::numeric_limits<SampleFrame>::max()
                     - clipboardFrames) {
@@ -870,7 +951,8 @@ bool AudioDocument::sameParameters(const AudioEvent& left,
                                                   const EnvelopePoint& rhs) {
                           return lhs.offset == rhs.offset && lhs.gain == rhs.gain;
                       });
-    return left.source == right.source && left.gain == right.gain
+    return left.trackIndex == right.trackIndex && left.timelineSampleRate == right.timelineSampleRate
+        && left.source == right.source && left.gain == right.gain
         && left.fadeIn == right.fadeIn && left.fadeOut == right.fadeOut
         && left.fadeInCurve == right.fadeInCurve
         && left.fadeOutCurve == right.fadeOutCurve
@@ -920,13 +1002,15 @@ bool AudioDocument::replaceSelectionWithSource(AudioSource source)
     candidate.erase(std::remove_if(candidate.begin(), candidate.end(),
         [&replacement](const AudioEvent& event) {
             const SampleFrame end = event.timelineStart + audibleFrames(event);
-            return event.timelineStart >= replacement.start
+            return (replacement.trackIndex < 0 || event.trackIndex == replacement.trackIndex)
+                && event.timelineStart >= replacement.start
                 && end <= replacement.end;
         }), candidate.end());
     auto shared = std::make_shared<const AudioSource>(std::move(source));
     candidate.push_back(AudioEvent{candidateId, shared, 0,
                                    shared->total_frames, replacement.start,
                                    1.0F, 0, 0, 1.0, 0, false, {}});
+    candidate.back().trackIndex = std::max(0, replacement.trackIndex);
     if (!applyCandidate(std::move(candidate))) return false;
     next_event_id_ = candidateId + 1;
     selection_.reset();
@@ -936,22 +1020,87 @@ bool AudioDocument::replaceSelectionWithSource(AudioSource source)
 bool AudioDocument::insertSourceAtCursor(AudioSource source,
                                          const SampleFrame cursor)
 {
+    return insertSource(std::move(source), cursor, 0);
+}
+
+bool AudioDocument::replaceEventWithSource(EventId id, AudioSource source,
+    SampleFrame start, SampleFrame end)
+{
+    auto state = timeline_.snapshot();
+    const auto found = std::find_if(state.events.begin(), state.events.end(),
+        [id](const AudioEvent& event) { return event.id == id; });
+    if (found == state.events.end() || start < found->timelineStart || end <= start
+        || end > found->timelineStart + audibleFrames(*found)
+        || source.sample_rate == 0 || source.channels == 0 || source.total_frames <= 0
+        || sourceToProjectFrames(source.total_frames, source.sample_rate, state.sampleRate) != end - start)
+        return false;
+    const AudioEvent original = *found;
+    const auto sourceBegin = original.sourceStart + sourceOffsetAt(original, start - original.timelineStart);
+    const auto sourceEnd = original.sourceStart + sourceOffsetAt(original, end - original.timelineStart);
+    AudioEvent processed = original;
+    if (!reframeEvent(processed, sourceBegin, sourceEnd, start)) return false;
+    processed.source = std::make_shared<const AudioSource>(std::move(source));
+    processed.sourceStart = 0; processed.sourceEnd = processed.source->total_frames;
+    if (!isValid(processed)) return false;
+    auto candidateId = next_event_id_;
+    std::vector<AudioEvent> pieces;
+    if (start > original.timelineStart) {
+        if (candidateId == std::numeric_limits<EventId>::max()) return false;
+        auto left = original;
+        if (!reframeEvent(left, original.sourceStart, sourceBegin, original.timelineStart)) return false;
+        left.id = candidateId++; pieces.push_back(std::move(left));
+    }
+    pieces.push_back(std::move(processed));
+    if (end < original.timelineStart + audibleFrames(original)) {
+        if (candidateId == std::numeric_limits<EventId>::max()) return false;
+        auto right = original;
+        if (!reframeEvent(right, sourceEnd, original.sourceEnd, end)) return false;
+        right.id = candidateId++; pieces.push_back(std::move(right));
+    }
+    state.events.erase(found);
+    state.events.insert(state.events.end(), pieces.begin(), pieces.end());
+    if (!applyCandidate(std::move(state.events))) return false;
+    next_event_id_ = candidateId;
+    return true;
+}
+
+bool AudioDocument::overwriteSource(AudioSource source, const SampleFrame cursor, const int trackIndex)
+{
+    const auto current = timeline_.snapshot();
+    if (cursor < 0 || trackIndex < 0 || trackIndex >= 6 || source.sample_rate == 0
+        || source.channels == 0 || source.total_frames <= 0 || current.sampleRate == 0) return false;
+    const auto duration = sourceToProjectFrames(source.total_frames, source.sample_rate, current.sampleRate);
+    if (duration <= 0 || cursor > std::numeric_limits<SampleFrame>::max() - duration) return false;
+    const auto end = cursor + duration;
+    auto candidate = current.events;
+    auto nextId = next_event_id_;
+    if (!splitAtFrame(candidate, cursor, nextId, trackIndex)
+        || !splitAtFrame(candidate, end, nextId, trackIndex)
+        || nextId == std::numeric_limits<EventId>::max()) return false;
+    candidate.erase(std::remove_if(candidate.begin(), candidate.end(), [&](const AudioEvent& event) {
+        return event.trackIndex == trackIndex && event.timelineStart >= cursor && event.timelineStart < end;
+    }), candidate.end());
+    auto shared = std::make_shared<const AudioSource>(std::move(source));
+    AudioEvent take{nextId++, shared, 0, shared->total_frames, cursor};
+    take.trackIndex = trackIndex;
+    candidate.push_back(std::move(take));
+    if (!applyCandidate(std::move(candidate))) return false;
+    next_event_id_ = nextId;
+    return true;
+}
+
+bool AudioDocument::insertSource(AudioSource source, const SampleFrame cursor, const int trackIndex)
+{
     if (cursor < 0 || source.sample_rate == 0 || source.channels == 0
         || source.total_frames <= 0
         || next_event_id_ == std::numeric_limits<EventId>::max()) return false;
     const TimelineSnapshot current = timeline_.snapshot();
-    if (!current.events.empty()) {
-        const AudioSource& format = *current.events.front().source;
-        if (source.sample_rate != format.sample_rate
-            || source.channels != format.channels) {
-            return false;
-        }
-    }
     auto shared = std::make_shared<const AudioSource>(std::move(source));
     std::vector<AudioEvent> candidate = current.events;
     candidate.push_back(AudioEvent{next_event_id_, shared, 0,
                                    shared->total_frames, cursor,
                                    1.0F, 0, 0, 1.0, 0, false, {}});
+    candidate.back().trackIndex = trackIndex;
     if (!applyCandidate(std::move(candidate))) return false;
     ++next_event_id_;
     return true;
@@ -990,6 +1139,15 @@ bool AudioDocument::applyCandidate(std::vector<AudioEvent> candidate)
             std::make_unique<TimelineEditCommand>(std::move(*command)), timeline_)) {
         return false;
     }
+    normalizeEditorState();
+    return true;
+}
+
+bool AudioDocument::applySnapshot(TimelineSnapshot candidate)
+{
+    auto command = TimelineEditCommand::fromSnapshot(timeline_, std::move(candidate));
+    if (!command || !history_.executeAndPush(
+        std::make_unique<TimelineEditCommand>(std::move(*command)), timeline_)) return false;
     normalizeEditorState();
     return true;
 }

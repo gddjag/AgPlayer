@@ -33,6 +33,7 @@ public:
         QString album{};
         qint64 durationMs = 0;
         bool lowPriority = false;
+        bool forceRefresh = false;
     };
     struct Candidate final {
         Source source;

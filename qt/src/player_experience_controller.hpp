@@ -17,6 +17,14 @@ class PlayerExperienceController final : public QObject {
     Q_PROPERTY(int hostMode READ hostMode WRITE setHostMode NOTIFY hostModeChanged)
     Q_PROPERTY(bool lyricsVisible READ lyricsVisible WRITE setLyricsVisible
                    NOTIFY lyricsVisibleChanged)
+    Q_PROPERTY(int integratedSidePanelPage READ integratedSidePanelPage
+                   WRITE setIntegratedSidePanelPage NOTIFY integratedSidePanelPageChanged)
+    Q_PROPERTY(bool integratedSidePanelExpanded READ integratedSidePanelExpanded
+                   WRITE setIntegratedSidePanelExpanded NOTIFY integratedSidePanelExpandedChanged)
+    Q_PROPERTY(int rollingSidePanelPage READ rollingSidePanelPage
+                   WRITE setRollingSidePanelPage NOTIFY rollingSidePanelPageChanged)
+    Q_PROPERTY(bool rollingSidePanelExpanded READ rollingSidePanelExpanded
+                   WRITE setRollingSidePanelExpanded NOTIFY rollingSidePanelExpandedChanged)
     Q_PROPERTY(bool panelVisible READ panelVisible WRITE setPanelVisible
                    NOTIFY panelVisibleChanged)
     Q_PROPERTY(bool desktopMousePassthrough READ desktopMousePassthrough
@@ -150,6 +158,10 @@ public:
     int immersiveMode() const noexcept;
     int hostMode() const noexcept;
     bool lyricsVisible() const noexcept;
+    int integratedSidePanelPage() const noexcept;
+    bool integratedSidePanelExpanded() const noexcept;
+    int rollingSidePanelPage() const noexcept;
+    bool rollingSidePanelExpanded() const noexcept;
     bool panelVisible() const noexcept;
     bool desktopMousePassthrough() const noexcept;
     int qualityPreset() const noexcept;
@@ -221,6 +233,10 @@ public:
     void setImmersiveMode(int value);
     void setHostMode(int value);
     void setLyricsVisible(bool value);
+    void setIntegratedSidePanelPage(int value);
+    void setIntegratedSidePanelExpanded(bool value);
+    void setRollingSidePanelPage(int value);
+    void setRollingSidePanelExpanded(bool value);
     void setPanelVisible(bool value);
     void setDesktopMousePassthrough(bool value);
     void setQualityPreset(int value);
@@ -302,6 +318,10 @@ signals:
     void immersiveModeChanged();
     void hostModeChanged();
     void lyricsVisibleChanged();
+    void integratedSidePanelPageChanged();
+    void integratedSidePanelExpandedChanged();
+    void rollingSidePanelPageChanged();
+    void rollingSidePanelExpandedChanged();
     void panelVisibleChanged();
     void desktopMousePassthroughChanged();
     void qualityPresetChanged();
@@ -385,6 +405,10 @@ private:
     int immersiveMode_ = Off;
     int hostMode_ = Windowed;
     bool lyricsVisible_ = false;
+    int integratedSidePanelPage_ = 0;
+    bool integratedSidePanelExpanded_ = true;
+    int rollingSidePanelPage_ = 0;
+    bool rollingSidePanelExpanded_ = true;
     bool panelVisible_ = true;
     bool desktopMousePassthrough_ = false;
     int qualityPreset_ = Auto;

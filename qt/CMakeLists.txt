@@ -5,6 +5,8 @@ add_library(agplayer_qt STATIC
     src/audio_editor/audio_editor_waveform_item.hpp
     src/audio_editor/audio_editor_controller.cpp
     src/audio_editor/audio_editor_controller.hpp
+    src/audio_editor/editor_recording_service.cpp
+    src/audio_editor/editor_recording_service.hpp
     src/audio_editor/editor_playback_adapter.cpp
     src/audio_editor/editor_playback_adapter.hpp
     src/audio_editor/editor_action_model.cpp
@@ -179,6 +181,7 @@ target_include_directories(agplayer_qt
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
     PRIVATE
         "${CMAKE_BINARY_DIR}/generated"
+        ${MINIAUDIO_INCLUDE_DIRS}
         "${CMAKE_SOURCE_DIR}/core/src"
         "${CMAKE_SOURCE_DIR}/worker/src"
 )

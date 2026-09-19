@@ -96,6 +96,7 @@ set(ICON_FILES
 
 set(BRAND_FILES
     ${CMAKE_SOURCE_DIR}/assets/brand/agplayer.ico
+    ${CMAKE_SOURCE_DIR}/assets/brand/desktop-install-icon.ico
     ${CMAKE_SOURCE_DIR}/assets/brand/logo-mark.png
 )
 
@@ -206,11 +207,9 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/tools/LosslessConclusionPanel.qml
         qml/AgPlayer/components/tools/LosslessConfidenceRing.qml
         qml/AgPlayer/components/tools/LosslessProgressBar.qml
-        qml/AgPlayer/components/audioeditor/EditorCommandBar.qml
-        qml/AgPlayer/components/audioeditor/FileSummaryBar.qml
         qml/AgPlayer/components/audioeditor/EditorWaveformCanvas.qml
+        qml/AgPlayer/components/audioeditor/EditorSixTrackWorkspace.qml
         qml/AgPlayer/components/audioeditor/EditorSlider.qml
-        qml/AgPlayer/components/audioeditor/EditorStatusBar.qml
     RESOURCES
         ${BRAND_FILES}
         ${ICON_FILES}

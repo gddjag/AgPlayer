@@ -9,10 +9,11 @@ endif()
 project(AgPlayer VERSION "${AGPLAYER_VERSION}" LANGUAGES C CXX)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
-if(APPLE)
-    set(AGPLAYER_DEFAULT_UPDATE_MANIFEST_URL "https://download.agplayer.com/updates/macos/latest.json")
-else()
-    set(AGPLAYER_DEFAULT_UPDATE_MANIFEST_URL "https://download.agplayer.com/updates/latest.json")
+set(AGPLAYER_DEFAULT_UPDATE_MANIFEST_URL "https://download.agplayer.com/updates/latest.json")
+# Migrate the former built-in Mac endpoint in existing build caches, without
+# overwriting custom endpoints or an explicitly disabled update service.
+if(AGPLAYER_UPDATE_MANIFEST_URL STREQUAL "https://download.agplayer.com/updates/macos/latest.json")
+    set(AGPLAYER_UPDATE_MANIFEST_URL "${AGPLAYER_DEFAULT_UPDATE_MANIFEST_URL}" CACHE STRING "Direct HTTPS URL of the official release manifest; empty disables update requests" FORCE)
 endif()
 set(AGPLAYER_UPDATE_MANIFEST_URL "${AGPLAYER_DEFAULT_UPDATE_MANIFEST_URL}" CACHE STRING "Direct HTTPS URL of the official release manifest; empty disables update requests")
 if(AGPLAYER_UPDATE_MANIFEST_URL AND NOT AGPLAYER_UPDATE_MANIFEST_URL MATCHES "^https://[A-Za-z0-9][A-Za-z0-9./_?=&%:+~-]*$")

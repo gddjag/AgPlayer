@@ -246,6 +246,15 @@ vec3 receivedColumnLight(vec3 normal)
                vec3(0.45));
 }
 
+vec3 customDisplayColor(vec3 linearColor)
+{
+    if (ubuf.atmosphereColor.a < 1.5) return linearColor;
+    vec3 value = clamp(linearColor, vec3(0.0), vec3(1.0));
+    return mix(value * 12.92,
+        1.055 * pow(value, vec3(1.0 / 2.4)) - 0.055,
+        step(vec3(0.0031308), value));
+}
+
 vec3 terrainMaterial(vec3 normal, vec3 view)
 {
     float jelly = step(0.5, material.x);
@@ -262,8 +271,7 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
     vec3 albedo = srgbToLinear(color);
     vec3 columnCenter = worldPosition - surfacePosition * columnExtent;
     if (referenceMode) {
-        // Fixed Sonic Topography material contract. Except for the explicitly
-        // authored localized-core material, keep this branch literal:
+        // Fixed Sonic Topography material contract for every preset:
         // AgPlayer's optional gel lighting below must never perturb the
         // reference theme palette, cap edge, side gradient, ripple channels,
         // aerial perspective, or direct linear output.
@@ -279,8 +287,6 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
         vec3 warmEdge = srgbToLinear(ubuf.colors[4].rgb);
         float warmBlend = smoothstep(0.0, 1.0,
             clamp(ubuf.timbre.x, 0.0, 1.0) * 1.5 + 0.5 - centerDistance / 80.0);
-        bool localizedCore = ubuf.bodyColor.a > 1.5;
-        if (localizedCore) warmBlend = 0.0;
         vec3 zoneCore = mix(coolCore, warmCore, warmBlend);
         vec3 zoneEdge = mix(coolEdge, warmEdge, warmBlend);
         vec3 targetGlow = mix(zoneCore, zoneEdge, fract(columnRandom * 11.0));
@@ -292,13 +298,7 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
                          * ubuf.styleParameters.z * distanceFade;
         currentGlow = mix(currentGlow, srgbToLinear(ubuf.rippleColor.rgb),
                           referenceRippleAnim.x);
-        // The single-column study uses the production 112-unit stage. Its
-        // cool base and coverage create a small warm delta at the white crest;
-        // compensate only that widened runtime stage. The fixed 84-unit
-        // reference replay keeps the literal vec3(1) source result.
-        vec3 referenceWhite = mix(vec3(1.0), vec3(0.93, 1.0, 1.07),
-                                  step(84.5, ubuf.sceneControls.z));
-        currentGlow = mix(currentGlow, referenceWhite, referenceRippleAnim.y);
+        currentGlow = mix(currentGlow, vec3(1.0), referenceRippleAnim.y);
         vec3 referenceBody = mix(base1, base2, relativeY * distanceFade);
         vec3 result;
         bool isTop = normal.y > 0.5;
@@ -343,22 +343,7 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
         }
         result += srgbToLinear(ubuf.rippleColor.rgb)
                 * referenceRippleAnim.x * 0.6;
-        result += referenceWhite * referenceRippleAnim.y * 1.2;
-        if (localizedCore) {
-            // Violet Heart: pink is an interior accent, not an audio-warmth
-            // wash over the entire field. Use actual elevation (no new beat
-            // clock); keep caps/ripples violet and let a small hot center warm
-            // towards yellow only as the middle rises.
-            float center = 1.0 - smoothstep(6.0, 22.0, centerDistance);
-            float raised = smoothstep(0.02, 0.60, normalizedElevation);
-            float hotCenter = (1.0 - smoothstep(0.0, 6.0, centerDistance))
-                            * smoothstep(0.30, 0.80, normalizedElevation);
-            vec3 innerTint = mix(warmCore, warmEdge, hotCenter * 0.85);
-            float interior = isTop ? 0.0 : smoothstep(0.08, 0.22, relativeY)
-                * (1.0 - smoothstep(0.68, 0.92, relativeY));
-            result = mix(result, innerTint * ubuf.styleParameters.z,
-                         center * raised * interior * 0.85);
-        }
+        result += vec3(1.0) * referenceRippleAnim.y * 1.2;
         vec3 atmosphere = mix(base1, base2, 0.4);
         result = mix(result, atmosphere,
                      smoothstep(30.0, 65.0, centerDistance) * 0.35);
@@ -366,14 +351,8 @@ vec3 terrainMaterial(vec3 normal, vec3 view)
                       ? srgbToLinear(ubuf.atmosphereColor.rgb) : vec3(0.0);
         float alphaBlend = smoothstep(55.0, 78.0, centerDistance);
         result = mix(result, backdrop, alphaBlend * 0.45);
-        // On the wider production stage the newly exposed side coverage of a
-        // white crest is still tinted by the cool base. Balance that coverage
-        // without touching the fixed 84-unit reference replay or its oracle.
-        float runtimeWhite = step(84.5, ubuf.sceneControls.z)
-                           * referenceRippleAnim.y;
-        result *= mix(vec3(1.0), vec3(0.70, 1.0, 1.0), runtimeWhite);
-        return clamp(result * clamp(material.z, 0.0, 2.0),
-                     vec3(0.0), vec3(1.0));
+        return customDisplayColor(clamp(result * clamp(material.z, 0.0, 2.0),
+                     vec3(0.0), vec3(1.0)));
     }
     if (ubuf.bodyColor.a > 0.5) {
         // Theme roles are encoded only for transport; interpolate in linear
@@ -711,7 +690,7 @@ void main()
         result=mix(result,mix(srgbToLinear(ubuf.colors[0].rgb),base,.4),smoothstep(30.0,65.0,distance)*.35);
         float alpha=1.0-smoothstep(55.0,78.0,distance);
         result=mix(result,fogColor,(1.0-alpha)*.45);
-        fragColor=vec4(clamp(result,vec3(0),vec3(1)),alpha);
+        fragColor=vec4(customDisplayColor(clamp(result,vec3(0),vec3(1))),alpha);
         return;
     }
     if (opacity < 0.012) {

@@ -3,6 +3,9 @@
 #include "audio_editor/audio_file_analyzer.hpp"
 #include "audio_editor/audio_document.hpp"
 #include "library_model.hpp"
+#include "decoder.hpp"
+#include <QDataStream>
+#include <cmath>
 
 #include <QApplication>
 #include <QFile>
@@ -27,6 +30,59 @@ class SelectionDragControllerTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void sixTrackSelectionHandoffContainsRealAutomatedMix()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString sourcePath = directory.filePath("known-stereo.wav");
+        QFile source(sourcePath);
+        QVERIFY(source.open(QIODevice::WriteOnly));
+        QDataStream pcm(&source);
+        pcm.setByteOrder(QDataStream::LittleEndian);
+        pcm.writeRawData("RIFF", 4); pcm << quint32(36 + 4096 * 4);
+        pcm.writeRawData("WAVEfmt ", 8); pcm << quint32(16) << quint16(1) << quint16(2)
+            << quint32(8000) << quint32(32000) << quint16(4) << quint16(16);
+        pcm.writeRawData("data", 4); pcm << quint32(4096 * 4);
+        for (int i = 0; i < 4096; ++i) pcm << qint16(2048) << qint16(-2048);
+        source.close();
+        const auto analysis = AudioFileAnalyzer::analyze(std::filesystem::path(sourcePath.toStdWString()), 64);
+        QVERIFY(analysis.success);
+        auto document = AudioDocument::fromSource(analysis.source);
+        for (int track = 1; track < 6; ++track) QVERIFY(document.insertSource(analysis.source, 0, track));
+        for (int track = 0; track < 6; ++track) {
+            QVERIFY(document.setTrackGain(track, 0.5F));
+            QVERIFY(document.addEnvelopePoint(track + 1, 0, 0.5F));
+        }
+        HandoffAssetManager manager(directory.filePath("handoff"));
+        HandoffRequest request;
+        request.selection = Selection{1024, 3072};
+        request.sourceIdentity = sourcePath;
+        request.renderState = {8000, 2, 1.0F, false};
+        QString previous;
+        for (int activeTracks = 6; activeTracks >= 5; --activeTracks) {
+            if (activeTracks == 5) QVERIFY(document.setTrackMuted(5, true));
+            request.snapshot = document.timelineSnapshot();
+            request.timelineRevision = request.snapshot.revision;
+            const auto asset = manager.prepare(request);
+            QVERIFY2(asset.success, qPrintable(asset.error));
+            QVERIFY(asset.path != previous);
+            previous = asset.path;
+            agplayer::Decoder decoder;
+            QCOMPARE(decoder.open(asset.path.toUtf8().constData()), AG_OK);
+            agplayer::DecodedAudioBlock block;
+            std::size_t frames = 0;
+            do {
+                QCOMPARE(decoder.read(block), AG_OK);
+                for (std::size_t i = 0; i < block.frames; ++i) {
+                    const float expected = activeTracks == 6 ? 0.09375F : 0.078125F;
+                    QVERIFY(std::abs(block.samples[i * 2] - expected) < 0.00001F);
+                    QVERIFY(std::abs(block.samples[i * 2 + 1] + expected) < 0.00001F);
+                }
+                frames += block.frames;
+            } while (!block.end_of_stream);
+            QCOMPARE(frames, std::size_t(2048));
+        }
+    }
     void thresholdDefersRenderAndLaunchesExactlyOnce()
     {
         std::atomic_int prepares{0};

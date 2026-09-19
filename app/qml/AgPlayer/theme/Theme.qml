@@ -64,6 +64,9 @@ QtObject {
     readonly property color accentSoft: isLight ? "#1F6D28D9" : "#4D7657E8"
     readonly property color accentText: "#FFFFFF"
     readonly property color accentBorder: accent
+    // Reading text needs a different tone from filled buttons/selected rows.
+    readonly property color lyricCurrentText: isLight ? "#7941C9" : "#AD8EEB"
+    readonly property color lyricContextText: isLight ? "#59616D" : "#A6ADB8"
     readonly property color focus: accent
     readonly property color highlight: accent
     readonly property color highlightHover: accentHover

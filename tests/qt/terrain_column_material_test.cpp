@@ -304,6 +304,7 @@ struct StudyParameters {
     QVector3D lighting{1, 0.6F, 1};
     QColor tint = QColor::fromRgbF(0.08F, 0.55F, 0.72F);
     QColor bodyTint; // Optional explicit base2; invalid retains the legacy fallback.
+    bool customDisplay = false;
     QVector3D camera{15, 16, 24};
     QVector3D cameraTarget{0, 6, 0};
 };
@@ -492,6 +493,7 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     u.bandsLow[1] = 0.30F * parameters_.audioLevel * parameters_.lowAudioLevel;
     u.bandsLow[2] = u.bandsLow[3] = 0.70F * parameters_.midAudioLevel;
     u.parameters[3] = parameters_.time;
+    if (parameters_.customDisplay) u.atmosphereColor[3] = 2;
     for (int i = 0; i < 5; ++i) {
         u.colors[i][0] = float(parameters_.tint.redF());
         u.colors[i][1] = float(parameters_.tint.greenF());
@@ -1761,6 +1763,7 @@ private slots:
     void consecutiveWavesUseDifferentPaletteAnchors();
     void explicitThemeTravellingWaveTintRequiresActiveWave();
     void referenceRippleSeparatesNormalAndWhiteContracts();
+    void customPickerMidtoneKeepsDisplayEncoding();
     void discreteBeatDoesNotMoveCanonicalColumns_data() {
         QTest::addColumn<int>("materialMode");
         QTest::addColumn<float>("randomValue");
@@ -2075,6 +2078,34 @@ void TerrainColumnMaterialTest::explicitThemeTravellingWaveTintRequiresActiveWav
     window.close();
 }
 
+void TerrainColumnMaterialTest::customPickerMidtoneKeepsDisplayEncoding()
+{
+    auto counters = std::make_shared<StudyCounters>();
+    QQuickWindow window;
+    window.resize(640, 640);
+    window.setColor(Qt::black);
+    ColumnItem item(window.contentItem(), counters);
+    item.parameters.tint = item.parameters.bodyTint = item.parameters.rippleTint = QColor(128, 128, 128);
+    item.parameters.audioLevel = item.parameters.heightControl = 0;
+    item.parameters.customDisplay = true;
+    window.show();
+    QVERIFY(waitForStudyWindow(window));
+    QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
+    QVERIFY(!counters->failed);
+    const QImage frame = studyFrame(window);
+    QVERIFY(!frame.isNull());
+    int midtonePixels = 0;
+    for (int y = 0; y < frame.height(); ++y)
+        for (int x = 0; x < frame.width(); ++x) {
+            const auto pixel = frame.pixelColor(x, y);
+            if (std::abs(pixel.red() - 128) <= 1) ++midtonePixels;
+            QCOMPARE(pixel.red(), pixel.green());
+            QCOMPARE(pixel.green(), pixel.blue());
+        }
+    // Inspect the flat face, not its intentionally brighter reference rim.
+    QVERIFY2(midtonePixels > 100, "The unlit face must retain the selected sRGB #808080 midtone");
+}
+
 void TerrainColumnMaterialTest::referenceRippleSeparatesNormalAndWhiteContracts()
 {
     // Break caught: reference ripple input falls into the native 42-unit
@@ -2083,11 +2114,16 @@ void TerrainColumnMaterialTest::referenceRippleSeparatesNormalAndWhiteContracts(
     // elevation 4/1, with white receiving its own brightness channel.
     auto counters = std::make_shared<StudyCounters>();
     QQuickWindow window;
-    window.resize(640, 640); window.setColor(QColor(3, 5, 9));
+    // Isolate emitted hue from the base revealed by the changing silhouette.
+    // A colored base makes a white-minus-idle RGB delta non-neutral even with
+    // the literal reference vec3(1) shader; do not compensate production color
+    // merely to make that invalid measurement neutral.
+    window.resize(640, 640); window.setColor(QColor(5, 5, 5));
     ColumnItem item(window.contentItem(), counters);
     item.parameters.camera = {0, 38, 10};
     item.parameters.cameraTarget = {0, 0, 0};
-    item.parameters.bodyTint = QColor::fromRgbF(0.24F, 0.30F, 0.40F);
+    item.parameters.bodyTint = QColor::fromRgbF(0.30F, 0.30F, 0.30F);
+    item.parameters.tint = item.parameters.bodyTint;
     item.parameters.audioLevel = 0;
     item.parameters.heightControl = 0;
     item.parameters.rippleTint = QColor::fromRgbF(0.2F, 0.9F, 1.0F);

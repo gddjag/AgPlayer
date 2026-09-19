@@ -74,6 +74,9 @@ AudioFileAnalysis AudioFileAnalyzer::analyze(
             }
         }
         result.visual_mix_peaks.assign(points * 2U, 0.0F);
+        std::vector<double> energy(points, 0.0);
+        std::vector<double> absolute(points, 0.0);
+        std::vector<std::size_t> energyFrames(points, 0);
         for (std::size_t point = 0; point < points; ++point) {
             result.visual_mix_peaks[point * 2U] = 1.0F;
             result.visual_mix_peaks[point * 2U + 1U] = -1.0F;
@@ -100,6 +103,8 @@ AudioFileAnalysis AudioFileAnalyzer::analyze(
                         (absolute_frame + static_cast<SampleFrame>(frame))
                             * static_cast<SampleFrame>(points) / total_frames));
                 double mixedSample = 0.0;
+                double frameEnergy = 0.0;
+                double frameAbsolute = 0.0;
                 for (int channel = 0; channel < metadata.channels; ++channel) {
                     const float sample = block.samples[
                         frame * static_cast<std::size_t>(metadata.channels)
@@ -109,6 +114,8 @@ AudioFileAnalysis AudioFileAnalyzer::analyze(
                         return result;
                     }
                     mixedSample += sample;
+                    frameEnergy += static_cast<double>(sample) * sample;
+                    frameAbsolute += std::abs(sample);
                     auto& peaks = result.channel_peaks[
                         static_cast<std::size_t>(channel)];
                     peaks[bucket * 2U] = std::min(peaks[bucket * 2U], sample);
@@ -117,6 +124,9 @@ AudioFileAnalysis AudioFileAnalyzer::analyze(
                 }
                 const float visualSample = static_cast<float>(
                     mixedSample / metadata.channels);
+                energy[bucket] += frameEnergy / metadata.channels;
+                absolute[bucket] += frameAbsolute / metadata.channels;
+                ++energyFrames[bucket];
                 result.visual_mix_peaks[bucket * 2U] = std::min(
                     result.visual_mix_peaks[bucket * 2U], visualSample);
                 result.visual_mix_peaks[bucket * 2U + 1U] = std::max(
@@ -139,6 +149,14 @@ AudioFileAnalysis AudioFileAnalyzer::analyze(
                 result.visual_mix_peaks[point * 2U] = 0.0F;
                 result.visual_mix_peaks[point * 2U + 1U] = 0.0F;
             }
+        }
+        result.mean_square.resize(points);
+        result.mean_absolute.resize(points);
+        for (std::size_t point = 0; point < points; ++point) {
+            result.mean_square[point] = energyFrames[point]
+                ? static_cast<float>(energy[point] / energyFrames[point]) : 0.0F;
+            result.mean_absolute[point] = energyFrames[point]
+                ? static_cast<float>(absolute[point] / energyFrames[point]) : 0.0F;
         }
         result.source = AudioSource{
             path, static_cast<std::uint32_t>(metadata.sample_rate),

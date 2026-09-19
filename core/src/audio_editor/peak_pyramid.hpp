@@ -10,6 +10,9 @@ namespace agplayer::editor {
 struct PeakBucket final {
     float minimum{};
     float maximum{};
+    float meanSquare{-1.0F};
+    SampleFrame sampleCount{};
+    float meanAbsolute{-1.0F};
 };
 
 struct PeakReadWindow final {

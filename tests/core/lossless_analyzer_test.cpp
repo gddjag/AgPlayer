@@ -1,6 +1,7 @@
 #undef NDEBUG
 
 #include "lossless/lossless_analyzer.hpp"
+#include "transcoder.hpp"
 
 #include <algorithm>
 #include <array>
@@ -456,6 +457,24 @@ int main(const int argc, char** argv)
         assert(result.spectrum.db == channel_reference.spectrum.db);
     }
 
+    // A lossless input encoded once to MP3 is not evidence of MP3 -> MP3.
+    {
+        std::string error;
+        agplayer::TranscodeConfig flac;
+        flac.output_path = (directory / "original.flac").u8string();
+        assert(agplayer::transcode((directory / "channels-0.wav").u8string(), flac, &cancelled, {}, error) == AG_OK);
+        agplayer::TranscodeConfig mp3;
+        mp3.output_path = (directory / "converted.mp3").u8string();
+        mp3.bit_rate = 192000;
+        assert(agplayer::transcode(flac.output_path, mp3, &cancelled, {}, error) == AG_OK);
+        const auto result = lossless::analyzeFile(mp3.output_path, options, cancelled, {});
+        assert(result.verdict == lossless::Verdict::KnownLossyEncoding);
+        assert(result.chain.size() == 2);
+        assert(result.chain.front() == "原始格式未知");
+        assert(result.chain.back() == result.source.container);
+        assert(result.candidates.empty());
+    }
+
     // Cached Hann windows must preserve strong and silent spectra. The two
     // tones are separated by complete silent windows, including when the active
     // channel moves. Reordering the separated tones preserves their spectrum.
@@ -496,6 +515,19 @@ int main(const int argc, char** argv)
     assert(silence_result.verdict == lossless::Verdict::Inconclusive);
     assert(silence_result.confidence <= 25);
     assert(silence_result.coverage.activeWindowRatio == 0.0);
+    {
+        agplayer::TranscodeConfig mp3;
+        mp3.output_path = (directory / "silent.mp3").u8string();
+        mp3.bit_rate = 192000;
+        std::string error;
+        assert(agplayer::transcode(silence.u8string(), mp3, &cancelled, {}, error) == AG_OK);
+        const auto encoded = lossless::analyzeFile(mp3.output_path, options, cancelled, {});
+        assert(encoded.error.empty());
+        assert(encoded.coverage.activeWindows == 0);
+        assert(encoded.verdict == lossless::Verdict::KnownLossyEncoding);
+        assert(encoded.candidates.empty());
+        assert(encoded.chain.front() == "原始格式未知");
+    }
     assert(silence_result.spectrum.nyquistHz == 22'050.0);
     assert(!silence_result.measurements.transientPreEchoMeasured);
     const auto broadband = directory / "broadband-does-not-prove-history.wav";
@@ -795,6 +827,10 @@ int main(const int argc, char** argv)
         nonfinite.u8string(), options, cancelled, {});
     assert(nonfinite_result.verdict != lossless::Verdict::AnalysisFailed);
     assert(!nonfinite_result.warnings.empty());
+    assert(nonfinite_result.verdict == lossless::Verdict::Inconclusive);
+    assert(nonfinite_result.chain.empty());
+    assert(nonfinite_result.candidates.empty());
+    assert(nonfinite_result.confidence <= 25);
 
     cancelled.store(true);
     const auto cancelled_result = lossless::analyzeFile(

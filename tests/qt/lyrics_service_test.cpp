@@ -4,6 +4,7 @@
 #include "lyrics_provider.hpp"
 #include "lyrics_provider_chain.hpp"
 #include "lyrics_service.hpp"
+#include "lrcapi_lyrics_provider.hpp"
 #include "playback_controller.hpp"
 #include "settings_controller.hpp"
 
@@ -134,12 +135,17 @@ public:
         searchRequests.append({requestId, track});
     }
 
-    void cancel(quint64 requestId) override { canceledRequests.append(requestId); }
+    void cancel(quint64 requestId) override
+    {
+        canceledRequests.append(requestId);
+        if (completeOnCancel) complete(requestId, Result::notFound());
+    }
 
     struct Request final { quint64 requestId; Track track; };
     QList<Request> exactRequests;
     QList<Request> searchRequests;
     QList<quint64> canceledRequests;
+    bool completeOnCancel = false;
 };
 
 class LyricsServiceTest final : public QObject {
@@ -147,6 +153,10 @@ class LyricsServiceTest final : public QObject {
 
 private slots:
     void parseLrcPreservesTimingMetadataAndUntimedText();
+    void parseLrcPreservesUnicodeBomAndLegacyEncodings_data();
+    void parseLrcPreservesUnicodeBomAndLegacyEncodings();
+    void activeLineLookupPreservesDuplicateTimestampsAndOffsetBoundaries();
+    void benchmarkLongLyricsLookup();
     void cacheUsesTrackIdentityAndRejectsStaleEntry();
     void cacheRoundTripsTypedSourceAndWritesVersionTwoMetadata();
     void cacheReadsLegacyVersionOneSourcesAndInfersSynchronization();
@@ -185,7 +195,216 @@ private slots:
     void providerChainPreservesChildRouteAttempts();
     void partialExactOutageStillFallsBackToSearch();
     void chainRouteFailureIsForegroundOnlyAndSuccessPreservesSource();
+    void refreshSearchReplacesRejectedCachedLyricsAndIsTrackScoped();
+    void refreshPreservesManualLyricsCache();
+    void cancellationCannotStartAnotherSearch();
+    void lrcApiUsesRealCandidateMetadataAndRefreshesNetwork();
+    void exactResultWithWrongIdentityIsRejected();
+    void refreshProbesTechnicalCircuitButHonorsRateLimit();
 };
+
+void LyricsServiceTest::refreshSearchReplacesRejectedCachedLyricsAndIsTrackScoped()
+{
+    QTemporaryDir directory;
+    SettingsController settings;
+    settings.setCacheDirectory(directory.filePath(QStringLiteral("cache")));
+    TrackRecord track;
+    track.trackId = QStringLiteral("refresh");
+    track.path = directory.filePath(QStringLiteral("song.flac"));
+    track.title = QStringLiteral("Song");
+    track.artist = QStringLiteral("Artist");
+    track.album = QStringLiteral("Album");
+    track.durationMs = 180000;
+    LyricsProvider::Candidate rejected;
+    rejected.source = lrclibSource();
+    rejected.title = track.title;
+    rejected.artist = track.artist;
+    rejected.album = track.album;
+    rejected.durationSeconds = 180;
+    rejected.syncedLyrics = QStringLiteral("[00:01]Old wrong lyrics");
+    LyricsCache cache(settings.cacheDirectory());
+    QVERIFY(cache.save(track, {LyricsLineModel::parseLrc(rejected.syncedLyrics.toUtf8()),
+                              rejected.source, false, true}));
+    FakeLyricsProvider provider;
+    LyricsService service(nullptr, nullptr, &settings, &provider);
+    service.setEnabled(true);
+    service.requestTrack(track);
+    auto* lines = qobject_cast<LyricsLineModel*>(service.lines());
+    QCOMPARE(lines->lines().constFirst().text, QStringLiteral("Old wrong lyrics"));
+    QVERIFY(provider.exactRequests.isEmpty());
+
+    service.retry();
+    QCOMPARE(provider.searchRequests.size(), 1);
+    QCOMPARE(lines->rowCount(), 0);
+    auto lessSuitable = rejected;
+    lessSuitable.durationSeconds = 183;
+    lessSuitable.syncedLyrics = QStringLiteral("[00:01]Less suitable cut");
+    auto corrected = rejected;
+    corrected.syncedLyrics = QStringLiteral("[00:01]Corrected lyrics");
+    auto empty = corrected;
+    empty.syncedLyrics.clear();
+    provider.complete(provider.searchRequests.constLast().requestId,
+                      LyricsProvider::Result::search({rejected, empty, lessSuitable, corrected}));
+    QCOMPARE(service.status(), LyricsService::Ready);
+    QCOMPARE(lines->lines().constFirst().text, QStringLiteral("Corrected lyrics"));
+    QCOMPARE(cache.load(track)->document.lines.constFirst().text,
+             QStringLiteral("Corrected lyrics"));
+
+    service.retry();
+    QCOMPARE(provider.searchRequests.size(), 2);
+    provider.complete(provider.searchRequests.constLast().requestId,
+                      LyricsProvider::Result::search({rejected, corrected}));
+    QCOMPARE(service.status(), LyricsService::NotFound);
+    QCOMPARE(lines->rowCount(), 0);
+    track.trackId = QStringLiteral("another-recording");
+    track.path = directory.filePath(QStringLiteral("another.flac"));
+    service.requestTrack(track);
+    QCOMPARE(provider.exactRequests.size(), 1);
+    provider.complete(provider.exactRequests.constLast().requestId,
+                      LyricsProvider::Result::search({corrected}));
+    QCOMPARE(service.status(), LyricsService::Ready);
+}
+
+void LyricsServiceTest::refreshPreservesManualLyricsCache()
+{
+    QTemporaryDir directory;
+    SettingsController settings;
+    settings.setCacheDirectory(directory.filePath(QStringLiteral("cache")));
+    TrackRecord track;
+    track.trackId = QStringLiteral("manual-refresh");
+    track.path = directory.filePath(QStringLiteral("song.flac"));
+    track.title = QStringLiteral("Song");
+    LyricsCache cache(settings.cacheDirectory());
+    QVERIFY(cache.save(track, {LyricsLineModel::parseLrc("[00:01]User imported lyrics"),
+                              manualSource(), false, true}));
+    FakeLyricsProvider provider;
+    LyricsService service(nullptr, nullptr, &settings, &provider);
+    service.setEnabled(true);
+    service.requestTrack(track);
+    service.retry();
+    QCOMPARE(provider.searchRequests.size(), 1);
+    provider.complete(provider.searchRequests.constLast().requestId,
+                      LyricsProvider::Result::technicalError(503));
+    QCOMPARE(cache.load(track)->source.providerId, QStringLiteral("manual"));
+    service.retry();
+    LyricsProvider::Candidate online;
+    online.source = lrclibSource();
+    online.title = track.title;
+    online.syncedLyrics = QStringLiteral("[00:01]New online lyrics");
+    provider.complete(provider.searchRequests.constLast().requestId,
+                      LyricsProvider::Result::search({online}));
+    QCOMPARE(service.status(), LyricsService::Ready);
+    QCOMPARE(cache.load(track)->source.providerId, QStringLiteral("manual"));
+    QCOMPARE(cache.load(track)->document.lines.constFirst().text,
+             QStringLiteral("User imported lyrics"));
+}
+
+void LyricsServiceTest::cancellationCannotStartAnotherSearch()
+{
+    FakeLyricsProvider provider;
+    provider.completeOnCancel = true;
+    LyricsService service(nullptr, nullptr, nullptr, &provider);
+    service.setEnabled(true);
+    TrackRecord track;
+    track.trackId = QStringLiteral("cancel-reentry");
+    track.title = QStringLiteral("Song");
+    service.requestTrack(track);
+    service.setEnabled(false);
+    QVERIFY(provider.searchRequests.isEmpty());
+    QCOMPARE(provider.canceledRequests.size(), 1);
+}
+
+void LyricsServiceTest::lrcApiUsesRealCandidateMetadataAndRefreshesNetwork()
+{
+    QTemporaryDir directory;
+    SettingsController settings;
+    settings.setCacheDirectory(directory.filePath(QStringLiteral("cache")));
+    FakeNetworkAccessManager manager;
+    LrcApiLyricsProvider provider(&manager);
+    LyricsService service(nullptr, nullptr, &settings, &provider);
+    TrackRecord track;
+    track.trackId = QStringLiteral("json-matching");
+    track.path = directory.filePath(QStringLiteral("song.flac"));
+    track.title = QStringLiteral("Song");
+    track.artist = QStringLiteral("Artist");
+    track.durationMs = 180000;
+    service.setEnabled(true);
+    service.requestTrack(track);
+    QCOMPARE(manager.requests.size(), 1);
+    QCOMPARE(manager.requests.constLast().request.url().path(), QStringLiteral("/jsonapi"));
+    const QByteArray candidates = R"([{"title":"Wrong song","artist":"Artist","duration":180,"lrc":"[00:01]Wrong identity"},{"title":"Song","artist":"Artist","duration":180,"lrc":"[00:01]Original version"}])";
+    manager.requests.constLast().reply->respond(200, candidates, {{"Content-Type", "application/json"}});
+    QCOMPARE(service.status(), LyricsService::Ready);
+    auto* lines = qobject_cast<LyricsLineModel*>(service.lines());
+    QCOMPARE(lines->lines().constFirst().text, QStringLiteral("Original version"));
+    service.retry();
+    QCOMPARE(manager.requests.size(), 2);
+    const auto refreshed = manager.requests.constLast().request;
+    QVERIFY(refreshed.url() != manager.requests.constFirst().request.url());
+    QCOMPARE(refreshed.attribute(QNetworkRequest::CacheLoadControlAttribute).toInt(),
+             int(QNetworkRequest::AlwaysNetwork));
+    QCOMPARE(refreshed.rawHeader("Cache-Control"), QByteArray("no-cache, no-store"));
+    const auto canceled = manager.requests.constLast().reply;
+    track.trackId = QStringLiteral("replacement");
+    track.path = directory.filePath(QStringLiteral("replacement.flac"));
+    service.requestTrack(track);
+    QVERIFY(canceled->aborted);
+    canceled->respond(200, candidates, {{"Content-Type", "application/json"}});
+    QCOMPARE(service.status(), LyricsService::Loading);
+    QCOMPARE(lines->rowCount(), 0);
+    manager.requests.constLast().reply->respond(200, candidates, {{"Content-Type", "application/json"}});
+    QCOMPARE(service.status(), LyricsService::Ready);
+}
+
+void LyricsServiceTest::exactResultWithWrongIdentityIsRejected()
+{
+    FakeLyricsProvider provider;
+    LyricsService service(nullptr, nullptr, nullptr, &provider);
+    service.setEnabled(true);
+    TrackRecord track;
+    track.trackId = QStringLiteral("exact-mismatch");
+    track.title = QStringLiteral("Expected title");
+    service.requestTrack(track);
+    LyricsProvider::Candidate wrong;
+    wrong.title = QStringLiteral("Other title");
+    wrong.syncedLyrics = QStringLiteral("[00:01]Wrong song");
+    provider.complete(provider.exactRequests.constLast().requestId,
+                      LyricsProvider::Result::found(wrong));
+    QVERIFY(service.status() != LyricsService::Ready);
+    QCOMPARE(qobject_cast<LyricsLineModel*>(service.lines())->rowCount(), 0);
+}
+
+void LyricsServiceTest::refreshProbesTechnicalCircuitButHonorsRateLimit()
+{
+    FakeLyricsProvider provider;
+    qint64 now = 1000;
+    LyricsProviderChain chain({{QStringLiteral("lrcapi"), QStringLiteral("LrcAPI"), &provider}},
+                              nullptr, [&now] { return now; });
+    LyricsService service(nullptr, nullptr, nullptr, &chain);
+    service.setEnabled(true);
+    TrackRecord track;
+    track.trackId = QStringLiteral("refresh-circuit");
+    track.title = QStringLiteral("Song");
+    service.requestTrack(track);
+    provider.complete(provider.exactRequests.constLast().requestId,
+                      LyricsProvider::Result::technicalError(503));
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        service.retry();
+        QCOMPARE(provider.searchRequests.size(), attempt + 1);
+        QVERIFY(provider.searchRequests.constLast().track.forceRefresh);
+        provider.complete(provider.searchRequests.constLast().requestId,
+                          LyricsProvider::Result::technicalError(503));
+    }
+    service.retry();
+    QCOMPARE(provider.searchRequests.size(), 4);
+    provider.complete(provider.searchRequests.constLast().requestId,
+                      LyricsProvider::Result::rateLimited(60000));
+    service.retry();
+    QCOMPARE(provider.searchRequests.size(), 4);
+    now += 60001;
+    service.retry();
+    QCOMPARE(provider.searchRequests.size(), 5);
+}
 
 void LyricsServiceTest::parseLrcPreservesTimingMetadataAndUntimedText()
 {
@@ -202,6 +421,60 @@ void LyricsServiceTest::parseLrcPreservesTimingMetadataAndUntimedText()
     QCOMPARE(document.lines.at(1).text, QStringLiteral("Hello"));
     QCOMPARE(document.lines.at(2).text, QStringLiteral("Again"));
     QCOMPARE(document.untimedText, QStringLiteral("plain text\n[bad]not timed"));
+}
+
+void LyricsServiceTest::parseLrcPreservesUnicodeBomAndLegacyEncodings_data()
+{
+    QTest::addColumn<QByteArray>("contents");
+    // Literal bytes for [00:01]中文, independent of the decoder under test.
+    QTest::newRow("utf8") << QByteArray::fromHex("5b30303a30315de4b8ade69687");
+    QTest::newRow("utf8-bom") << QByteArray::fromHex("efbbbf5b30303a30315de4b8ade69687");
+    QTest::newRow("utf16-le-bom") << QByteArray::fromHex("fffe5b00300030003a00300031005d002d4e8765");
+    QTest::newRow("utf16-be-bom") << QByteArray::fromHex("feff005b00300030003a00300031005d4e2d6587");
+    QTest::newRow("utf32-le-bom") << QByteArray::fromHex("fffe00005b00000030000000300000003a00000030000000310000005d0000002d4e000087650000");
+    QTest::newRow("utf32-be-bom") << QByteArray::fromHex("0000feff0000005b00000030000000300000003a00000030000000310000005d00004e2d00006587");
+    QTest::newRow("gbk") << QByteArray::fromHex("5b30303a30315dd6d0cec4");
+}
+
+void LyricsServiceTest::parseLrcPreservesUnicodeBomAndLegacyEncodings()
+{
+    QFETCH(QByteArray, contents);
+    const auto document = LyricsLineModel::parseLrc(contents);
+    QCOMPARE(document.lines.size(), 1);
+    QCOMPARE(document.lines.front().timeMs, 1000LL);
+    QCOMPARE(document.lines.front().text, QStringLiteral("中文"));
+    QVERIFY(document.untimedText.isEmpty());
+}
+
+void LyricsServiceTest::activeLineLookupPreservesDuplicateTimestampsAndOffsetBoundaries()
+{
+    LyricsLineModel model;
+    QCOMPARE(model.activeIndex(0, 0), -1);
+    model.setLines({{2000, "last"}, {1000, "first"}, {1000, "same-time"}});
+    QCOMPARE(model.activeIndex(999, 0), -1);
+    QCOMPARE(model.activeIndex(1000, 0), 1);
+    QCOMPARE(model.lineAt(1000, 0), QStringLiteral("same-time"));
+    QCOMPARE(model.previousLine(1000, 0), QStringLiteral("first"));
+    QCOMPARE(model.nextLine(1000, 0), QStringLiteral("last"));
+    QCOMPARE(model.activeIndex(1999, 0), 1);
+    QCOMPARE(model.activeIndex(2000, 0), 2);
+    QCOMPARE(model.activeIndex(999999, 0), 2);
+    QCOMPARE(model.activeIndex(1100, 100), 1);
+    QCOMPARE(model.activeIndex(900, -100), 1);
+    QCOMPARE(model.activeIndex(0, 100), -1);
+}
+
+void LyricsServiceTest::benchmarkLongLyricsLookup()
+{
+    LyricsLineModel model;
+    QList<LyricsLine> lines;
+    lines.reserve(100000);
+    for (int index = 0; index < 100000; ++index)
+        lines.append({qint64(index) * 1000, QStringLiteral("line")});
+    model.setLines(std::move(lines));
+    int active = -1;
+    QBENCHMARK { active = model.activeIndex(99999999, 0); }
+    QCOMPARE(active, 99999);
 }
 
 void LyricsServiceTest::cacheUsesTrackIdentityAndRejectsStaleEntry()
@@ -456,10 +729,10 @@ void LyricsServiceTest::canceledRequestsAndRepeatedTechnicalFailuresRemainRetrya
                        LyricsProvider::Result::notFound());
 
     for (int attempt = 0; attempt < 3; ++attempt) {
-        const qsizetype beforeRetry = provider->exactRequests.size();
+        const qsizetype beforeRetry = provider->searchRequests.size();
         service.retry();
-        QCOMPARE(provider->exactRequests.size(), beforeRetry + 1);
-        provider->complete(provider->exactRequests.constLast().requestId,
+        QCOMPARE(provider->searchRequests.size(), beforeRetry + 1);
+        provider->complete(provider->searchRequests.constLast().requestId,
             LyricsProvider::Result::technicalError(attempt == 0 ? 0 : 503,
                                                     attempt == 0));
     }
@@ -479,7 +752,7 @@ void LyricsServiceTest::rateLimitedResultRemainsManuallyRetryable()
                        LyricsProvider::Result::rateLimited(60000));
     QCOMPARE(service.status(), LyricsService::Offline);
     service.retry();
-    QCOMPARE(provider->exactRequests.size(), 2);
+    QCOMPARE(provider->searchRequests.size(), 1);
     const QVariantMap diagnostic = service.diagnostics();
     QVERIFY(!diagnostic.values().contains(track.path));
 }
@@ -515,21 +788,22 @@ void LyricsServiceTest::notFoundFollowedByTechnicalFailureRemainsRetryable()
     TrackRecord track; track.trackId = QStringLiteral("health"); track.title = QStringLiteral("Health");
     track.path = directory.filePath(QStringLiteral("health.flac"));
     service.requestTrack(track);
-    for (int attempt = 0; attempt < 2; ++attempt) {
-        QCOMPARE(provider->exactRequests.size(), attempt + 1);
-        provider->complete(provider->exactRequests.constLast().requestId,
-                           LyricsProvider::Result::technicalError(503));
-        service.retry();
-    }
-    QCOMPARE(provider->exactRequests.size(), 3);
+    QCOMPARE(provider->exactRequests.size(), 1);
     provider->complete(provider->exactRequests.constLast().requestId,
-                       LyricsProvider::Result::notFound());
-    QCOMPARE(provider->searchRequests.size(), 1);
+                       LyricsProvider::Result::technicalError(503));
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        service.retry();
+        QCOMPARE(provider->searchRequests.size(), attempt + 1);
+        provider->complete(provider->searchRequests.constLast().requestId,
+                           LyricsProvider::Result::technicalError(503));
+    }
+    service.retry();
+    QCOMPARE(provider->searchRequests.size(), 3);
     provider->complete(provider->searchRequests.constLast().requestId,
                        LyricsProvider::Result::notFound());
     service.retry();
-    QCOMPARE(provider->exactRequests.size(), 4);
-    provider->complete(provider->exactRequests.constLast().requestId,
+    QCOMPARE(provider->searchRequests.size(), 4);
+    provider->complete(provider->searchRequests.constLast().requestId,
                        LyricsProvider::Result::technicalError(503));
     QCOMPARE(service.status(), LyricsService::Error);
 }
@@ -914,16 +1188,19 @@ void LyricsServiceTest::repeatedInvalidResponsesDoNotGloballyBlackoutRetry()
     TrackRecord track; track.trackId = QStringLiteral("invalid"); track.title = QStringLiteral("Invalid");
     track.path = directory.filePath(QStringLiteral("invalid.flac"));
     service.requestTrack(track);
+    QCOMPARE(provider->exactRequests.size(), 1);
+    provider->complete(provider->exactRequests.constLast().requestId,
+        LyricsProvider::Result::technicalError(200, false, QStringLiteral("invalid-response")));
     for (int attempt = 0; attempt < 3; ++attempt) {
-        QCOMPARE(provider->exactRequests.size(), attempt + 1);
-        provider->complete(provider->exactRequests.constLast().requestId,
+        service.retry();
+        QCOMPARE(provider->searchRequests.size(), attempt + 1);
+        provider->complete(provider->searchRequests.constLast().requestId,
             LyricsProvider::Result::technicalError(200, false, QStringLiteral("invalid-response")));
-        if (attempt < 2) service.retry();
     }
     QCOMPARE(service.status(), LyricsService::Error);
-    QCOMPARE(provider->exactRequests.size(), 3);
+    QCOMPARE(provider->searchRequests.size(), 3);
     service.retry();
-    QCOMPARE(provider->exactRequests.size(), 4);
+    QCOMPARE(provider->searchRequests.size(), 4);
     QCOMPARE(service.status(), LyricsService::Loading);
 }
 
@@ -931,9 +1208,7 @@ void LyricsServiceTest::defaultServiceExposesOrderedProviderRoutesWithoutRequest
 {
     LyricsService service(nullptr, nullptr, nullptr);
     QCOMPARE(service.diagnostics().value(QStringLiteral("providerRoutes")).toStringList(),
-             QStringList({QStringLiteral("lrcapi"), QStringLiteral("lrclib"),
-                          QStringLiteral("unison"),
-                          QStringLiteral("lyrics-ovh")}));
+             QStringList({QStringLiteral("lrcapi")}));
 }
 
 void LyricsServiceTest::lowMatchLrclibSearchFallsThroughToUnison()

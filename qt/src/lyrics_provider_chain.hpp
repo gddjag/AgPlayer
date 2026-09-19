@@ -32,6 +32,7 @@ private:
     struct RouteHealth final {
         int consecutiveTechnicalFailures = 0;
         qint64 blockedUntilMs = 0;
+        qint64 rateLimitedUntilMs = 0;
         bool probeInFlight = false;
     };
     struct Pending final {

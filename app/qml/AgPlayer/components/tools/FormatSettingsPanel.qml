@@ -8,8 +8,7 @@ Rectangle {
     property var converter
     property string outputDirectory: ""
     property bool expanded: true
-    property bool forceCollapsed: false
-    readonly property bool isExpanded: expanded && !forceCollapsed
+    readonly property bool isExpanded: expanded
     property string outputFormat: converter.selectedFormat
     readonly property var capability: converter.currentCapability || ({})
     readonly property string parameterKind: capability.parameterKind || "none"
@@ -219,8 +218,8 @@ Rectangle {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: Theme.spacingLg
-        anchors.rightMargin: Theme.spacingSm
+        anchors.leftMargin: root.isExpanded ? Theme.spacingLg : 0
+        anchors.rightMargin: root.isExpanded ? Theme.spacingSm : 0
         spacing: Theme.spacingSm
 
         Text {
@@ -238,10 +237,7 @@ Rectangle {
             iconSource: icon.source
             accessibleName: root.isExpanded
                 ? qsTr("收起转换设置") : qsTr("展开转换设置")
-            onClicked: {
-                if (!root.forceCollapsed)
-                    root.expanded = !root.expanded
-            }
+            onClicked: root.expanded = !root.expanded
         }
     }
 
@@ -279,10 +275,12 @@ Rectangle {
                 GridLayout {
                     id: outputFormatGrid
                     objectName: "formatOutputFormatGrid"
-                    Layout.minimumWidth: 384
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     Layout.preferredWidth: 384
                     Layout.maximumWidth: 384
-                    columns: 4
+                    columns: Math.max(1, Math.min(4,
+                        Math.floor((width + columnSpacing) / (90 + columnSpacing))))
                     rowSpacing: 4
                     columnSpacing: 8
                     Repeater {

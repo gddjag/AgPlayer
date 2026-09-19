@@ -518,13 +518,10 @@ Rectangle {
         modal: true
         title: qsTr("三态编辑说明")
         anchors.centerIn: parent
-        width: Math.min(440, page.width - 2 * Theme.spacing2Xl)
-        contentWidth: Math.max(0, width - leftPadding - rightPadding)
         contentHeight: threeStateHelpContent.implicitHeight
         standardButtons: Dialog.Ok
         contentItem: Label {
             id: threeStateHelpContent
-            width: threeStateHelpDialog.contentWidth
             wrapMode: Text.WordWrap
             text: qsTr("保留：每个文件保持原值，不写入。\n\n设为：将输入值统一写入目标文件；空值无效，请使用清除。\n\n清除：删除该字段的所有已知别名标签。")
             color: Theme.primaryText
@@ -539,18 +536,15 @@ Rectangle {
         modal: true
         title: qsTr("元数据处理提示")
         anchors.centerIn: parent
-        width: Math.min(360, page.width - 2 * Theme.spacing2Xl)
-        contentWidth: Math.max(0, width - leftPadding - rightPadding)
         contentHeight: metadataErrorContent.implicitHeight
         standardButtons: Dialog.Ok
         contentItem: Label {
             id: metadataErrorContent
-            width: metadataErrorDialog.contentWidth
             text: page.errorMessage
             color: Theme.primaryText
             font.family: Theme.fontPrimary
             font.pixelSize: Theme.fontSizeBody
-            wrapMode: Text.WordWrap
+            wrapMode: Text.Wrap
         }
     }
 
@@ -560,14 +554,10 @@ Rectangle {
         modal: true
         title: qsTr("预检发现不支持项")
         anchors.centerIn: parent
-        width: Math.min(500, page.width - 2 * Theme.spacing2Xl)
-        contentWidth: Math.max(0, width - leftPadding - rightPadding)
         contentHeight: metadataPreflightContent.implicitHeight
         closePolicy: Popup.NoAutoClose
         contentItem: ColumnLayout {
             id: metadataPreflightContent
-            width: preflightDecisionDialog.contentWidth
-            implicitWidth: preflightDecisionDialog.contentWidth
             spacing: Theme.spacingMd
             Label {
                 Layout.fillWidth: true
@@ -675,8 +665,8 @@ Rectangle {
             }
             ThemedComboBox {
                 objectName: "metadataStatusFilter"
-                Layout.preferredWidth: page.compactLayout ? 96 : 110
-                Layout.minimumWidth: page.compactLayout ? 86 : 100
+                Layout.preferredWidth: Math.ceil(contentItem.implicitWidth + leftPadding + rightPadding)
+                Layout.minimumWidth: Layout.preferredWidth
                 Layout.preferredHeight: Theme.controlHeight
                 textRole: "text"
                 valueRole: "value"
@@ -1024,12 +1014,13 @@ Rectangle {
 
                     ScrollView {
                         id: inspectorScroll
+                        objectName: "metadataInspectorScroll"
                         anchors.fill: parent
                         anchors.margins: 14
+                        anchors.bottomMargin: metadataActionBar.height + 28
                         clip: true
                         contentWidth: availableWidth
-                        ScrollBar.vertical.policy: page.compactLayout
-                                                   ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                        ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
                         ColumnLayout {
                             width: inspectorScroll.availableWidth
@@ -1454,10 +1445,17 @@ Rectangle {
                                 }
                             }
 
+                        }
+                    }
+
                             RowLayout {
+                                id: metadataActionBar
                                 objectName: "metadataActionBar"
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 48
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.margins: 14
+                                height: Theme.controlHeightProminent
                                 spacing: 12
                                 ProgressBar {
                                     Layout.fillWidth: true
@@ -1493,8 +1491,6 @@ Rectangle {
                                     onClicked: MetadataEditor.cancel()
                                 }
                             }
-                        }
-                    }
                 }
             }
         }

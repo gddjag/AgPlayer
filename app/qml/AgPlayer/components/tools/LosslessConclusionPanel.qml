@@ -15,10 +15,21 @@ Rectangle {
                                        && SettingsController.language.toLowerCase()
                                           .startsWith("en")
 
+    function conclusionScope(code) {
+        if (code === "known_lossy_encoding")
+            return qsTr("已确认的是当前有损编码，不是原始来源。无法仅凭成品文件确定此前由 FLAC、WAV 或其他格式转换而来。")
+        if (code === "credible_lossless" || code === "credible_native_dsd")
+            return qsTr("在已分析区间内未发现充分的有损转码证据；不等同于原始母带或全程无损认证。")
+        if (code === "inconclusive")
+            return qsTr("现有证据不足以确定来源。建议使用完整原文件，并结合频谱、有效位深和各段证据判断。")
+        return qsTr("这是基于信号特征的疑似结论；低通滤波、母带处理和录音设备也可能产生相似特征，不能据此唯一确定历史格式。")
+    }
+
     function verdictColor(code) {
         if (code === "credible_lossless" || code === "credible_native_dsd")
             return Theme.losslessVerdictCredible
         if (code === "suspected_lossy_transcode"
+                || code === "known_lossy_encoding"
                 || code === "suspected_lossy_upsample")
             return Theme.losslessVerdictTranscode
         if (code === "suspected_upsample"
@@ -221,6 +232,18 @@ Rectangle {
                     }
                 }
 
+                Text {
+                    objectName: "losslessConclusionScope"
+                    width: parent.width
+                    visible: root.hasResult
+                    text: root.conclusionScope(root.result.verdictCode)
+                          + "\n" + qsTr("证据评分表示支持强度，不是准确率或来源概率；可能来源的评分也不表示确定的转码顺序。")
+                    wrapMode: Text.Wrap
+                    color: Theme.textSecondary
+                    font.family: Theme.fontPrimary
+                    font.pixelSize: Theme.losslessFontSizeBody
+                }
+
                 Column {
                     width: parent.width
                     spacing: Theme.spacingSm
@@ -292,7 +315,7 @@ Rectangle {
                     visible: !!(root.hasResult && root.result.chain
                                 && root.result.chain.length > 0)
                     Text {
-                        text: qsTr("推测转换链")
+                        text: qsTr("格式转换线索（推测，不代表完整来源）")
                         color: Theme.textPrimary
                         font.family: Theme.fontPrimary
                         font.pixelSize: Theme.losslessFontSizeBody

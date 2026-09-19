@@ -8,6 +8,7 @@ Rectangle {
     objectName: "losslessTaskPanel"
     property var controller
     property bool compact: false
+    readonly property bool shortLayout: compact && height < 220
     readonly property bool englishUi: SettingsController.language
                                        && SettingsController.language.toLowerCase()
                                           .startsWith("en")
@@ -36,6 +37,7 @@ Rectangle {
         if (code === "credible_lossless" || code === "credible_native_dsd")
             return Theme.losslessVerdictCredible
         if (code === "suspected_lossy_transcode"
+                || code === "known_lossy_encoding"
                 || code === "suspected_lossy_upsample")
             return Theme.losslessVerdictTranscode
         if (code === "suspected_upsample"
@@ -96,15 +98,15 @@ Rectangle {
 
         Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: 92
+            Layout.preferredHeight: root.shortLayout ? 70 : 92
 
             ColumnLayout {
                 anchors.fill: parent
                 anchors.leftMargin: Theme.spacingLg
                 anchors.rightMargin: Theme.spacingLg
-                anchors.topMargin: Theme.spacingSm
-                anchors.bottomMargin: Theme.spacingSm
-                spacing: Theme.spacingSm
+                anchors.topMargin: root.shortLayout ? 2 : Theme.spacingSm
+                anchors.bottomMargin: root.shortLayout ? 2 : Theme.spacingSm
+                spacing: root.shortLayout ? Theme.spacingXs : Theme.spacingSm
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -145,7 +147,7 @@ Rectangle {
                         model: [
                             { code: "all", label: qsTr("全部"), shortLabel: qsTr("全部") },
                             { code: "credible", label: qsTr("可信无损"), shortLabel: qsTr("可信") },
-                            { code: "transcode", label: qsTr("疑似转码"), shortLabel: qsTr("转码") },
+                            { code: "transcode", label: qsTr("有损 / 疑似转码"), shortLabel: qsTr("有损 / 转码") },
                             { code: "upsample", label: qsTr("疑似升频"), shortLabel: qsTr("升频") },
                             { code: "inconclusive", label: qsTr("无法确定"), shortLabel: qsTr("不确定") }
                         ]
@@ -215,7 +217,7 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: Theme.tableHeaderHeight
+            Layout.preferredHeight: root.shortLayout ? 28 : Theme.tableHeaderHeight
             color: Theme.losslessPanelHeaderSurface
             border.width: 0
 
@@ -324,6 +326,7 @@ Rectangle {
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            clip: true
 
             ListView {
                 id: taskList
@@ -498,6 +501,7 @@ Rectangle {
                 visible: taskList.count === 0
 
                 ThemedIcon {
+                    visible: emptyState.parent.height >= 80
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Theme.iconSizeLg
                     height: width
@@ -520,7 +524,7 @@ Rectangle {
 
         Text {
             Layout.fillWidth: true
-            Layout.preferredHeight: 34
+            Layout.preferredHeight: root.shortLayout ? 22 : 34
             Layout.leftMargin: Theme.spacingMd
             verticalAlignment: Text.AlignVCenter
             text: qsTr("共 %1 个文件（已选择 %2 个）")

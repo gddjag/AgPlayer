@@ -8,6 +8,19 @@ class PeakPyramidTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void contourStatisticsMergeBySampleCountWithoutLosingPeak()
+    {
+        const auto pyramid = PeakPyramid::fromBaseBuckets({{
+            {-1, 1, 0.25F, 100, 0.25F}, {-1, 1, 0.75F, 100, 0.75F},
+            {-1, 1, 0.25F, 100, 0.25F}, {-1, 1, 0.75F, 100, 0.75F}
+        }}, 100, 400);
+        const auto buckets = pyramid.read(0, 0, 400, 1);
+        QCOMPARE(buckets.size(), std::size_t(2));
+        QCOMPARE(buckets[0].maximum, 1.0F);
+        QCOMPARE(buckets[0].meanSquare, 0.5F);
+        QCOMPARE(buckets[0].meanAbsolute, 0.5F);
+        QCOMPARE(buckets[0].sampleCount, SampleFrame(200));
+    }
     void choosesCoarsestUsefulLevelWithoutLosingExtrema()
     {
         const std::vector<std::vector<PeakBucket>> channels{{

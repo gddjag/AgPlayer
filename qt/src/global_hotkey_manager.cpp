@@ -537,7 +537,8 @@ bool GlobalHotkeyManager::registerNativeHotkey(const Hotkey& hotkey)
     QString error;
     const bool registered = hotkey.mediaKey
         ? agplayer::qt::macos::registerMediaHotkey(
-              hotkey.id, hotkey.key, this, &GlobalHotkeyManager::dispatchMacHotkey,
+              hotkey.id, hotkey.modifiers, hotkey.key, this,
+              &GlobalHotkeyManager::dispatchMacHotkey,
               &error)
         : agplayer::qt::macos::registerHotkey(
               hotkey.id, hotkey.modifiers, hotkey.key, this,

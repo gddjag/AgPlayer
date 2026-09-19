@@ -11,6 +11,7 @@ extern "C" {
 
 #include <algorithm>
 #include <chrono>
+#include <cerrno>
 #include <cmath>
 #include <system_error>
 
@@ -19,6 +20,8 @@ extern "C" {
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#elif defined(__APPLE__)
+#include <stdio.h>
 #endif
 
 namespace agplayer::editor {
@@ -53,19 +56,35 @@ std::filesystem::path temporary_sibling(const std::filesystem::path& target,
 
 SampleFrame count_decoded_frames(const std::filesystem::path& path,
                                  const int sample_rate,
-                                 const int channels)
+                                 const int channels,
+                                 const std::atomic_bool* cancelled,
+                                 const SampleFrame expected,
+                                 const std::function<void(float)>& progress)
 {
     agplayer::Decoder decoder;
-    if (decoder.open(path.u8string(), sample_rate, channels) != AG_OK) {
+    agplayer::DecoderOpenOptions options;
+    options.output_sample_rate = sample_rate;
+    options.output_channels = channels;
+    options.interrupt_context = &cancelled;
+    options.interrupt_callback = [](void* context) noexcept {
+        const auto* flag = *static_cast<const std::atomic_bool**>(context);
+        return flag && flag->load(std::memory_order_acquire);
+    };
+    if (decoder.open(path.u8string(), options) != AG_OK) {
         return -1;
     }
     agplayer::DecodedAudioBlock block;
     SampleFrame result = 0;
     for (;;) {
+        if (cancelled && cancelled->load(std::memory_order_acquire)) return -1;
         if (decoder.read(block) != AG_OK) {
             return -1;
         }
         result += static_cast<SampleFrame>(block.frames);
+        if (progress && expected > 0) {
+            progress(0.95F + 0.04F * std::min(
+                1.0F, static_cast<float>(result) / static_cast<float>(expected)));
+        }
         if (block.end_of_stream) {
             return result;
         }
@@ -81,12 +100,16 @@ std::int64_t probed_duration_ms(const std::filesystem::path& path)
 
 bool commit_file(const std::filesystem::path& staged,
                  const std::filesystem::path& target,
+                 const OutputCommitMode mode,
                  std::string& message)
 {
 #ifdef _WIN32
     const std::wstring staged_w = staged.wstring();
     const std::wstring target_w = target.wstring();
-    if (std::filesystem::exists(target)) {
+    if (mode == OutputCommitMode::CreateNoReplace) {
+        if (MoveFileExW(staged_w.c_str(), target_w.c_str(),
+                        MOVEFILE_WRITE_THROUGH) != 0) return true;
+    } else if (std::filesystem::exists(target)) {
         if (ReplaceFileW(target_w.c_str(), staged_w.c_str(), nullptr,
                          REPLACEFILE_WRITE_THROUGH, nullptr, nullptr) != 0) {
             return true;
@@ -99,6 +122,23 @@ bool commit_file(const std::filesystem::path& staged,
     return false;
 #else
     std::error_code error;
+    if (mode == OutputCommitMode::CreateNoReplace) {
+#ifdef __APPLE__
+        // RENAME_EXCL rejects a competing destination atomically, without
+        // requiring hard-link support from the destination filesystem.
+        if (::renamex_np(staged.c_str(), target.c_str(), RENAME_EXCL) == 0)
+            return true;
+        error = std::error_code(errno, std::generic_category());
+#else
+        std::filesystem::create_hard_link(staged, target, error);
+        if (!error) {
+            std::filesystem::remove(staged, error);
+            return true;
+        }
+#endif
+        message = error.message();
+        return false;
+    }
     std::filesystem::rename(staged, target, error);
     if (!error) return true;
     message = error.message();
@@ -148,6 +188,19 @@ bool copy_metadata(const std::filesystem::path& source,
 
 } // namespace
 
+bool outputOverwritesSource(const WriteRequest& request)
+{
+    const auto isOutput = [&](const std::filesystem::path& source) {
+        if (source.empty() || request.output_path.empty()) return false;
+        std::error_code error;
+        return std::filesystem::equivalent(request.output_path, source, error)
+            && !error;
+    };
+    if (isOutput(request.metadata_source_path)) return true;
+    return std::any_of(request.snapshot.events.begin(), request.snapshot.events.end(),
+        [&](const AudioEvent& event) { return event.source && isOutput(event.source->path); });
+}
+
 WriteResult DocumentWriter::write(
     const WriteRequest& request,
     const std::atomic_bool* cancelled,
@@ -156,6 +209,9 @@ WriteResult DocumentWriter::write(
     if (request.output_path.empty() || request.snapshot.events.empty()
         || (request.range && !request.range->valid())) {
         return {WriteError::InvalidRequest, "invalid write request", 0};
+    }
+    if (outputOverwritesSource(request)) {
+        return {WriteError::InvalidRequest, "output would overwrite a source file", 0};
     }
     const std::string codec = request.codec_name.empty()
         ? default_codec(request.output_path) : request.codec_name;
@@ -179,6 +235,9 @@ WriteResult DocumentWriter::write(
         std::error_code ignored;
         std::filesystem::remove(render_path, ignored);
         std::filesystem::remove(staged_path, ignored);
+    };
+    const auto is_cancelled = [&] {
+        return cancelled && cancelled->load(std::memory_order_acquire);
     };
 
     DocumentRenderer renderer;
@@ -209,7 +268,7 @@ WriteResult DocumentWriter::write(
     std::string encode_error;
     const ag_result encoded = agplayer::transcode(
         render_path.u8string(), config, cancelled,
-        progress ? [progress = std::move(progress)](const float fraction) {
+        progress ? [progress](const float fraction) {
             progress(0.65F + 0.30F * fraction);
         } : std::function<void(float)>{}, encode_error);
     if (encoded != AG_OK) {
@@ -217,6 +276,10 @@ WriteResult DocumentWriter::write(
         return {encoded == AG_CANCELLED ? WriteError::Cancelled
                                        : WriteError::EncodeFailed,
                 encode_error, rendered.frames};
+    }
+    if (is_cancelled()) {
+        cleanup();
+        return {WriteError::Cancelled, "cancelled", rendered.frames};
     }
     if (request.keep_metadata && !request.metadata_source_path.empty()) {
         std::string metadata_error;
@@ -232,7 +295,12 @@ WriteResult DocumentWriter::write(
         static_cast<long double>(rendered.frames) * config.sample_rate
         / static_cast<long double>(rendered.sample_rate)));
     const SampleFrame verified = count_decoded_frames(
-        staged_path, config.sample_rate, config.channels);
+        staged_path, config.sample_rate, config.channels,
+        cancelled, expected, progress);
+    if (is_cancelled()) {
+        cleanup();
+        return {WriteError::Cancelled, "cancelled", rendered.frames};
+    }
     const bool exact_frames = verified == expected;
     const bool framed_lossy = codec == "aac" || codec == "libvorbis"
         || codec == "libopus" || codec == "libmp3lame";
@@ -250,7 +318,12 @@ WriteResult DocumentWriter::write(
                     + std::to_string(verified), rendered.frames};
     }
     std::string commit_error;
-    if (!commit_file(staged_path, request.output_path, commit_error)) {
+    if (is_cancelled()) {
+        cleanup();
+        return {WriteError::Cancelled, "cancelled", rendered.frames};
+    }
+    if (!commit_file(staged_path, request.output_path,
+                     request.commit_mode, commit_error)) {
         cleanup();
         return {WriteError::CommitFailed, commit_error, rendered.frames};
     }

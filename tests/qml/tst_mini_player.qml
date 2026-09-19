@@ -495,8 +495,8 @@ TestCase {
     function test_reference_layout_and_scalable_window() {
         compare(miniPlayer.width, 588)
         compare(miniPlayer.height, 186)
-        compare(miniPlayer.minimumWidth, 588)
-        compare(miniPlayer.minimumHeight, 186)
+        compare(miniPlayer.minimumWidth, 480)
+        compare(miniPlayer.minimumHeight, 160)
         verify(findChild(miniPlayer, "miniCover"))
         verify(findChild(miniPlayer, "miniTrackTitle"))
         var volume = findChild(miniPlayer, "miniVolumeSlider")

@@ -8,17 +8,98 @@
 #include <agplayer/c_api.h>
 
 #include "decoder.hpp"
+#include "audio_editor/audio_file_analyzer.hpp"
+#include "lossless/lossless_analyzer.hpp"
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
+
+// Optional, read-only integration check against user-provided FLAC files.
+// Originals are never rewritten. Transcode output uses an owned temporary folder.
+int check_external_flac(const std::filesystem::path& directory)
+{
+    int failures = 0;
+    int checked = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".flac") continue;
+        ++checked;
+        const auto path = entry.path().u8string();
+        agplayer::MediaMetadata metadata;
+        const auto probe = agplayer::probe_media_metadata(path, metadata);
+        agplayer::Decoder decoder;
+        const auto opened = decoder.open(path);
+        std::cout << path << " probe=" << probe << " open=" << opened
+                  << " rate=" << metadata.sample_rate
+                  << " channels=" << metadata.channels << std::endl;
+        if (probe != AG_OK || opened != AG_OK) { ++failures; continue; }
+        std::uint64_t frames = 0;
+        agplayer::DecodedAudioBlock block;
+        ag_result result = AG_OK;
+        do {
+            result = decoder.read(block);
+            if (result != AG_OK) break;
+            frames += block.frames;
+        } while (!block.end_of_stream);
+        std::cout << "read=" << result << " frames=" << frames << std::endl;
+        if (result != AG_OK || frames == 0) { ++failures; continue; }
+        for (const auto position : {std::int64_t{0}, metadata.duration_ms / 2,
+                                   std::max(std::int64_t{0}, metadata.duration_ms - 1000)}) {
+            result = decoder.seek(position);
+            if (result == AG_OK) result = decoder.read(block);
+            if (result != AG_OK || block.frames == 0) ++failures;
+        }
+        decoder.close();
+        result = decoder.open(path);
+        agplayer::DecodedAnalysisBlock analysis;
+        std::uint64_t analysis_frames = 0;
+        while (result == AG_OK) {
+            result = decoder.readAnalysis(analysis);
+            if (result != AG_OK) break;
+            analysis_frames += analysis.frames;
+            if (analysis.end_of_stream) break;
+        }
+        std::cout << "analysis=" << result << " frames=" << analysis_frames << std::endl;
+        if (result != AG_OK || analysis_frames != frames) ++failures;
+        ag_waveform* waveform = nullptr;
+        result = ag_waveform_analyze(path.c_str(), 512, nullptr, nullptr, nullptr, &waveform);
+        std::cout << "waveform=" << result << " points=" << ag_waveform_count(waveform) << std::endl;
+        if (result != AG_OK || ag_waveform_count(waveform) == 0) ++failures;
+        ag_waveform_destroy(waveform);
+        const auto editor = agplayer::editor::AudioFileAnalyzer::analyze(entry.path(), 512);
+        std::cout << "editor=" << editor.success << " error=" << editor.message << std::endl;
+        if (!editor.success || editor.visual_mix_peaks.empty()) ++failures;
+        const std::atomic_bool cancelled{false};
+        const auto identification = agplayer::lossless::analyzeFile(path, {}, cancelled);
+        std::cout << "lossless_error=" << identification.error << std::endl;
+        if (!identification.error.empty() || identification.cancelled) ++failures;
+        const auto output_dir = std::filesystem::temp_directory_path()
+            / ("agplayer-flac-check-" + std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count()));
+        if (!std::filesystem::create_directory(output_dir)) return 1;
+        const auto output_file = output_dir / "converted.wav";
+        result = ag_transcode(path.c_str(), output_file.u8string().c_str(),
+                              "pcm_s16le", 0, 44'100, 2, nullptr, nullptr, nullptr);
+        std::cout << "transcode=" << result << " error=" << ag_last_error() << std::endl;
+        if (result != AG_OK) ++failures;
+        std::filesystem::remove(output_file);
+        std::filesystem::remove(output_dir);
+    }
+    std::cout << "files=" << checked << " failures=" << failures << std::endl;
+    return checked > 0 && failures == 0 ? 0 : 1;
+}
 
 int main(const int argc, char** argv)
 {
+    if (argc == 3 && std::strcmp(argv[1], "--external-flac") == 0) {
+        return check_external_flac(std::filesystem::path(argv[2]));
+    }
     assert(argc == 6);
     const std::filesystem::path sine_path = argv[1];
     const std::filesystem::path video_with_audio_path = argv[2];
@@ -283,6 +364,73 @@ int main(const int argc, char** argv)
     assert(ag_metadata_channels(metadata) == 2);
     assert(ag_metadata_duration_ms(metadata) >= 1'990);
     ag_metadata_destroy(metadata);
+
+    // A valid FLAC followed by a non-audio trailer must stop at STREAMINFO's
+    // exact sample count. This reproduces the supplied music-library files.
+    {
+        std::ofstream trailer(short_flac, std::ios::binary | std::ios::app);
+        const unsigned char bytes[] = {
+            0x00, 0xff, 0x0f, 0x47, 0x40, 0x38, 0x40, 0x48,
+            0x46, 0x3c, 0x36, 0x23, 0x23, 0x25, 0x41, 0x43,
+            0x27, 0x3f, 0x4a, 0x24, 0x3c, 0x4d, 0x5e, 0x23,
+            0x69, 0x0e, 0x55, 0xff, 0xf0};
+        trailer.write(reinterpret_cast<const char*>(bytes), sizeof(bytes));
+    }
+    for (const bool analysis_mode : {false, true}) {
+        agplayer::Decoder flac_decoder;
+        assert(flac_decoder.open(short_flac.u8string()) == AG_OK);
+        std::uint64_t flac_frames = 0;
+        bool ended = false;
+        while (!ended) {
+            if (analysis_mode) {
+                agplayer::DecodedAnalysisBlock analysis_block;
+                assert(flac_decoder.readAnalysis(analysis_block) == AG_OK);
+                flac_frames += analysis_block.frames;
+                ended = analysis_block.end_of_stream;
+            } else {
+                agplayer::DecodedAudioBlock audio_block;
+                assert(flac_decoder.read(audio_block) == AG_OK);
+                flac_frames += audio_block.frames;
+                ended = audio_block.end_of_stream;
+            }
+        }
+        assert(flac_frames == 88'200);
+    }
+    const auto converted_flac = sine_path.parent_path() / "decoder-flac-trailer.wav";
+    std::filesystem::remove(converted_flac);
+    assert(ag_transcode(short_flac.u8string().c_str(), converted_flac.u8string().c_str(),
+                        "pcm_s16le", 0, 48'000, 2, nullptr, nullptr, nullptr) == AG_OK);
+    agplayer::Decoder converted_decoder;
+    assert(converted_decoder.open(converted_flac.u8string()) == AG_OK);
+    std::uint64_t converted_frames = 0;
+    agplayer::DecodedAudioBlock converted_block;
+    do {
+        assert(converted_decoder.read(converted_block) == AG_OK);
+        converted_frames += converted_block.frames;
+    } while (!converted_block.end_of_stream);
+    assert(converted_frames == 96'000);
+    converted_decoder.close();
+    std::filesystem::remove(converted_flac);
+
+    // Unknown sample count, or garbage before the declared end, must not be
+    // accepted as a successful stream merely because some PCM was decoded.
+    for (const std::uint32_t declared_frames : {0U, 88'201U}) {
+        std::fstream streaminfo(short_flac, std::ios::binary | std::ios::in | std::ios::out);
+        streaminfo.seekp(22);
+        for (int shift = 24; shift >= 0; shift -= 8) {
+            streaminfo.put(static_cast<char>((declared_frames >> shift) & 0xff));
+        }
+        streaminfo.close();
+        agplayer::Decoder invalid_decoder;
+        assert(invalid_decoder.open(short_flac.u8string()) == AG_OK);
+        agplayer::DecodedAudioBlock invalid_block;
+        ag_result invalid_result = AG_OK;
+        for (int count = 0; count < 128; ++count) {
+            invalid_result = invalid_decoder.read(invalid_block);
+            if (invalid_result != AG_OK || invalid_block.end_of_stream) break;
+        }
+        assert(invalid_result == AG_DECODE_ERROR);
+    }
 
     // Raw ADTS has no container duration table. The bounded codec-free probe
     // must still recover sample rate, channels and a useful duration estimate.

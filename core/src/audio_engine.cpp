@@ -636,6 +636,13 @@ public:
         scratch_commit_test_hook_.store(hook, std::memory_order_release);
     }
 
+    void set_seek_wait_test_hook(const SeekWaitTestHook hook,
+                                 void* const context) noexcept
+    {
+        seek_wait_test_context_.store(context, std::memory_order_relaxed);
+        seek_wait_test_hook_.store(hook, std::memory_order_release);
+    }
+
     [[nodiscard]] std::int64_t pending_boundary_for_testing() const noexcept
     {
         return pending_boundary_frame_.load(std::memory_order_acquire);
@@ -725,7 +732,7 @@ public:
     void request_decode_exit_for_testing() noexcept
     {
         stop_decode_.store(true, std::memory_order_release);
-        seek_cv_.notify_all();
+        notify_seek_waiters();
     }
 
     void mark_device_lost_for_testing() noexcept
@@ -1122,7 +1129,7 @@ public:
             seek_target_ms_.store(position_ms, std::memory_order_release);
             seeking_.store(true, std::memory_order_release);
             seek_requested_.store(true, std::memory_order_release);
-            seek_cv_.notify_one();
+            notify_seek_waiters();
 
             // Wait for the decode thread to complete the seek. Using a
             // condition_variable instead of sleep_for() because Windows
@@ -1134,9 +1141,11 @@ public:
                 seek_cv_.wait_for(lock,
                     std::chrono::seconds(2),
                     [this] {
-                        return seek_done_.load(std::memory_order_acquire)
+                        const bool ready = seek_done_.load(std::memory_order_acquire)
                                || !decode_running_.load(
                                       std::memory_order_acquire);
+                        if (!ready) notify_seek_wait_test_hook(0);
+                        return ready;
                     });
             }
 
@@ -1365,7 +1374,7 @@ public:
         }
         seeking_.store(true, std::memory_order_release);
         seek_requested_.store(true, std::memory_order_release);
-        seek_cv_.notify_one();
+        notify_seek_waiters();
         const auto request_completed = [this, request_generation] {
             return completed_time_pitch_generation_.load(
                        std::memory_order_acquire) == request_generation
@@ -1393,7 +1402,7 @@ public:
                         std::memory_order_acq_rel,
                         std::memory_order_acquire)) {
                     seeking_.store(false, std::memory_order_release);
-                    seek_cv_.notify_all();
+                    notify_seek_waiters();
                     return AG_CANCELLED;
                 }
             }
@@ -1404,7 +1413,8 @@ public:
             if (state == TimePitchRequestState::CommitExecuting) {
                 // The worker crossed the point of no return. From here to
                 // publication it performs fixed-cost swaps, ring reset, and
-                // atomics only: no file I/O, locks, or retired destruction.
+                // atomics only. The CV handshake follows publication; no file
+                // I/O or retired destruction occurs before the result.
                 // Wait for this generation's real result rather than guessing
                 // success or returning a failure that could apply later.
                 std::unique_lock<std::mutex> lock(seek_mutex_);
@@ -1547,7 +1557,7 @@ public:
 
             scratch_phase_.store(ScratchPhase::Active,
                                  std::memory_order_release);
-            seek_cv_.notify_all();
+            notify_seek_waiters();
             if (!scratch_was_playing_ && start_output() != AG_OK) {
                 hard_invalidate_scratch();
                 return AG_DEVICE_ERROR;
@@ -1569,7 +1579,7 @@ public:
         scratch_requested_rate_.store(
             std::clamp(signed_rate, -3.0F, 3.0F),
             std::memory_order_release);
-        seek_cv_.notify_one();
+        notify_seek_waiters();
         return AG_OK;
     }
 
@@ -1596,7 +1606,7 @@ public:
         const ScratchCommand exit_command{
             generation, epoch, false, 0.0F};
         scratch_render_mailbox_.publish(exit_command);
-        seek_cv_.notify_all();
+        notify_seek_waiters();
 
         if (backend_ == AudioBackend::Manual) {
             std::array<float, 1'024U * ScratchRenderer::kMaximumChannels>
@@ -1646,7 +1656,7 @@ public:
                 ? current_error() : AG_CANCELLED;
         }
         notify_scratch_commit_test_hook(3);
-        seek_cv_.notify_all();
+        notify_seek_waiters();
 
         {
             std::unique_lock<std::mutex> lock(seek_mutex_);
@@ -2173,7 +2183,7 @@ public:
         end_timeline_write(epoch);
         const ag_result thread_result = start_decode_thread();
         if (thread_result != AG_OK) return enter_error(thread_result);
-        seek_cv_.notify_all();
+        notify_seek_waiters();
         return AG_OK;
     }
 
@@ -2455,7 +2465,7 @@ public:
                                           std::memory_order_release);
                 }
                 device_lost_.store(false, std::memory_order_release);
-                seek_cv_.notify_all();
+                notify_seek_waiters();
                 if (!resume || start_output() == AG_OK) {
                     meter_attempt.succeed();
                     return AG_OK;
@@ -2483,7 +2493,7 @@ public:
                     }
                 }
                 device_lost_.store(false, std::memory_order_release);
-                seek_cv_.notify_all();
+                notify_seek_waiters();
                 if (!resume || start_output() == AG_OK) {
                     return AG_DEVICE_ERROR;
                 }
@@ -2693,6 +2703,20 @@ private:
         return AG_OK;
     }
 
+    // Non-realtime publishers store their atomic predicates before this
+    // handshake. Taking the waiter's mutex prevents notification from passing
+    // between a false predicate check and the CV's atomic unlock-and-wait.
+    // Audio callbacks keep their existing lock-free publication and the
+    // corresponding bounded polling waits; they must not call this helper.
+    void notify_seek_waiters() noexcept
+    {
+        {
+            const std::lock_guard<std::mutex> lock(seek_mutex_);
+        }
+        // This CV serves both the decoder and control-side completion waits.
+        seek_cv_.notify_all();
+    }
+
     ag_result start_decode_thread() noexcept
     {
         stop_decode_.store(false, std::memory_order_release);
@@ -2731,7 +2755,7 @@ private:
                                                 std::memory_order_release);
         time_pitch_request_state_.store(TimePitchRequestState::Idle,
                                         std::memory_order_release);
-        seek_cv_.notify_all();
+        notify_seek_waiters();
     }
 
     void stop_decode_thread() noexcept
@@ -2742,7 +2766,8 @@ private:
         seek_requested_.store(false, std::memory_order_release);
         seeking_.store(false, std::memory_order_release);
         // Wake the decode thread if it is blocked on the seek CV.
-        seek_cv_.notify_all();
+        notify_seek_waiters();
+        notify_seek_wait_test_hook(2);
         if (decode_thread_.joinable()) {
             decode_thread_.join();
         }
@@ -2786,7 +2811,7 @@ private:
                             AG_CANCELLED, std::memory_order_relaxed);
                         scratch_completed_commit_generation_.store(
                             generation, std::memory_order_release);
-                        seek_cv_.notify_all();
+                        notify_seek_waiters();
                     }
                     return true;
                 }
@@ -2808,7 +2833,7 @@ private:
                             AG_CANCELLED, std::memory_order_relaxed);
                         scratch_completed_commit_generation_.store(
                             generation, std::memory_order_release);
-                        seek_cv_.notify_all();
+                        notify_seek_waiters();
                     }
                     return true;
                 }
@@ -2839,7 +2864,7 @@ private:
                     generation, std::memory_order_release);
                 scratch_commit_state_.store(ScratchCommitState::Complete,
                                             std::memory_order_release);
-                seek_cv_.notify_all();
+                notify_seek_waiters();
                 return true;
             }
             commit = expected;
@@ -2900,17 +2925,13 @@ private:
     void decode_loop() noexcept
     {
         struct RunningGuard {
-            std::atomic<bool>& flag;
-            std::condition_variable& cv;
-            RunningGuard(std::atomic<bool>& f,
-                         std::condition_variable& condition) noexcept
-                : flag(f), cv(condition) {}
+            Impl& owner;
             ~RunningGuard() noexcept
             {
-                flag.store(false, std::memory_order_release);
-                cv.notify_all();
+                owner.decode_running_.store(false, std::memory_order_release);
+                owner.notify_seek_waiters();
             }
-        } guard{decode_running_, seek_cv_};
+        } guard{*this};
         try {
             PlaybackDecodedBlock block;
             std::size_t frame_offset = 0U;
@@ -2930,6 +2951,7 @@ private:
                 // the seek here avoids stopping the output device and
                 // recreating the decode thread.
                 if (seek_requested_.load(std::memory_order_acquire)) {
+                    notify_seek_wait_test_hook(3);
                     const std::int64_t target_ms =
                         seek_target_ms_.load(std::memory_order_acquire);
                     const bool time_pitch_change =
@@ -3090,7 +3112,8 @@ private:
                         seek_result_.store(result, std::memory_order_release);
                         seek_done_.store(true, std::memory_order_release);
                     }
-                    seek_cv_.notify_all();
+                    notify_seek_waiters();
+                    notify_seek_wait_test_hook(2);
                     // Discard any pre-seek decoded data so the next read
                     // fetches fresh samples from the new position.
                     if (result == AG_OK) {
@@ -3183,11 +3206,13 @@ private:
                     {
                         std::unique_lock<std::mutex> lock(seek_mutex_);
                         seek_cv_.wait(lock, [this] {
-                            return seek_requested_.load(
+                            const bool ready = seek_requested_.load(
                                        std::memory_order_acquire)
                                    || scratch_rendering()
                                    || stop_decode_.load(
                                           std::memory_order_acquire);
+                            if (!ready) notify_seek_wait_test_hook(1);
+                            return ready;
                         });
                     }
                     if (stop_decode_.load(std::memory_order_acquire)) {
@@ -3632,6 +3657,15 @@ private:
         transition_version_.store(epoch + 2U, std::memory_order_release);
     }
 
+    void notify_seek_wait_test_hook(const int phase) noexcept
+    {
+        const SeekWaitTestHook hook =
+            seek_wait_test_hook_.load(std::memory_order_acquire);
+        if (hook != nullptr) {
+            hook(seek_wait_test_context_.load(std::memory_order_relaxed), phase);
+        }
+    }
+
     void notify_timeline_test_hook(const bool realtime) noexcept
     {
         const TimelineTestHook hook =
@@ -3786,7 +3820,7 @@ private:
     {
         invalidate_scratch_from_device_callback();
         if (scratch_worker_) scratch_worker_->cancel();
-        seek_cv_.notify_all();
+        notify_seek_waiters();
     }
 
     void destroy_scratch_resources_after_output_stopped() noexcept
@@ -4290,6 +4324,8 @@ private:
     std::atomic<void*> time_pitch_test_context_{nullptr};
     std::atomic<ScratchCommitTestHook> scratch_commit_test_hook_{nullptr};
     std::atomic<void*> scratch_commit_test_context_{nullptr};
+    std::atomic<SeekWaitTestHook> seek_wait_test_hook_{nullptr};
+    std::atomic<void*> seek_wait_test_context_{nullptr};
     std::atomic<std::uint64_t> time_pitch_generation_counter_{0U};
     std::atomic<std::uint64_t> requested_time_pitch_generation_{0U};
     std::atomic<std::uint64_t> completed_time_pitch_generation_{0U};
@@ -4315,6 +4351,12 @@ AudioEngine::AudioEngine(const AudioBackend backend,
 }
 
 AudioEngine::~AudioEngine() = default;
+
+void AudioEngine::set_seek_wait_test_hook(const SeekWaitTestHook hook,
+                                         void* const context) noexcept
+{
+    impl_->set_seek_wait_test_hook(hook, context);
+}
 
 void AudioEngine::set_timeline_test_hook(const TimelineTestHook hook,
                                          void* const context) noexcept

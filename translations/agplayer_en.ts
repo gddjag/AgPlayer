@@ -4,6 +4,78 @@
 <context>
         <name>AudioEditorController</name>
         <message>
+            <source>%1；部分录音保留于：%2</source>
+            <translation>%1; partial recording saved at: %2</translation>
+        </message>
+        <message>
+            <source>工程已改变，录音保留于：%1</source>
+            <translation>The project has changed. The recording is saved at: %1</translation>
+        </message>
+        <message>
+            <source>空轨道</source>
+            <translation>Empty track</translation>
+        </message>
+        <message>
+            <source>一次导入不能超过 4096 个文件</source>
+            <translation>You can import up to 4096 files at a time</translation>
+        </message>
+        <message>
+            <source>目标轨道没有可用位置，片段保持原状</source>
+            <translation>There is no available position on the target track. The clip was not changed</translation>
+        </message>
+        <message>
+            <source>录音只能开始于空轨道或本轨最后片段之后</source>
+            <translation>Recording can only start on an empty track or after the last clip on this track</translation>
+        </message>
+        <message>
+            <source>无法创建录音文件</source>
+            <translation>Unable to create the recording file</translation>
+        </message>
+        <message>
+            <source>录音支持单声道或立体声工程</source>
+            <translation>Recording supports mono or stereo projects</translation>
+        </message>
+        <message>
+            <source>导出不能覆盖工程源文件，请选择新文件名</source>
+            <translation>Export cannot overwrite a project source file. Please choose a new file name</translation>
+        </message>
+        <message>
+            <source>请先选择要降噪的片段</source>
+            <translation>Select a clip before applying noise reduction</translation>
+        </message>
+        <message>
+            <source>选区未与所选片段相交</source>
+            <translation>The time selection does not overlap the selected clip</translation>
+        </message>
+        <message>
+            <source>冻结导入位置没有可用轨道，未覆盖原素材</source>
+            <translation>No track has space at the saved import position. Existing media was not overwritten</translation>
+        </message>
+        <message>
+            <source>工程片段容量不足，未覆盖原素材</source>
+            <translation>The project clip limit has been reached. Existing media was not overwritten</translation>
+        </message>
+        <message>
+            <source>工程已改变，已丢弃过期导入结果</source>
+            <translation>The project has changed. Outdated import results were discarded</translation>
+        </message>
+        <message>
+            <source>音频导入失败</source>
+            <translation>Audio import failed</translation>
+        </message>
+        <message>
+            <source>音频时长超出工程范围</source>
+            <translation>The audio duration exceeds the project range</translation>
+        </message>
+        <message>
+            <source>片段冲突或工程容量不足，未覆盖原素材</source>
+            <translation>The clip overlaps existing media or exceeds the project limit. Existing media was not overwritten</translation>
+        </message>
+        <message>
+            <source>工程已改变，已停止后续导入</source>
+            <translation>The project has changed. Remaining imports were stopped</translation>
+        </message>
+        <message>
             <source>未检测到可导入的音频文件</source>
             <translation>No importable audio files were detected</translation>
         </message>
@@ -189,6 +261,10 @@
     </context>
 <context>
         <name>AudioEditorPage</name>
+        <message>
+            <source>音频、视频或工程 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma *.ape *.aif *.aiff *.mp4 *.mkv *.webm *.mov *.avi *.m4v *.agproj)</source>
+            <translation>Audio, video, or project (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma *.ape *.aif *.aiff *.mp4 *.mkv *.webm *.mov *.avi *.m4v *.agproj)</translation>
+        </message>
         <message>
             <source>检测中…</source>
             <translation>Detecting…</translation>
@@ -894,167 +970,49 @@
         </message>
     </context>
 <context>
-        <name>EditorCommandBar</name>
+        <name>EditorWaveformCanvas</name>
+        <message><source>添加音量线</source><translation>Add volume envelope</translation></message>
+        <message><source>添加控制点</source><translation>Add control point</translation></message>
         <message>
-            <source>降噪</source>
-            <translation>Noise reduction</translation>
+            <source>删除音量控制点</source>
+            <translation>Delete volume point</translation>
         </message>
         <message>
-            <source>音轨静音</source>
-            <translation>Mute track</translation>
+            <source>在此分割</source>
+            <translation>Split here</translation>
         </message>
         <message>
-            <source>音轨独奏</source>
-            <translation>Solo track</translation>
+            <source>复制片段</source>
+            <translation>Copy clip</translation>
         </message>
         <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="61" />
-            <source>打开</source>
-            <translation>打开</translation>
+            <source>剪切片段</source>
+            <translation>Cut clip</translation>
         </message>
         <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="63" />
-            <source>保存</source>
-            <translation>Save</translation>
+            <source>粘贴到当前轨道</source>
+            <translation>Paste to current track</translation>
         </message>
         <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="65" />
-            <source>撤销</source>
-            <translation>Undo</translation>
+            <source>删除片段</source>
+            <translation>Delete clip</translation>
         </message>
         <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="66" />
-            <source>重做</source>
-            <translation>Redo</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="68" />
-            <source>剪切</source>
-            <translation>Cut</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="121" />
-            <source>复制</source>
-            <translation>Copy</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="129" />
-            <source>粘贴</source>
-            <translation>Paste</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="103" />
-            <source>删除</source>
-            <translation>Delete</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="112" />
-            <source>裁剪</source>
-            <translation>Crop</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="74" />
-            <source>静音</source>
-            <translation>Mute</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="137" />
             <source>淡入</source>
             <translation>Fade in</translation>
         </message>
         <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="145" />
             <source>淡出</source>
             <translation>Fade out</translation>
         </message>
         <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="77" />
-            <source>更多</source>
-            <translation>更多</translation>
+            <source>淡入曲线</source>
+            <translation>Fade-in curve</translation>
         </message>
         <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="79" />
-            <source>导出</source>
-            <translation>Export</translation>
+            <source>淡出曲线</source>
+            <translation>Fade-out curve</translation>
         </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="71" />
-            <source>导入音频</source>
-            <translation>Import audio</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="77" />
-            <source>保存工程</source>
-            <translation>Save project</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="85" />
-            <source>选择</source>
-            <translation>Select</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="92" />
-            <source>分割</source>
-            <translation>Split</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="153" />
-            <source>静音片段</source>
-            <translation>Mute clip</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorCommandBar.qml" line="162" />
-            <source>清除</source>
-            <translation>Clear</translation>
-        </message>
-    </context>
-<context>
-        <name>EditorStatusBar</name>
-        <message>
-            <source>导出完成：%1</source>
-            <translation>Export complete: %1</translation>
-        </message>
-        <message>
-            <source>正在处理… %1%</source>
-            <translation>Processing… %1%</translation>
-        </message>
-        <message>
-            <source>空格：播放 / 暂停 · S：在播放头处分割 · Delete：删除片段</source>
-            <translation>Space: Play / Pause · S: Split at playhead · Delete: Delete clip</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="18" />
-            <source>就绪</source>
-            <translation>Ready</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="18" />
-            <source>未打开音频</source>
-            <translation>No audio open</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="29" />
-            <source>选区范围：%1 - %2（%3 帧）</source>
-            <translation>Selection: %1 - %2 (%3 frames)</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="33" />
-            <source>选区范围：--</source>
-            <translation>Selection: --</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="44" />
-            <source> 声道</source>
-            <translation> channels</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/EditorStatusBar.qml" line="45" />
-            <source>采样率 --   位深 --   声道 --   时长 --</source>
-            <translation>Sample rate --   Bit depth --   Channels --   Duration --</translation>
-        </message>
-    </context>
-<context>
-        <name>EditorWaveformCanvas</name>
         <message>
             <source>线性</source>
             <translation>Linear</translation>
@@ -1543,58 +1501,6 @@
             <location filename="../qt/src/file_association_controller.cpp" line="76" />
             <source>Cannot determine application path</source>
             <translation>Cannot determine application path</translation>
-        </message>
-    </context>
-<context>
-        <name>FileSummaryBar</name>
-        <message>
-            <source>总时长：</source>
-            <translation>Total duration:</translation>
-        </message>
-        <message>
-            <source>时长：</source>
-            <translation>Duration:</translation>
-        </message>
-        <message>
-            <source>采样率：</source>
-            <translation>Sample rate:</translation>
-        </message>
-        <message>
-            <source>位深度：</source>
-            <translation>Bit depth:</translation>
-        </message>
-        <message>
-            <source>声道：</source>
-            <translation>Channels:</translation>
-        </message>
-        <message>
-            <source>BPM：</source>
-            <translation>BPM:</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="48" />
-            <source>未打开音频</source>
-            <translation>No audio open</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="60" />
-            <source>单声道</source>
-            <translation>Mono</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="61" />
-            <source>立体声</source>
-            <translation>Stereo</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="62" />
-            <source> 声道</source>
-            <translation> channels</translation>
-        </message>
-        <message>
-            <location filename="../app/qml/AgPlayer/components/audioeditor/FileSummaryBar.qml" line="64" />
-            <source>BPM --</source>
-            <translation>BPM --</translation>
         </message>
     </context>
 <context>
@@ -5378,6 +5284,14 @@ Clear: Remove all known aliases for this field.</translation>
     </context>
 <context>
         <name>SettingsPage</name>
+        <message>
+            <source>波形使用所选目录下的专用子目录，封面使用程序缓存目录；清理不删除歌词或旧的未标记波形文件。</source>
+            <translation>Waveforms use a dedicated subfolder in the selected directory; covers use the app cache. Cleaning preserves lyrics and old unmarked waveform files.</translation>
+        </message>
+        <message>
+            <source>仅清理可重建的波形和封面缓存，不删除歌词。确定继续吗？</source>
+            <translation>Only rebuildable waveform and cover caches will be cleared. Lyrics will be preserved. Continue?</translation>
+        </message>
         <message><source>聚焦后按下要设置的快捷键</source><translation>Focus this field and press the shortcut you want to use</translation></message>
         <message>
             <source>下载由浏览器完成。若下载卡顿、超时或失败，请返回官网切换 GitHub / R2 线路。</source>
@@ -5631,13 +5545,13 @@ Clear: Remove all known aliases for this field.</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2162" />
-            <source>缓存上限</source>
-            <translation>Cache Limit</translation>
+            <source>波形缓存上限</source>
+            <translation>Waveform Cache Limit</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2192" />
-            <source>缓存自动清理（超出上限自动删旧文件，默认开启）</source>
-            <translation>Automatic cache cleaning (automatically delete old files when the upper limit is exceeded, enabled by default)</translation>
+            <source>波形缓存自动清理（超出上限删除旧波形，默认开启）</source>
+            <translation>Automatic waveform cleaning (remove old waveforms when over the limit; on by default)</translation>
         </message>
         <message>
             <location filename="../app/qml/AgPlayer/SettingsPage.qml" line="2014" />
@@ -7637,6 +7551,44 @@ Clear: Remove all known aliases for this field.</translation>
     </context>
 <context>
         <name>VocalSeparationPage</name>
+        <message>
+            <source>macOS 分离环境：
+• MDX / HTDemucs ONNX：原模型卡片一键配置 ONNX Runtime。Intel 与 Apple Silicon 均提供 CPU，Apple Silicon 逐模型验证 CoreML 后显示可用。
+• 5_HP-Karaoke-UVR.pth：原卡片一键配置独立 Python 3.10、PyTorch、audio-separator 与 FFmpeg；Intel 使用兼容的 PyTorch 2.2.2，Apple Silicon 使用 2.5.1 并逐模型验证 MPS。
+
+运行环境和模型均外置下载，不修改系统 Python。下载进度、暂停、继续和失败原因显示在原卡片中。
+
+模型可放入模型目录任意子目录后点击“检测”；已验证的本地模型不会重复下载。其他 .pth / .th / .ckpt 仍需对应适配器，尚未验证不表示不兼容。运行验证失败或尚未适配的卡片提供 UVR 官方 macOS 支持链接，可查看 Intel / Apple Silicon 兼容模型和下载。
+
+模型来源：卡片官方仓库与官方下载；HTDemucs 支持 HF-Mirror 自动备用线路。
+组件来源：
+https://onnxruntime.ai/
+https://docs.astral.sh/uv/
+https://github.com/nomadkaraoke/python-audio-separator
+https://pytorch.org/
+
+第三方公益服务：百度网盘人声伴奏分离模型。
+百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888
+提取码: 8888</source>
+            <translation>macOS separation runtime:
+• MDX / HTDemucs ONNX: configure ONNX Runtime from the existing model card. CPU is available on Intel and Apple Silicon; CoreML is offered on Apple Silicon after per-model validation.
+• 5_HP-Karaoke-UVR.pth: configure standalone Python 3.10, PyTorch, audio-separator and FFmpeg from the existing card. Intel uses compatible PyTorch 2.2.2; Apple Silicon uses 2.5.1 with per-model MPS validation.
+
+Runtimes and models are downloaded separately without modifying system Python. Progress, pause, resume and failure details appear in the model card.
+
+Place models in any subfolder of the model directory, then select Scan. Validated local models are not downloaded again. Other .pth / .th / .ckpt models require their respective adapters; an unverified model is not necessarily incompatible. Cards for failed or unsupported runtimes link to official UVR macOS support for Intel and Apple Silicon models and downloads.
+
+Model sources: official repositories and downloads on the model cards; HTDemucs supports automatic HF-Mirror fallback.
+Component sources:
+https://onnxruntime.ai/
+https://docs.astral.sh/uv/
+https://github.com/nomadkaraoke/python-audio-separator
+https://pytorch.org/
+
+Third-party community service: vocal and instrumental separation models on Baidu Netdisk.
+Baidu Netdisk: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888
+Access code: 8888</translation>
+        </message>
         <message><source>等待共享环境</source><translation>Waiting for shared runtime</translation></message>
         <message><source>配置失败</source><translation>Configuration failed</translation></message>
         <message><source>已配置</source><translation>Configured</translation></message>
@@ -8930,4 +8882,138 @@ A pinned NVIDIA CUDA version is installed separately without changing the existi
         <message><source>退出全屏</source><translation>Exit Full Screen</translation></message>
         <message><source>进入全屏</source><translation>Enter Full Screen</translation></message>
     </context>
+    <context>
+        <name>SettingsController</name>
+        <message>
+            <source>正在清理缓存…</source>
+            <translation>Clearing cache…</translation>
+        </message>
+        <message>
+            <source>缓存清理已停止，已清理 %1 个缓存文件。</source>
+            <translation>Cache cleanup stopped. Removed %1 cache files.</translation>
+        </message>
+        <message>
+            <source>缓存清理未完成：已清理 %1 个文件，%2 项无法清理。</source>
+            <translation>Cache cleanup incomplete: removed %1 files; %2 items could not be cleared.</translation>
+        </message>
+        <message>
+            <source>没有可清理的缓存文件。</source>
+            <translation>No cache files to clear.</translation>
+        </message>
+        <message>
+            <source>已清理 %1 个缓存文件，释放 %2 MB。</source>
+            <translation>Removed %1 cache files, freeing %2 MB.</translation>
+        </message>
+        <message>
+            <source>转码临时文件由各任务自动管理，无需手动清理。</source>
+            <translation>Transcoding temporary files are managed automatically by each job; no manual cleanup is needed.</translation>
+        </message>
+    </context>
+<context>
+        <name>EditorSixTrackWorkspace</name>
+        <message>
+            <source>添加音频</source>
+            <translation>Add audio</translation>
+        </message>
+        <message>
+            <source>保存工程</source>
+            <translation>Save project</translation>
+        </message>
+        <message>
+            <source>撤销</source>
+            <translation>Undo</translation>
+        </message>
+        <message>
+            <source>分割</source>
+            <translation>Split</translation>
+        </message>
+        <message>
+            <source>降噪</source>
+            <translation>Noise reduction</translation>
+        </message>
+        <message>
+            <source>删除</source>
+            <translation>Delete</translation>
+        </message>
+        <message>
+            <source>清空</source>
+            <translation>Clear</translation>
+        </message>
+        <message>
+            <source>音轨 %1</source>
+            <translation>Track %1</translation>
+        </message>
+        <message>
+            <source>音轨 %1 静音</source>
+            <translation>Mute track %1</translation>
+        </message>
+        <message>
+            <source>音轨 %1 音量，百分之 %2</source>
+            <translation>Track %1 volume, %2 percent</translation>
+        </message>
+        <message>
+            <source>处理中… %1%</source>
+            <translation>Processing… %1%</translation>
+        </message>
+        <message>
+            <source>取消</source>
+            <translation>Cancel</translation>
+        </message>
+        <message>
+            <source>输入设备</source>
+            <translation>Input device</translation>
+        </message>
+        <message>
+            <source>录音输入设备</source>
+            <translation>Recording input device</translation>
+        </message>
+        <message>
+            <source>录音</source>
+            <translation>Record</translation>
+        </message>
+        <message>
+            <source>继续录音</source>
+            <translation>Resume recording</translation>
+        </message>
+        <message>
+            <source>暂停录音</source>
+            <translation>Pause recording</translation>
+        </message>
+        <message>
+            <source>回到开始</source>
+            <translation>Go to start</translation>
+        </message>
+        <message>
+            <source>后退五秒</source>
+            <translation>Back five seconds</translation>
+        </message>
+        <message>
+            <source>播放或暂停</source>
+            <translation>Play or pause</translation>
+        </message>
+        <message>
+            <source>前进五秒</source>
+            <translation>Forward five seconds</translation>
+        </message>
+        <message>
+            <source>跳到结尾</source>
+            <translation>Go to end</translation>
+        </message>
+        <message>
+            <source>停止</source>
+            <translation>Stop</translation>
+        </message>
+        <message>
+            <source>录音已暂停</source>
+            <translation>Recording paused</translation>
+        </message>
+        <message>
+            <source>正在录音</source>
+            <translation>Recording</translation>
+        </message>
+        <message>
+            <source>总时长  %1</source>
+            <translation>Total duration  %1</translation>
+        </message>
+</context>
 </TS>

@@ -101,6 +101,31 @@ TestCase {
     }
 
     Component {
+        id: lyricsReadabilityServiceComponent
+        QtObject {
+            property bool enabled: true
+            property int status: LyricsService.Ready
+            property bool synchronizedLyrics: true
+            property bool instrumental: false
+            property string untimedLyrics: ""
+            property string previousLine: "窗外的风慢慢吹过"
+            property string currentLine: "让音乐陪你走过长夜"
+            property string nextLine: "下一句旋律正在靠近"
+            property int currentLineIndex: 1
+            property string sourceProvider: ""
+            property string sourceAttribution: ""
+            property var routeNotice: ({})
+            property var routeAttempts: []
+            property var lines: ListModel {
+                ListElement { text: "窗外的风慢慢吹过" }
+                ListElement { text: "让音乐陪你走过长夜" }
+                ListElement { text: "下一句旋律正在靠近" }
+                ListElement { text: "把每个字都看得清楚" }
+            }
+        }
+    }
+
+    Component {
         id: defaultListWindowComponent
         ListWindow { visible: true }
     }
@@ -734,10 +759,10 @@ TestCase {
         mouseClick(button)
         var window = findChild(mainWindow, "equalizerWindow")
         tryVerify(function() { return window && window.visible }, 1000)
-        compare(window.width, 1080)
-        compare(window.height, 620)
-        compare(window.minimumWidth, 960)
-        compare(window.minimumHeight, 460)
+        compare(window.width, window.defaultWindowBounds.width)
+        compare(window.height, window.defaultWindowBounds.height)
+        compare(window.minimumWidth, Math.min(760, window.defaultWindowBounds.width))
+        compare(window.minimumHeight, Math.min(420, window.defaultWindowBounds.height))
         var equalizerTitle = findChild(window, "equalizerTitle")
         var equalizerContent = findChild(window, "equalizerContent")
         verify(equalizerTitle,
@@ -1255,7 +1280,7 @@ TestCase {
             var expectedRowHeight = enabled ? Theme.mediaListRowHeight
                                             : Theme.listRowHeight
             var expectedHeight = Theme.titleBarHeight + Theme.tableHeaderHeight
-                    + 10 * expectedRowHeight + listWindow.filterBarHeight
+                    + 10 * expectedRowHeight + listWindow.filterBarHeight + Theme.spacingSm
             compare(listWindow.height, expectedHeight)
             compare(filter.height, listWindow.filterBarHeight)
             tryCompare(trackList, "height",
@@ -5910,9 +5935,10 @@ TestCase {
         })
         const settingsWindow = findChild(mainWindow, "settingsWindow")
         verify(settingsWindow, "settings must open in its own window")
-        compare(settingsWindow.width, 860)
-        verify(settingsWindow.height >= 640 && settingsWindow.height <= 900,
-               "settings window must fit the available desktop")
+        compare(settingsWindow.width, settingsWindow.defaultWindowBounds.width)
+        compare(settingsWindow.height, settingsWindow.defaultWindowBounds.height)
+        verify(settingsWindow.width <= 860 && settingsWindow.height <= 700,
+               "settings window must fit the available desktop without enlarging its default")
         const page = findChild(mainWindow, "settingsPage")
         tryVerify(function() { return page.visible })
         compare(page.editResolved, false,
@@ -5931,11 +5957,12 @@ TestCase {
                 ? findChild(page, "macCloseButton").parent : null
         const leadingControlsWidth = macButtons ? macButtons.width + Theme.spacingLg : 0
         verify(headerDragArea.x >= leadingControlsWidth)
-        verify(headerDragArea.width + leadingControlsWidth > settingsWindow.width * 0.50)
-        compare(sidebar.width, 184)
+        verify(headerDragArea.width >= Math.min(120, settingsWindow.width * 0.20),
+               "compact settings must retain a usable drag strip outside its controls")
+        compare(sidebar.width, page.compact ? 152 : 184)
         verify(contentColumn.width <= 760,
                "settings content must remain a readable single column")
-        verify(contentColumn.x >= 24,
+        verify(contentColumn.x >= (page.compact ? 12 : 24),
                "settings content must keep balanced horizontal breathing room")
         verify(contentColumn.spacing <= 6,
                "settings sections must use compact PC spacing")
@@ -6114,12 +6141,27 @@ TestCase {
         var covers = findChild(page, "clearCoverCacheButton")
         var temp = findChild(page, "clearTempCacheButton")
         var all = findChild(page, "clearAllCacheButton")
-        verify(limit && waveform && covers && temp && all)
+        verify(limit && waveform && covers && all)
+        verify(!temp, "There is no shared temporary-file cache to clear")
+        var hint = findChild(page, "cacheDirectoryScopeHint")
+        verify(hint)
+        verify(hint.text.indexOf("歌词") >= 0)
+        var confirmation = findChild(page, "clearCacheConfirmDialog")
+        verify(confirmation.contentItem.text.indexOf("歌词") >= 0)
+        var pending = [page]
+        while (pending.length) {
+            var item = pending.pop()
+            verify(item.text !== "退出自动清理临时转码文件（默认开启）",
+                   "Job-owned staging cleanup must not be exposed as an exit setting")
+            if (item.children) {
+                for (var child = 0; child < item.children.length; ++child)
+                    pending.push(item.children[child])
+            }
+        }
         limit.text = "20"
         limit.editingFinished()
         tryCompare(SettingsController, "cacheSizeLimitMB", 20480)
         compare(waveform.parent, covers.parent)
-        compare(waveform.parent, temp.parent)
         compare(waveform.parent, all.parent)
         page.close()
     }
@@ -6664,7 +6706,8 @@ TestCase {
                         mainWindow.contentItem, controls.width / 2, 0).x
             var playCenter = playButton.mapToItem(
                         mainWindow.contentItem, playButton.width / 2, 0).x
-            compare(Math.round(playCenter), Math.round(controlsCenter))
+            verify(Math.abs(playCenter - controlsCenter) <= 0.5,
+                   "play center=" + playCenter + " controls center=" + controlsCenter)
             var playCenterBefore = playCenter
             volume.expandedForQa = true
             wait(220)
@@ -6672,9 +6715,9 @@ TestCase {
                         mainWindow.contentItem, controls.width / 2, 0).x
             var expandedPlayCenter = playButton.mapToItem(
                         mainWindow.contentItem, playButton.width / 2, 0).x
-            compare(Math.round(expandedPlayCenter),
-                    Math.round(expandedControlsCenter),
-                    "expanded integrated play button must stay centered")
+            verify(Math.abs(expandedPlayCenter - expandedControlsCenter) <= 0.5,
+                   "expanded integrated play button must stay centered; play="
+                   + expandedPlayCenter + " controls=" + expandedControlsCenter)
             if (Math.round(expandedControlsCenter) === Math.round(controlsCenter))
                 compare(Math.round(expandedPlayCenter),
                         Math.round(playCenterBefore))
@@ -6737,6 +6780,136 @@ TestCase {
                         20, 100, 180, 180, host, 32), "none")
         } finally {
             window.destroy()
+        }
+    }
+
+    function test_reloading_shell_preserves_independent_sidebar_choices() {
+        for (var warning = 0; !nativeDropHelper.supportsWindowsDropFiles() && warning < 4; ++warning)
+            ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
+        var previousShell = SettingsController.playerShellMode
+        var previousLyrics = PlayerExperienceController.lyricsVisible
+        var saved = [mainWindow.integratedSidePanelPage, mainWindow.integratedSidePanelExpanded,
+                     mainWindow.rollingSidePanelPage, mainWindow.rollingSidePanelExpanded]
+        try {
+            PlayerExperienceController.lyricsVisible = true
+            mainWindow.integratedSidePanelPage = 0
+            mainWindow.integratedSidePanelExpanded = false
+            mainWindow.rollingSidePanelPage = 1
+            mainWindow.rollingSidePanelExpanded = false
+            compare(PlayerExperienceController.integratedSidePanelPage, 0)
+            compare(PlayerExperienceController.integratedSidePanelExpanded, false)
+            compare(PlayerExperienceController.rollingSidePanelPage, 1)
+            compare(PlayerExperienceController.rollingSidePanelExpanded, false)
+            for (var mode of [0, 1, 2, 1, 2]) {
+                SettingsController.playerShellMode = mode
+                wait(0)
+                compare(mainWindow.integratedSidePanelPage, 0)
+                compare(mainWindow.integratedSidePanelExpanded, false)
+                compare(mainWindow.rollingSidePanelPage, 1)
+                compare(mainWindow.rollingSidePanelExpanded, false)
+            }
+        } finally {
+            PlayerExperienceController.lyricsVisible = previousLyrics
+            mainWindow.integratedSidePanelPage = saved[0]
+            mainWindow.integratedSidePanelExpanded = saved[1]
+            mainWindow.rollingSidePanelPage = saved[2]
+            mainWindow.rollingSidePanelExpanded = saved[3]
+            SettingsController.playerShellMode = previousShell
+        }
+    }
+
+    function test_navigation_menu_width_follows_text_data() {
+        return [{ tag: "playlist", menu: "playlistContextMenu", item: "playlistMenuCreate" },
+                { tag: "resource", menu: "resourceFolderContextMenu", item: "resourceFolderMenuRemove" }]
+    }
+
+    function test_navigation_menu_width_follows_text(data) {
+        var navigation = createTemporaryObject(sideNavigationComponent, mainWindow.contentItem)
+        var menu = findChild(navigation, data.menu)
+        var item = findChild(menu, data.item)
+        verify(menu && item)
+        menu.popup(20, 20)
+        tryCompare(menu, "opened", true)
+        function expectedWidth() {
+            var widest = 0
+            for (var i = 0; i < menu.count; ++i) {
+                var entry = menu.itemAt(i)
+                if (entry && entry.text !== undefined)
+                    widest = Math.max(widest, entry.contentItem.implicitWidth
+                                      + entry.leftPadding + entry.rightPadding)
+            }
+            return widest + menu.leftPadding + menu.rightPadding
+        }
+        tryVerify(function() { return Math.abs(menu.width - expectedWidth()) <= 2 }, 500,
+                  "Menu width must follow actual labels and padding, not a fixed minimum")
+        var shortWidth = menu.width
+        item.text = "Create a playlist with a longer translated name"
+        tryVerify(function() { return menu.width > shortWidth })
+        tryVerify(function() { return Math.abs(menu.width - expectedWidth()) <= 2 })
+        verify(item.contentItem.width + 1 >= item.contentItem.implicitWidth,
+               "The widest action must not be elided")
+        menu.close()
+    }
+
+    function test_lyrics_text_remains_readable_in_both_appearances_data() {
+        return [{ tag: "dark", mode: 0 }, { tag: "light", mode: 1 }]
+    }
+
+    function test_lyrics_text_remains_readable_in_both_appearances(data) {
+        var oldTheme = SettingsController.themeMode
+        var service = createTemporaryObject(lyricsReadabilityServiceComponent, testCase)
+        var sidePanel = createTemporaryObject(lyricsSidePanelComponent,
+                                             mainWindow.contentItem,
+                                             { lyricsService: service, z: 1000 })
+        verify(sidePanel)
+        try {
+            SettingsController.themeMode = data.mode
+            tryCompare(Theme, "isLight", data.mode === 1)
+            var panel = findChild(sidePanel, "libraryLyricsPanel")
+            verify(panel)
+            panel.lyricOpacity = 88 // The existing immersive default must not dim ordinary lyrics.
+            panel.chromeAutoHideDelay = 60000
+            panel.revealChrome()
+            var timeline = findChild(panel, "lyricsTimelineList")
+            tryCompare(timeline, "count", 4)
+            // Drive a real position change after ListView's initial layout.
+            service.currentLineIndex = 2
+            wait(20)
+            service.currentLineIndex = 1
+            tryCompare(timeline, "currentIndex", 1)
+            tryVerify(function() { return timeline.itemAtIndex(1) && timeline.itemAtIndex(2) })
+            function textFor(index) {
+                var item = timeline.itemAtIndex(index)
+                for (var i = 0; i < item.children.length; ++i)
+                    if (item.children[i].text === service.lines.get(index).text)
+                        return item.children[i]
+                return null
+            }
+            var active = textFor(1), adjacent = textFor(2)
+            verify(active && adjacent)
+            var background = Theme.surface
+            function composed(text) {
+                var alpha = text.color.a * text.opacity * panel.opacity
+                return Qt.rgba(text.color.r * alpha + background.r * (1 - alpha),
+                               text.color.g * alpha + background.g * (1 - alpha),
+                               text.color.b * alpha + background.b * (1 - alpha), 1)
+            }
+            verify(colorContrast(composed(active), background) >= 4.5,
+                   "Current purple lyric must retain readable composed contrast")
+            verify(colorContrast(composed(adjacent), background) >= 4.5,
+                   "Adjacent lyric must not be dimmed by stacked opacity")
+            verify(active.font.weight > adjacent.font.weight)
+            compare(panel.opacity, 1)
+            var retry = findChild(panel, "lyricsRetryButton")
+            verify(retry.enabled)
+            service.status = LyricsService.Loading
+            compare(retry.enabled, false)
+            service.status = LyricsService.Ready
+            wait(350)
+            if (visualFixtureOutput)
+                grabImage(sidePanel).save(visualFixtureOutput + "-" + data.tag + ".png")
+        } finally {
+            SettingsController.themeMode = oldTheme
         }
     }
 

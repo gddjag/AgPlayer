@@ -342,13 +342,14 @@ def deploy_qt(app, qt_root, repo_root):
     # Copy into staging only; the installed Qt SDK is never modified.
     plugin_root = qt_root / "plugins"
     for required in ("platforms/libqcocoa.dylib", "platforms/libqoffscreen.dylib",
-                     "sqldrivers/libqsqlite.dylib"):
+                     "sqldrivers/libqsqlite.dylib",
+                     "permissions/libqdarwinmicrophonepermission.dylib"):
         if not (plugin_root / required).is_file():
             raise PackageError(f"Missing required Qt runtime plugin: {required}")
     plugin_binaries = []
     for family in ("platforms", "styles", "imageformats", "iconengines", "printsupport",
                    "accessible", "platforminputcontexts", "tls", "networkinformation",
-                   "audio", "multimedia", "sqldrivers"):
+                   "audio", "multimedia", "sqldrivers", "permissions"):
         source = plugin_root / family
         if not source.is_dir():
             continue
@@ -356,6 +357,8 @@ def deploy_qt(app, qt_root, repo_root):
             if plugin.stem.endswith("_debug"):
                 continue
             if family == "sqldrivers" and plugin.name != "libqsqlite.dylib":
+                continue
+            if family == "permissions" and plugin.name != "libqdarwinmicrophonepermission.dylib":
                 continue
             destination = app / "Contents/PlugIns" / family / plugin.name
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -396,7 +399,7 @@ def clean_development_rpaths(app):
 
 def add_resources(app, repo_root, temporary):
     required = [repo_root / value for value in REQUIRED_LICENSES]
-    required += [repo_root / "THIRD-PARTY-NOTICES.md", repo_root / "assets/brand/agplayer-icon.png"]
+    required += [repo_root / "THIRD-PARTY-NOTICES.md", repo_root / "assets/brand/desktop-install-icon.png"]
     for path in required:
         if not path.is_file():
             raise PackageError(f"Required packaging resource missing: {path}")
@@ -408,7 +411,7 @@ def add_resources(app, repo_root, temporary):
     shutil.copytree(repo_root / "LICENSES", licenses, dirs_exist_ok=True)
     iconset = temporary / "AgPlayer.iconset"
     iconset.mkdir()
-    source = repo_root / "assets/brand/agplayer-icon.png"
+    source = repo_root / "assets/brand/desktop-install-icon.png"
     for size in (16, 32, 128, 256, 512):
         for scale in (1, 2):
             name = f"icon_{size}x{size}{'@2x' if scale == 2 else ''}.png"
@@ -421,7 +424,9 @@ def add_resources(app, repo_root, temporary):
 
 def sign_bundle(app, inventory, identity, temporary):
     main_entitlements = temporary / "qml.entitlements"
-    main_entitlements.write_bytes(plistlib.dumps({"com.apple.security.cs.allow-jit": True}))
+    main_entitlement_values = {"com.apple.security.cs.allow-jit": True,
+                               "com.apple.security.device.audio-input": True}
+    main_entitlements.write_bytes(plistlib.dumps(main_entitlement_values))
     # The worker loads an optional, separately supplied ONNX Runtime library.
     # Keep its library-validation exception confined to this child executable.
     worker_entitlements = temporary / "worker.entitlements"
@@ -466,7 +471,7 @@ def sign_bundle(app, inventory, identity, temporary):
     return {"mode": "ad-hoc" if identity == "-" else "Developer ID Application", "identity": identity,
             "verified": True, "hardened_runtime": identity != "-", "details": details.strip(),
             "expected_team_id": expected_team, "native_code": signatures,
-            "qml_entitlements": {"com.apple.security.cs.allow-jit": True},
+            "qml_entitlements": main_entitlement_values,
             "worker_entitlements": {"com.apple.security.cs.disable-library-validation": True}}
 
 

@@ -59,43 +59,57 @@ Rectangle {
         anchors.fill: parent
         spacing: 0
 
-        RowLayout {
-            objectName: "formatStatusFilters"
+        Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: Theme.listRowHeight
+            Layout.preferredHeight: statusFilterFlow.implicitHeight
+                                    + Theme.listRowHeight - Theme.controlHeightCompact
             Layout.leftMargin: 18
-            spacing: 12
-            Text { text: qsTr("任务列表"); color: Theme.primaryText; font.pixelSize: Theme.fontSizeBody; font.weight: Font.DemiBold }
-            Repeater {
-                model: [
-                    { key: "All", text: qsTr("全部"), count: converter.fileCount },
-                    { key: "Converting", text: qsTr("转换中"), count: converter.convertingCount },
-                    { key: "Done", text: qsTr("已完成"), count: converter.doneCount },
-                    { key: "Error", text: qsTr("失败"), count: converter.failedCount },
-                    { key: "Cancelled", text: qsTr("已取消"), count: converter.cancelledCount }
-                ]
-                Button {
-                    Layout.preferredHeight: Theme.controlHeightCompact
-                    text: modelData.text + "  " + modelData.count
-                    checkable: true
-                    checked: converter.filteredTaskModel.statusFilter === modelData.key
-                             || (modelData.key === "All" && converter.filteredTaskModel.statusFilter === "")
-                    onClicked: converter.filteredTaskModel.statusFilter = modelData.key
-                    background: Rectangle {
-                    color: parent.checked ? Theme.activeSelection : Theme.elevated
-                        border.color: parent.checked ? Theme.accent : Theme.border
-                        radius: 5
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        color: parent.checked ? Theme.activeSelectionText : Theme.primaryText
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        font.pixelSize: Theme.fontSizeBody
+            Layout.rightMargin: Theme.spacingSm
+
+            Flow {
+                id: statusFilterFlow
+                objectName: "formatStatusFilters"
+                width: parent.width
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 12
+                Text {
+                    height: Theme.controlHeightCompact
+                    text: qsTr("任务列表")
+                    color: Theme.primaryText
+                    font.pixelSize: Theme.fontSizeBody
+                    font.weight: Font.DemiBold
+                    verticalAlignment: Text.AlignVCenter
+                }
+                Repeater {
+                    model: [
+                        { key: "All", text: qsTr("全部"), count: converter.fileCount },
+                        { key: "Converting", text: qsTr("转换中"), count: converter.convertingCount },
+                        { key: "Done", text: qsTr("已完成"), count: converter.doneCount },
+                        { key: "Error", text: qsTr("失败"), count: converter.failedCount },
+                        { key: "Cancelled", text: qsTr("已取消"), count: converter.cancelledCount }
+                    ]
+                    Button {
+                        height: Theme.controlHeightCompact
+                        text: modelData.text + "  " + modelData.count
+                        checkable: true
+                        checked: converter.filteredTaskModel.statusFilter === modelData.key
+                                 || (modelData.key === "All" && converter.filteredTaskModel.statusFilter === "")
+                        onClicked: converter.filteredTaskModel.statusFilter = modelData.key
+                        background: Rectangle {
+                            color: parent.checked ? Theme.activeSelection : Theme.elevated
+                            border.color: parent.checked ? Theme.accent : Theme.border
+                            radius: 5
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            color: parent.checked ? Theme.activeSelectionText : Theme.primaryText
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            font.pixelSize: Theme.fontSizeBody
+                        }
                     }
                 }
             }
-            Item { Layout.fillWidth: true }
         }
 
         Rectangle {

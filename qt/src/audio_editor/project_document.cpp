@@ -6,11 +6,15 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QSet>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QSaveFile>
+#include <QTemporaryFile>
+#include <QCryptographicHash>
+#include <QUuid>
 
 #include <algorithm>
 #include <chrono>
@@ -132,6 +136,62 @@ bool safeRelative(const QString& path)
     const QString clean = QDir::cleanPath(QDir::fromNativeSeparators(path));
     return clean != QStringLiteral("..") && !clean.startsWith(QStringLiteral("../"));
 }
+
+// Only files explicitly declared session-owned may be copied. Until the JSON
+// commit succeeds this guard owns (and rolls back) just the new media files.
+struct MediaSaveTransaction final {
+    QString directory;
+    bool createdDirectory{};
+    bool committed{};
+    QStringList createdFiles;
+
+    ~MediaSaveTransaction()
+    {
+        if (committed) return;
+        for (const auto& path : createdFiles) QFile::remove(path);
+        if (createdDirectory) QDir().rmdir(directory); // empty directory only
+    }
+
+    QString copy(const QString& source, const QString& projectDir)
+    {
+        QFile input(source);
+        if (!input.open(QIODevice::ReadOnly) || input.size() <= 0) return {};
+        if (!QFileInfo::exists(directory)) {
+            if (!QDir().mkdir(directory)) return {};
+            createdDirectory = true;
+        }
+        if (!QFileInfo(directory).isDir() || !withinResolvedBoundary(directory, projectDir)) return {};
+        QTemporaryFile temporary(QDir(directory).filePath(QStringLiteral(".staging-XXXXXX")));
+        if (!temporary.open()) return {};
+        QCryptographicHash hash(QCryptographicHash::Sha256);
+        qint64 copied = 0;
+        while (!input.atEnd()) {
+            const auto chunk = input.read(1024 * 1024);
+            if (chunk.isEmpty() || temporary.write(chunk) != chunk.size()) return {};
+            hash.addData(chunk); copied += chunk.size();
+        }
+        if (input.error() != QFileDevice::NoError || copied != input.size() || !temporary.flush()) return {};
+        const auto digest = hash.result();
+        auto suffix = QFileInfo(source).suffix();
+        if (suffix.isEmpty()) suffix = QStringLiteral("wav");
+        QString target = QDir(directory).filePath(QStringLiteral("media-%1.%2")
+            .arg(QString::fromLatin1(digest.toHex()), suffix));
+        if (QFileInfo::exists(target)) {
+            QFile existing(target);
+            QCryptographicHash existingHash(QCryptographicHash::Sha256);
+            if (!QFileInfo(target).isSymLink() && withinResolvedBoundary(target, directory)
+                && existing.open(QIODevice::ReadOnly) && existing.size() == copied
+                && existingHash.addData(&existing) && existingHash.result() == digest) return target;
+            target = QDir(directory).filePath(QStringLiteral("media-%1.%2")
+                .arg(QUuid::createUuid().toString(QUuid::WithoutBraces), suffix));
+        }
+        temporary.close();
+        if (!temporary.rename(target)) return {};
+        temporary.setAutoRemove(false);
+        createdFiles.push_back(target);
+        return target;
+    }
+};
 
 bool isValidProjectEditorSettings(const ProjectEditorSettings& settings) noexcept
 {
@@ -416,6 +476,12 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
     }
     const QString projectPath = absolutePath(path);
     const QString projectDir = QFileInfo(projectPath).dir().absolutePath();
+    MediaSaveTransaction media;
+    media.directory = QDir(projectDir).filePath(QFileInfo(projectPath).completeBaseName() + QStringLiteral(".media"));
+    QSet<QString> generated;
+    QHash<QString, QString> copiedMedia;
+    for (const auto& item : request.generatedMediaPaths)
+        generated.insert(sourceInspectionKey(absolutePath(toQString(item))));
     const TimelineSnapshot timeline = request.document->timelineSnapshot();
     if (timeline.events.size() > static_cast<std::size_t>(kMaxProjectEvents)
         || request.document->markers().size()
@@ -474,20 +540,37 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
         sourceIds.emplace(event.source.get(), id);
         const QString rawSourcePath = toQString(event.source->path);
         if (rawSourcePath.isEmpty()) return {false, QStringLiteral("source path is required")};
-        const QString sourcePath = absolutePath(rawSourcePath);
+        QString sourcePath = absolutePath(rawSourcePath);
+        std::error_code identityError;
+        const bool sameFile = std::filesystem::equivalent(toPath(sourcePath), toPath(projectPath), identityError);
+        if (sourceInspectionKey(sourcePath) == sourceInspectionKey(projectPath)
+            || (!identityError && sameFile))
+            return {false, QStringLiteral("project path would overwrite source media")};
+        const auto sourceKey = sourceInspectionKey(sourcePath);
+        const bool generatedSource = generated.contains(sourceKey)
+            || (supplied != records.end() && supplied->second.generatedMedia);
+        if (generatedSource) {
+            if (!copiedMedia.contains(sourceKey)) {
+                const auto copied = media.copy(sourcePath, projectDir);
+                if (copied.isEmpty()) return {false, QStringLiteral("could not preserve generated project media")};
+                copiedMedia.insert(sourceKey, copied);
+            }
+            sourcePath = copiedMedia.value(sourceKey);
+        }
         const QString relativePath = QDir(projectDir).relativeFilePath(sourcePath);
         const bool relative = safeRelative(relativePath)
             && withinResolvedBoundary(sourcePath, projectDir);
         const QFileInfo file(sourcePath);
         QString savedPath = relative ? relativePath : sourcePath;
         savedPath.replace(QLatin1Char('\\'), QLatin1Char('/'));
-        const qint64 savedSize = supplied == records.end()
+        const qint64 savedSize = supplied == records.end() || generatedSource
             ? (file.exists() ? file.size() : -1) : supplied->second.fileSize;
-        const qint64 savedModified = supplied == records.end()
+        const qint64 savedModified = supplied == records.end() || generatedSource
             ? (file.exists() ? file.lastModified().toUTC().toMSecsSinceEpoch() : -1)
             : supplied->second.lastModifiedUtcMs;
-        savedRecords.push_back({id, event.source, savedSize, savedModified});
+        savedRecords.push_back({id, event.source, savedSize, savedModified, generatedSource});
         sources.append(QJsonObject{{QStringLiteral("sourceId"), idJson(id)},
+                                   {QStringLiteral("generatedMedia"), generatedSource},
                                    {QStringLiteral("pathKind"), relative ? QStringLiteral("relative") : QStringLiteral("absolute")},
                                    {QStringLiteral("path"), savedPath},
                                    {QStringLiteral("sampleRate"), static_cast<int>(event.source->sample_rate)},
@@ -509,6 +592,7 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
                                         {QStringLiteral("gain"), point.gain}});
         }
         events.append(QJsonObject{{QStringLiteral("id"), idJson(event.id)},
+                       {QStringLiteral("trackIndex"), event.trackIndex},
                        {QStringLiteral("sourceId"), idJson(sourceIds.at(event.source.get()))},
                        {QStringLiteral("sourceStart"), integerJson(event.sourceStart)},
                        {QStringLiteral("sourceEnd"), integerJson(event.sourceEnd)},
@@ -532,9 +616,20 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
     if (request.document->selection()) {
         const Selection value = *request.document->selection();
         selection = QJsonObject{{QStringLiteral("start"), integerJson(value.start)},
-                                {QStringLiteral("end"), integerJson(value.end)}};
+                                {QStringLiteral("end"), integerJson(value.end)},
+                                {QStringLiteral("trackIndex"), value.trackIndex}};
+    }
+    QJsonArray tracks;
+    for (std::size_t index = 0; index < timeline.tracks.size(); ++index) {
+        const auto& track = timeline.tracks[index];
+        tracks.append(QJsonObject{{QStringLiteral("index"), static_cast<int>(index)},
+            {QStringLiteral("muted"), track.muted}, {QStringLiteral("gain"), track.gain}});
     }
     const QJsonObject root{{QStringLiteral("schemaVersion"), schemaVersion()},
+                           {QStringLiteral("tracks"), tracks},
+                           {QStringLiteral("sampleRate"), static_cast<qint64>(timeline.sampleRate)},
+                           {QStringLiteral("channels"), static_cast<int>(timeline.channels)},
+                           {QStringLiteral("legacyMasterGain"), timeline.legacyMasterGain},
                            {QStringLiteral("sources"), sources}, {QStringLiteral("events"), events},
                            {QStringLiteral("markers"), markers}, {QStringLiteral("selection"), selection},
                            {QStringLiteral("playheadFrame"), integerJson(request.playheadFrame)},
@@ -550,6 +645,7 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
     if (!output.open(QIODevice::WriteOnly)
         || output.write(payload) != payload.size()
         || !output.commit()) return {false, QStringLiteral("could not save project")};
+    media.committed = true;
     return {true, {}, std::move(savedRecords)};
 }
 
@@ -581,7 +677,7 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
     const QJsonObject root = json.object();
     qint64 version{};
     if (!integer(root.value(QStringLiteral("schemaVersion")), version)
-        || (version != 1 && version != schemaVersion())) {
+        || (version != 1 && version != 2 && version != schemaVersion())) {
         result.message = QStringLiteral("unsupported project schema");
         return result;
     }
@@ -631,7 +727,12 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
         } else { result.message = QStringLiteral("invalid source path"); return result; }
         auto source = std::make_shared<const AudioSource>(AudioSource{toPath(resolved), static_cast<std::uint32_t>(rate), static_cast<std::uint32_t>(channels), frames});
         sourceMap.emplace(id, source);
-        result.sources.push_back({id, source, fileSize, modified});
+        bool generatedMedia = false;
+        if (version >= 3 && object.contains(QStringLiteral("generatedMedia"))
+            && !boolValue(object, "generatedMedia", generatedMedia)) {
+            result.message = QStringLiteral("invalid generated media flag"); return result;
+        }
+        result.sources.push_back({id, source, fileSize, modified, generatedMedia});
         const QString inspectionKey = sourceInspectionKey(resolved);
         auto inspectionIt = sourceInspectionCache.constFind(inspectionKey);
         if (inspectionIt == sourceInspectionCache.cend()) {
@@ -687,6 +788,26 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
             }
         }
     }
+    TimelineSnapshot state;
+    if (version >= 3) {
+        qint64 rate{}, channels{};
+        const auto trackValues = root.value(QStringLiteral("tracks"));
+        if (!trackValues.isArray() || trackValues.toArray().size() != static_cast<qsizetype>(kTrackCount)
+            || !integer(root.value(QStringLiteral("sampleRate")), rate) || rate < 0 || rate > std::numeric_limits<std::uint32_t>::max()
+            || !integer(root.value(QStringLiteral("channels")), channels) || channels < 1 || channels > 32
+            || !finiteFloat(root.value(QStringLiteral("legacyMasterGain")), state.legacyMasterGain)
+            || state.legacyMasterGain < 0) { result.message = QStringLiteral("invalid project tracks or format"); return result; }
+        state.sampleRate = static_cast<std::uint32_t>(rate);
+        state.channels = static_cast<std::uint32_t>(channels);
+        const auto array = trackValues.toArray();
+        for (std::size_t index = 0; index < kTrackCount; ++index) {
+            const auto item = array.at(static_cast<qsizetype>(index)).toObject(); qint64 storedIndex{};
+            auto& track = state.tracks[index];
+            if (!integer(item.value(QStringLiteral("index")), storedIndex) || storedIndex != static_cast<qint64>(index)
+                || !boolValue(item, "muted", track.muted) || !finiteFloat(item.value(QStringLiteral("gain")), track.gain)
+                || track.gain < 0 || track.gain > 2) { result.message = QStringLiteral("invalid project track"); return result; }
+        }
+    }
     std::vector<AudioEvent> events;
     std::unordered_set<quint64> eventIds;
     for (const QJsonValue& value : root.value(QStringLiteral("events")).toArray()) {
@@ -717,6 +838,13 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
             return result;
         }
         event.source = sourceMap.at(sourceId); event.sourceStart = start; event.sourceEnd = end; event.timelineStart = timeline; event.fadeIn = fadeIn; event.fadeOut = fadeOut; event.pitchSemitone = static_cast<int>(pitch);
+        if (version >= 3) {
+            qint64 track{};
+            if (state.sampleRate == 0 || !integer(object.value(QStringLiteral("trackIndex")), track)
+                || track < 0 || track >= static_cast<qint64>(kTrackCount)) { result.message = QStringLiteral("invalid event track"); return result; }
+            event.trackIndex = static_cast<int>(track);
+            event.timelineSampleRate = state.sampleRate;
+        }
         for (const QJsonValue& pointValue : object.value(QStringLiteral("envelope")).toArray()) {
             if (!pointValue.isObject()) { result.message = QStringLiteral("invalid envelope"); return result; }
             const QJsonObject point = pointValue.toObject(); EnvelopePoint envelope;
@@ -731,7 +859,22 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
         }
         events.push_back(std::move(event));
     }
-    AudioDocument document = AudioDocument::fromEvents(std::move(events));
+    if (version < 3 && !events.empty()) {
+        state.sampleRate = events.front().source->sample_rate;
+        state.channels = events.front().source->channels;
+    }
+    // Legacy single-track mixer gain is a separate multiplier so +12 dB is
+    // retained exactly instead of being clamped to the new 200% UI range.
+    if (version < 3) {
+        ProjectEditorSettings legacy;
+        if (!parseEditor(root.value(QStringLiteral("editorSettings")), legacy)) {
+            result.message = QStringLiteral("invalid editor state"); return result;
+        }
+        state.tracks[0].muted = legacy.trackMuted;
+        state.legacyMasterGain = static_cast<float>(std::pow(10.0, legacy.trackGainDb / 20.0));
+    }
+    state.events = std::move(events);
+    AudioDocument document = AudioDocument::fromSnapshot(std::move(state));
     if (document.timelineSnapshot().events.size() != static_cast<std::size_t>(root.value(QStringLiteral("events")).toArray().size())) { result.message = QStringLiteral("overlapping project events"); return result; }
     for (const QJsonValue& value : root.value(QStringLiteral("markers")).toArray()) {
         if (!value.isObject()) { result.message = QStringLiteral("invalid marker"); return result; }
@@ -741,8 +884,11 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
     const QJsonValue selection = root.value(QStringLiteral("selection"));
     if (!selection.isNull()) {
         if (!selection.isObject()) { result.message = QStringLiteral("invalid selection"); return result; }
-        const QJsonObject object = selection.toObject(); qint64 start{}, end{};
-        if (!integer(object.value(QStringLiteral("start")), start) || !integer(object.value(QStringLiteral("end")), end) || !document.setSelection({start, end})) { result.message = QStringLiteral("invalid selection"); return result; }
+        const QJsonObject object = selection.toObject(); qint64 start{}, end{}, track = -1;
+        if ((object.contains(QStringLiteral("trackIndex")) && !integer(object.value(QStringLiteral("trackIndex")), track))
+            || track < -1 || track >= 6
+            || !integer(object.value(QStringLiteral("start")), start) || !integer(object.value(QStringLiteral("end")), end)
+            || !document.setSelection({start, end, static_cast<int>(track)})) { result.message = QStringLiteral("invalid selection"); return result; }
     }
     if (!integer(root.value(QStringLiteral("playheadFrame")), result.playheadFrame) || !integer(root.value(QStringLiteral("visibleStartFrame")), result.visibleStartFrame) || !integer(root.value(QStringLiteral("visibleEndFrame")), result.visibleEndFrame)
         || result.playheadFrame < 0 || result.playheadFrame > document.totalFrames()
@@ -759,6 +905,11 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
         return result;
     }
     result.document = std::make_unique<AudioDocument>(std::move(document));
+    if (version < 3) {
+        result.editorSettings.trackMuted = false;
+        result.editorSettings.trackSolo = false;
+        result.editorSettings.trackGainDb = 0;
+    }
     return result;
 }
 
@@ -790,10 +941,11 @@ ProjectRelinkResult ProjectDocument::relink(
         return {false, QStringLiteral("replacement source format does not match")};
     }
     auto replacement = std::make_shared<const AudioSource>(AudioSource{toPath(path), expected.sample_rate, expected.channels, expected.total_frames});
-    std::vector<AudioEvent> events = document.timelineSnapshot().events; bool changed = false;
+    auto state = document.timelineSnapshot();
+    auto& events = state.events; bool changed = false;
     for (AudioEvent& event : events) if (event.source == record->source) { event.source = replacement; changed = true; }
     if (!changed) return {false, QStringLiteral("project source is not in document")};
-    AudioDocument rebuilt = AudioDocument::fromEvents(std::move(events));
+    AudioDocument rebuilt = AudioDocument::fromSnapshot(std::move(state));
     if (rebuilt.timelineSnapshot().events.empty()) return {false, QStringLiteral("replacement creates an invalid document")};
     for (const Marker& marker : document.markers()) if (!rebuilt.addMarker(marker)) return {false, QStringLiteral("could not restore markers")};
     if (document.selection() && !rebuilt.setSelection(*document.selection())) return {false, QStringLiteral("could not restore selection")};

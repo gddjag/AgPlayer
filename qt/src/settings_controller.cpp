@@ -24,6 +24,8 @@
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
+#include <QPointer>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include "cache_janitor.hpp"
 #include "audio_file_discovery.hpp"
@@ -33,6 +35,7 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <limits>
 
 QString SettingsController::shortcutDisplayText(const QString& portable) const
 {
@@ -201,11 +204,48 @@ SettingsController::SettingsController(QObject* parent)
             &UpdateChecker::changed, Qt::QueuedConnection);
     applyAutoStartWithWindows();
     applyFileAssociations();
+    cacheWorkerPool_.setMaxThreadCount(1);
+    cacheWorkerPool_.setThreadPriority(QThread::LowPriority);
+    cacheMaintenanceTimer_.setSingleShot(true);
+    cacheMaintenanceTimer_.setInterval(200);
+    connect(&cacheMaintenanceTimer_, &QTimer::timeout,
+            this, &SettingsController::startCacheMaintenance);
+    connect(&cacheWatcher_, &QFutureWatcher<CacheJanitor::TrimReport>::finished, this, [this] {
+        cacheTaskActive_ = false;
+        const auto report = cacheWatcher_.result();
+        const bool manualClear = cacheActiveClearCovers_;
+        cacheActiveClearCovers_ = false;
+        if (cacheMaintenancePending_ && !cacheMaintenanceTimer_.isActive()) cacheMaintenanceTimer_.start();
+        QPointer<SettingsController> guard(this);
+        if (!cacheCancelled_->load() && cacheActiveDirectory_ == cacheDirectory_) {
+            const int mb = static_cast<int>(std::min<qint64>(
+                report.bytesRemaining / (1024 * 1024), std::numeric_limits<int>::max()));
+            if (currentCacheSizeMB_ != mb) {
+                currentCacheSizeMB_ = mb;
+                emit currentCacheSizeMBChanged();
+                if (!guard) return;
+            }
+            if (report.filesRemoved > 0) emit cacheTrimReport(report.bytesFreed, report.filesRemoved);
+            if (!guard) return;
+        }
+        if (manualClear) {
+            cacheClearReport_.filesRemoved += report.filesRemoved;
+            cacheClearReport_.bytesFreed += report.bytesFreed;
+            cacheClearReport_.failures += report.failures;
+            finishCacheClear(cacheClearReport_, cacheCancelled_->load());
+        }
+    });
     recalculateCacheSize();
     QTimer::singleShot(10000, this, [this] { enforceCacheSizeLimit(); });
 }
 
-SettingsController::~SettingsController() = default;
+SettingsController::~SettingsController()
+{
+    cacheMaintenanceTimer_.stop();
+    cacheWatcher_.disconnect(this);
+    if (cacheCancelled_) cacheCancelled_->store(true);
+    cacheWorkerPool_.waitForDone();
+}
 
 QObject* SettingsController::updateChecker() const { return updateChecker_; }
 
@@ -1096,8 +1136,10 @@ void SettingsController::setCacheDirectory(const QString& value)
         return;
     }
     cacheDirectory_ = value;
+    if (cacheCancelled_) cacheCancelled_->store(true);
     persistValue(QStringLiteral("cache/directory"), value);
     emit cacheDirectoryChanged();
+    recalculateCacheSize();
 }
 
 void SettingsController::setAutoCleanCache(bool value)
@@ -1106,6 +1148,7 @@ void SettingsController::setAutoCleanCache(bool value)
         return;
     }
     autoCleanCache_ = value;
+    if (!value && cacheCancelled_) cacheCancelled_->store(true);
     persistValue(QStringLiteral("cache/autoCleanCache"), value);
     emit autoCleanCacheChanged();
     if (!editActive_ && autoCleanCache_) {
@@ -1354,49 +1397,6 @@ void SettingsController::emitAllChanged(const bool includeMediaSettings)
     emit currentCacheSizeMBChanged();
 }
 
-static bool isSafeCachePath(const QString& path)
-{
-    if (path.isEmpty()) {
-        return false;
-    }
-    const QFileInfo info(path);
-    if (!info.isAbsolute()) {
-        return false;
-    }
-    const QString canonical = info.canonicalFilePath();
-    if (canonical.isEmpty()) {
-        return false;
-    }
-    // Refuse root/system paths (e.g. C:/, D:/).
-    if (canonical.length() <= 3) {
-        return false;
-    }
-    // Require the path to contain "AgPlayer" to avoid wiping arbitrary directories.
-    if (!canonical.contains(QStringLiteral("AgPlayer"), Qt::CaseInsensitive)) {
-        return false;
-    }
-    return true;
-}
-
-static bool removeDirectoryContents(const QString& path)
-{
-    QDir dir(path);
-    if (!dir.exists()) {
-        return true;
-    }
-    bool ok = true;
-    for (const QString& entry : dir.entryList(QDir::NoDotAndDotDot | QDir::Files
-                                              | QDir::Dirs | QDir::Hidden)) {
-        const QString fullPath = dir.absoluteFilePath(entry);
-        const QFileInfo info(fullPath);
-        if (info.isDir() && !info.isSymLink()) {
-            ok &= QDir(fullPath).removeRecursively();
-        } else {
-            ok &= QFile::remove(fullPath);
-        }
-    }
-    return ok;
-}
 
 void SettingsController::rebindFileAssociations()
 {
@@ -1409,38 +1409,66 @@ void SettingsController::rebindFileAssociations()
 
 void SettingsController::clearWaveformCache()
 {
-    const QString dir = cacheDirectory_.isEmpty() ? defaultCacheDirectory() : cacheDirectory_;
-    if (isSafeCachePath(dir)) {
-        removeDirectoryContents(dir + QStringLiteral("/waveforms"));
-    }
+    if (!beginCacheClear()) return;
+    if (cacheCancelled_) cacheCancelled_->store(true);
+    const auto report = CacheJanitor::clearWaveforms(cacheDirectory_);
+    finishCacheClear(report);
     recalculateCacheSize();
 }
 
 void SettingsController::clearCoverCache()
 {
-    const QString dir = cacheDirectory_.isEmpty() ? defaultCacheDirectory() : cacheDirectory_;
-    if (isSafeCachePath(dir)) {
-        removeDirectoryContents(dir + QStringLiteral("/covers"));
-    }
+    if (!beginCacheClear()) return;
+    cacheClearCoversPending_ = true;
     recalculateCacheSize();
 }
 
 void SettingsController::clearTempFiles()
 {
-    const QString dir = cacheDirectory_.isEmpty() ? defaultCacheDirectory() : cacheDirectory_;
-    if (isSafeCachePath(dir)) {
-        removeDirectoryContents(dir + QStringLiteral("/temp"));
-    }
-    recalculateCacheSize();
+    // Active writers own and remove their unique staging files. Do not scan
+    // a user-selected "temp" folder or race an in-flight write on exit.
+    if (cacheClearBusy_) return;
+    cacheClearFailed_ = false;
+    cacheClearStatus_ = tr("转码临时文件由各任务自动管理，无需手动清理。");
+    emit cacheClearStateChanged();
 }
 
 void SettingsController::clearAllCache()
 {
-    const QString dir = cacheDirectory_.isEmpty() ? defaultCacheDirectory() : cacheDirectory_;
-    if (isSafeCachePath(dir)) {
-        removeDirectoryContents(dir);
-    }
+    if (!beginCacheClear()) return;
+    if (cacheCancelled_) cacheCancelled_->store(true);
+    cacheClearReport_ = CacheJanitor::clearWaveforms(cacheDirectory_);
+    cacheClearCoversPending_ = true;
     recalculateCacheSize();
+}
+
+bool SettingsController::beginCacheClear()
+{
+    if (cacheClearBusy_) return false;
+    cacheClearBusy_ = true;
+    cacheClearFailed_ = false;
+    cacheClearReport_ = {};
+    cacheClearStatus_ = tr("正在清理缓存…");
+    emit cacheClearStateChanged();
+    return true;
+}
+
+void SettingsController::finishCacheClear(const CacheJanitor::TrimReport& report, bool cancelled)
+{
+    cacheClearBusy_ = false;
+    cacheClearFailed_ = cancelled || report.failures > 0;
+    if (cancelled) {
+        cacheClearStatus_ = tr("缓存清理已停止，已清理 %1 个缓存文件。").arg(report.filesRemoved);
+    } else if (report.failures > 0) {
+        cacheClearStatus_ = tr("缓存清理未完成：已清理 %1 个文件，%2 项无法清理。")
+            .arg(report.filesRemoved).arg(report.failures);
+    } else if (report.filesRemoved == 0) {
+        cacheClearStatus_ = tr("没有可清理的缓存文件。");
+    } else {
+        cacheClearStatus_ = tr("已清理 %1 个缓存文件，释放 %2 MB。")
+            .arg(report.filesRemoved).arg(QString::number(report.bytesFreed / (1024.0 * 1024.0), 'f', 2));
+    }
+    emit cacheClearStateChanged();
 }
 
 void SettingsController::openOfficialWebsite()
@@ -1460,19 +1488,51 @@ void SettingsController::onWaveformCacheSaved()
 
 void SettingsController::enforceCacheSizeLimit()
 {
-    if (!autoCleanCache_ || cacheSizeLimitMB_ <= 0) {
-        return;
-    }
-    const QString dir = cacheDirectory_.isEmpty() ? defaultCacheDirectory() : cacheDirectory_;
-    if (!isSafeCachePath(dir)) {
-        return;
-    }
-    const qint64 limitBytes = static_cast<qint64>(cacheSizeLimitMB_) * 1024 * 1024;
-    const CacheJanitor::TrimReport report = CacheJanitor::trimToSize(dir, limitBytes);
-    if (report.filesRemoved > 0) {
-        recalculateCacheSize();
-        emit cacheTrimReport(report.bytesFreed, report.filesRemoved);
-    }
+    requestCacheMaintenance(autoCleanCache_ && cacheSizeLimitMB_ > 0);
+}
+
+void SettingsController::requestCacheMaintenance(bool trim)
+{
+    cacheMaintenancePending_ = true;
+    cacheTrimPending_ = cacheTrimPending_ || trim;
+    if (cacheCancelled_ && cacheActiveDirectory_ != cacheDirectory_) cacheCancelled_->store(true);
+    // At most one worker and one follow-up scan; repeated waveform completions
+    // within the interval coalesce without postponing the scan indefinitely.
+    if (!cacheMaintenanceTimer_.isActive() && !cacheTaskActive_) cacheMaintenanceTimer_.start();
+}
+
+void SettingsController::startCacheMaintenance()
+{
+    if (cacheTaskActive_ || !cacheMaintenancePending_) return;
+    cacheTaskActive_ = true;
+    cacheMaintenancePending_ = false;
+    const qint64 limit = cacheTrimPending_ && autoCleanCache_ && !editActive_ && !cacheClearCoversPending_
+        ? static_cast<qint64>(cacheSizeLimitMB_) * 1024 * 1024 : 0;
+    cacheTrimPending_ = false;
+    cacheActiveDirectory_ = cacheDirectory_;
+    cacheCancelled_ = std::make_shared<std::atomic_bool>(false);
+    const auto cancelled = cacheCancelled_;
+    const QString directory = cacheActiveDirectory_;
+    const bool clearCovers = cacheClearCoversPending_;
+    cacheActiveClearCovers_ = clearCovers;
+    cacheClearCoversPending_ = false;
+    QStringList coverRoots{QStandardPaths::writableLocation(QStandardPaths::CacheLocation)};
+    // Production library imports can use this fallback. Test-mode settings
+    // must never clean a real user's shared temporary cover cache.
+    if (!QStandardPaths::isTestModeEnabled())
+        coverRoots.append(QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
+                              .filePath(QStringLiteral("AgPlayer")));
+    cacheWatcher_.setFuture(QtConcurrent::run(&cacheWorkerPool_, [directory, limit, cancelled, coverRoots, clearCovers] {
+        auto report = CacheJanitor::maintain(directory, limit, cancelled.get());
+        for (const auto& root : coverRoots) {
+            const auto covers = CacheJanitor::maintainCovers(root, clearCovers, cancelled.get());
+            report.bytesRemaining += covers.bytesRemaining;
+            report.bytesFreed += covers.bytesFreed;
+            report.filesRemoved += covers.filesRemoved;
+            report.failures += covers.failures;
+        }
+        return report;
+    }));
 }
 
 void SettingsController::load()
@@ -2143,28 +2203,7 @@ void SettingsController::restoreDefaults(const bool includeMediaSettings)
 
 void SettingsController::recalculateCacheSize()
 {
-    const QString dir = cacheDirectory_.isEmpty() ? defaultCacheDirectory() : cacheDirectory_;
-    const qint64 bytes = directorySizeBytes(dir);
-    const int mb = static_cast<int>(bytes / (1024 * 1024));
-    if (currentCacheSizeMB_ != mb) {
-        currentCacheSizeMB_ = mb;
-        emit currentCacheSizeMBChanged();
-    }
-}
-
-qint64 SettingsController::directorySizeBytes(const QString& path)
-{
-    if (path.isEmpty() || !QDir(path).exists()) {
-        return 0;
-    }
-    qint64 total = 0;
-    QDirIterator it(path, QDir::Files | QDir::Hidden | QDir::NoSymLinks,
-                    QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        it.next();
-        total += it.fileInfo().size();
-    }
-    return total;
+    requestCacheMaintenance(false);
 }
 
 QString SettingsController::defaultMusicDirectory()

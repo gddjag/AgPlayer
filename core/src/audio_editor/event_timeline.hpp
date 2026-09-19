@@ -3,21 +3,35 @@
 #include "audio_event.hpp"
 
 #include <cstdint>
+#include <array>
 #include <vector>
 
 namespace agplayer::editor {
+
+struct TrackState final {
+    bool muted{};
+    float gain{1.0F};
+};
+inline bool operator==(const TrackState& a, const TrackState& b) noexcept
+{ return a.muted == b.muted && a.gain == b.gain; }
 
 struct TimelineSnapshot final {
     std::vector<AudioEvent> events;
     SampleFrame totalFrames{};
     std::uint64_t revision{};
+    std::array<TrackState, kTrackCount> tracks{};
+    std::uint32_t sampleRate{};
+    std::uint32_t channels{2};
+    float legacyMasterGain{1.0F};
 };
 
 class EventTimeline final {
 public:
     [[nodiscard]] bool insert(AudioEvent event);
     [[nodiscard]] bool replace(std::vector<AudioEvent> events);
+    [[nodiscard]] bool restore(TimelineSnapshot snapshot);
     [[nodiscard]] bool moveEvent(EventId id, SampleFrame timelineStart);
+    [[nodiscard]] bool moveEvent(EventId id, SampleFrame timelineStart, int trackIndex);
     [[nodiscard]] bool trimEvent(EventId id, SampleFrame sourceStart,
                                  SampleFrame sourceEnd,
                                  SampleFrame timelineStart);
@@ -34,6 +48,10 @@ private:
 
     std::vector<AudioEvent> events_;
     std::uint64_t revision_{};
+    std::array<TrackState, kTrackCount> tracks_{};
+    std::uint32_t sample_rate_{};
+    std::uint32_t channels_{2};
+    float legacy_master_gain_{1.0F};
 };
 
 } // namespace agplayer::editor

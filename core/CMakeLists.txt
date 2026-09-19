@@ -14,6 +14,7 @@ add_library(agplayer_core STATIC
     src/audio_editor/timeline_undo_stack.cpp
     src/audio_editor/timeline_undo_stack.hpp
     src/audio_editor/document_renderer.cpp
+    src/audio_editor/timeline_mixer.cpp
     src/audio_editor/document_renderer.hpp
     src/audio_editor/document_render_pipeline.cpp
     src/audio_editor/document_render_pipeline.hpp

@@ -6,12 +6,19 @@ import AgPlayer
 Window {
     id: window
     objectName: "audioToolsWindow"
+    function handleEditorDropUrls(urls, x, y) {
+        if (!audioEditorLoader.item) return AudioEditorController.openDroppedUrls(urls)
+        const p = audioEditorLoader.item.mapFromItem(window.contentItem, x, y)
+        return audioEditorLoader.item.handleDropUrls(urls, p.x, p.y)
+    }
     visible: false
-    // Reference workbench baseline. Layouts still contract below this size.
-    width: 1672
-    height: 941
-    minimumWidth: 880
-    minimumHeight: 560
+    readonly property rect availableWorkArea: WindowController.availableGeometryForWindow(window)
+    readonly property rect initialGeometry: WindowController.audioToolsStartupGeometryForAvailableArea(
+        Qt.rect(0, 0, 1672, 941), availableWorkArea, true)
+    width: initialGeometry.width
+    height: initialGeometry.height
+    minimumWidth: Math.min(760, initialGeometry.width)
+    minimumHeight: Math.min(420, initialGeometry.height)
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
     title: qsTr("AgPlayer · 音频工具")
@@ -117,8 +124,7 @@ Window {
         onAccepted: {
             WindowController.hideAudioTools()
         }
-        Label {
-            width: Math.min(420, window.width - 2 * Theme.spacing2Xl)
+        contentItem: Label {
             text: qsTr("当前音频尚未保存。关闭窗口将舍弃这些更改。")
             color: Theme.primaryText
             font.family: Theme.fontPrimary
@@ -298,6 +304,7 @@ Window {
                     currentIndex: window.pageIndexForTool(AudioToolsController.currentTool)
 
                     Loader {
+                        id: audioEditorLoader
                         objectName: "audioEditorPageLoader"
                         active: AudioToolsController.currentTool === 0
                         sourceComponent: Component {
@@ -351,5 +358,7 @@ Window {
     WindowResizeHandles {
         objectName: "audioToolsResizeHandles"
         targetWindow: window
+        enabled: window.visibility !== Window.Maximized
+                 && window.visibility !== Window.FullScreen
     }
 }

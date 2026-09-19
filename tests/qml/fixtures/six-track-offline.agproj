@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "sources": [{"sourceId":"1","pathKind":"relative","path":"missing-audio.wav","sampleRate":44100,"channels":2,"totalFrames":"88200","fileSize":"-1","lastModifiedUtcMs":"-1"}],
+  "events": [{"id":"1","sourceId":"1","sourceStart":"0","sourceEnd":"88200","timelineStart":"0","gain":1,"fadeIn":"0","fadeOut":"0","speedRatio":1,"pitchSemitone":0,"mute":false,"envelope":[]}],
+  "markers": [], "selection": null,
+  "playheadFrame": "0", "visibleStartFrame":"0", "visibleEndFrame":"88200",
+  "exportSettings": {"codecName":"WAV","sampleRate":44100,"bitDepth":24,"channels":2,"bitRate":"320000","keepMetadata":true,"variableBitRate":false,"quality":5,"outputDirectory":""}
+}

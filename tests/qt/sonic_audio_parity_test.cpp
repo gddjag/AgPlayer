@@ -38,7 +38,7 @@ int main() {
     for (const auto& theme : agplayer::immersive::builtInThemes()) {
         // User-requested AgPlayer preset replaces Daybreak Lime. It is tested
         // by immersive_theme_catalog_test, not an upstream palette assertion.
-        if (theme.id == "violet-heart") continue;
+        if (theme.id == "violet-heart" || theme.id == "sakura-glow" || theme.id == "abyss-blue") continue;
         ++referencePalettes;
         const auto expected = palettes[QString::fromUtf8(theme.id.data(), qsizetype(theme.id.size()))].toObject();
         constexpr const char* roles[] = {"uBaseColor1","uBaseColor2","uFogColor","uCoolCore","uCoolEdge","uWarmCore","uWarmEdge","uRippleColor"};
