@@ -198,8 +198,11 @@ jobs:
           architectures="$(lipo -archs "$app_path/Contents/MacOS/AgPlayer")"
           for required_arch in x86_64 arm64; do
             printf '%s\n' "$architectures" | tr ' ' '\n' | grep -qx "$required_arch"
-            nm -arch "$required_arch" "$app_path/Contents/MacOS/AgPlayer" \
-              | grep -E '[Tt] .*qt_static_plugin_QDarwinMicrophonePermissionPlugin'
+            lipo "$app_path/Contents/MacOS/AgPlayer" -thin "$required_arch" \
+              -output "$RUNNER_TEMP/AgPlayer-$required_arch"
+            # macdeployqt strips symbols; Qt plugin metadata remains in each slice.
+            strings "$RUNNER_TEMP/AgPlayer-$required_arch" \
+              | grep -F 'QDarwinMicrophonePermissionPlugin'
           done
           codesign --verify --deep --strict --all-architectures "$app_path"
           signature_log="$RUNNER_TEMP/agplayer-signatures.log"
