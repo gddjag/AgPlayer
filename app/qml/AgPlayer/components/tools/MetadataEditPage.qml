@@ -726,11 +726,7 @@ Rectangle {
                 anchors.margins: 8
                 contentWidth: width
                 contentHeight: page.macStackedLayout
-                    ? Math.max(height, metadataWorkbenchLayout.implicitHeight
-                               + Math.max(0, 480 - page.height),
-                               metadataActionBar.mapToItem(contentItem, 0,
-                                                            metadataActionBar.height).y + 8)
-                    : height
+                    ? Math.max(height, metadataWorkbenchLayout.implicitHeight) : height
                 interactive: page.macStackedLayout
                 flickableDirection: Flickable.VerticalFlick
                 clip: true
