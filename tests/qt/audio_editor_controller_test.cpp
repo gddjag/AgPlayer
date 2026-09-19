@@ -672,7 +672,9 @@ private slots:
         QVERIFY(editor.editorPlaybackOwnsPlayer());
         QVERIFY(QFile::remove(source));
 
-        QVERIFY(editor.playPause());
+        // Missing-source errors can be reported immediately or by the decoder.
+        const bool accepted = editor.playPause();
+        if (!accepted) QCOMPARE(editor.state(), EditorSessionState::Error);
         QTRY_COMPARE_WITH_TIMEOUT(editor.state(), EditorSessionState::Error,
                                   10'000);
         QVERIFY(!editor.editorPlaybackOwnsPlayer());
@@ -2979,7 +2981,7 @@ private slots:
         QVERIFY(!controller.playing());
     }
 
-    void selectionPlayheadJumpTracksDirtyBeforeAsyncPreviewFailure()
+    void selectionPlayheadJumpTracksDirtyBeforePreviewFailure()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
         if (fixture.isEmpty()) QSKIP("fixture not configured", "");
@@ -2998,7 +3000,9 @@ private slots:
         QVERIFY(QFile::remove(source));
 
         QSignalSpy documentChanges(&controller, &AudioEditorController::documentChanged);
-        QVERIFY(controller.playPause());
+        // A nonzero selection start can fail synchronously while preparing seek.
+        const bool accepted = controller.playPause();
+        if (!accepted) QCOMPARE(controller.state(), EditorSessionState::Error);
         QCOMPARE(controller.playheadFrame(), qint64{100});
         QVERIFY(controller.modified());
         QCOMPARE(documentChanges.count(), 1);
