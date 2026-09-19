@@ -84,16 +84,6 @@ TestCase {
             }
             snapshot(page, data.tag)
             revealVertically(findChild(page, data.action))
-            if (data.tag === "metadata-760x332") {
-                var scroller = findChild(page, "metadataWorkbenchScroller")
-                var button = findChild(page, data.action)
-                var point = button.mapToItem(scroller, 0, 0)
-                console.log("METADATA_SCROLL_DIAGNOSTIC", JSON.stringify({
-                    stacked: page.macStackedLayout, scrollY: scroller.contentY,
-                    scrollHeight: scroller.height, contentHeight: scroller.contentHeight,
-                    buttonInScrollerY: point.y, buttonInPageY: button.mapToItem(page, 0, 0).y
-                }))
-            }
             inside(findChild(page, data.action), page)
             if (data.name === "editor") {
                 revealVertically(findChild(page, "editorPlaybackTransport"))
