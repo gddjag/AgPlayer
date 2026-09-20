@@ -743,7 +743,7 @@ void WaveformItemTest::spectrumSpacingIsIndependentOfScreenScale()
 void WaveformItemTest::spectrumPreview()
 {
     const QString output = qEnvironmentVariable("AGPLAYER_SPECTRUM_PREVIEW");
-    if (output.isEmpty()) QSKIP("Set AGPLAYER_SPECTRUM_PREVIEW to capture the renderer");
+    if (output.isEmpty()) QSKIP("Set AGPLAYER_SPECTRUM_PREVIEW to capture the renderer", "");
     QQuickWindow window;
     window.setColor(QColor(QStringLiteral("#202428")));
     window.resize(960, 112);
