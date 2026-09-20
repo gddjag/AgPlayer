@@ -87,10 +87,12 @@ Item {
             var accepted = false
             for (var i = 0; i < urls.length; ++i) {
                 var entry = ResourceFolderController.classifyDropUrl(urls[i])
-                if (entry.kind === ResourceFolderController.Directory
-                        && ResourceFolderController.addMonitoredFolder(entry.path))
+                if (entry.kind === ResourceFolderController.Directory) {
+                    ResourceFolderController.addMonitoredFolder(entry.path)
                     accepted = true
+                }
             }
+            if (accepted) ResourceFolderController.rescanAll()
             root.navigation.resourceDropAccepted = accepted
         }
         function onResourceFolderRemoved(folder) {

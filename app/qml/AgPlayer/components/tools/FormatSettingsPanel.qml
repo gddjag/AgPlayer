@@ -8,6 +8,7 @@ Rectangle {
     property var converter
     property string outputDirectory: ""
     property bool expanded: true
+    property bool macFourColumnFormats: Qt.platform.os === "osx"
     readonly property bool isExpanded: expanded
     property string outputFormat: converter.selectedFormat
     readonly property var capability: converter.currentCapability || ({})
@@ -279,7 +280,7 @@ Rectangle {
                     Layout.minimumWidth: 0
                     Layout.preferredWidth: 384
                     Layout.maximumWidth: 384
-                    columns: Math.max(1, Math.min(4,
+                    columns: root.macFourColumnFormats ? 4 : Math.max(1, Math.min(4,
                         Math.floor((width + columnSpacing) / (90 + columnSpacing))))
                     rowSpacing: 4
                     columnSpacing: 8

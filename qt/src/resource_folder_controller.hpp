@@ -42,6 +42,7 @@ public:
     Q_INVOKABLE bool pathIsWithin(const QString& candidate, const QString& root) const;
     Q_INVOKABLE bool removeTrackFromLibrary(const QString& trackId);
     Q_INVOKABLE void rescan();
+    Q_INVOKABLE void rescanAll();
     bool scanning() const noexcept;
     ImportController* importController() const noexcept;
     void setImportController(ImportController* controller);
@@ -77,6 +78,7 @@ private:
     QString storagePath_;
     QString lastPersistenceError_;
     bool scanning_ = false;
+    bool rescanAfterImport_ = false;
     QPointer<QFutureWatcher<QVariantMap>> scanWatcher_;
     std::shared_ptr<std::atomic_bool> scanCancel_;
     quint64 scanGeneration_ = 0;

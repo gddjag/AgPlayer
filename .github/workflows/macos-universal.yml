@@ -125,7 +125,7 @@ jobs:
       - name: Verify resource folder import regressions
         run: |
           build/macos-universal/tests/import_controller_test folderFiltersBadAudioWithoutDroppingGoodFiles deduplicatesCanonicalPathsAndContinuesAfterFailure queuesDropsReceivedWhileAnImportIsBusy importsSupportedAudioRecursivelyFromFolder
-          build/macos-universal/tests/resource_folder_controller_test rejectedAudioIsSkippedAcrossRescansAndRestartUntilChanged persistsRootsAndImportsNewAudioRecursively resourceReadErrorsRemainVisibleAndRetryable
+          build/macos-universal/tests/resource_folder_controller_test rejectedAudioIsSkippedAcrossRescansAndRestartUntilChanged persistsRootsAndImportsNewAudioRecursively resourceReadErrorsRemainVisibleAndRetryable folderScanWaitsForBusyImporter manualRescanRetriesRejectedAudio
       - name: Exercise Mac UI regressions with Cocoa
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         env:

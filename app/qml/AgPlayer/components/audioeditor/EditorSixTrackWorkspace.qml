@@ -17,7 +17,9 @@ Item {
     readonly property bool wrapTransport: compactTransport && !singleRowTransport
     readonly property bool tinyTransport: width < 620
     readonly property rect rulerGeometry: Qt.rect(ruler.x, ruler.y, ruler.width, ruler.height)
-    readonly property real trackHeight: height < 760 ? 72 : 82
+    readonly property real standardCommandHeight: shortLayout ? 48 : height < 760 ? 64 : 82
+    readonly property real trackHeight: (height < 760 ? 72 : 82)
+        + (singleRowTransport ? (standardCommandHeight - 40) / 6 : 0)
     property int actionRevision: 0
 
     function dropAudio(urls, x, y) {
@@ -52,7 +54,8 @@ Item {
         id: commandBar
         objectName: "editorCommandBar"
         x: workspace.shortLayout ? 8 : 14; y: workspace.shortLayout ? 6 : 12
-        width: parent.width - x * 2; height: workspace.shortLayout ? 48 : workspace.height < 760 ? 64 : 82
+        width: parent.width - x * 2
+        height: workspace.singleRowTransport ? 40 : workspace.standardCommandHeight
         spacing: workspace.width < 800 ? 6 : 12
         Repeater {
             model: [
@@ -76,12 +79,17 @@ Item {
                     && (modelData.name === "importAudio" || (AudioEditorController.hasDocument
                         && (modelData.action.length === 0 || workspace.actionRevision >= 0
                             && AudioEditorController.actionEnabled(modelData.action))))
-                contentItem: Column {
-                    spacing: workspace.shortLayout ? 2 : 6
-                    topPadding: command.height > 70 ? 12 : workspace.shortLayout ? 3 : 5
+                leftPadding: workspace.singleRowTransport ? 8 : 6
+                rightPadding: leftPadding
+                contentItem: Item {
+                    readonly property real gap: workspace.singleRowTransport ? 6 : workspace.shortLayout ? 2 : 6
+                    readonly property real rowWidth: commandIcon.width + gap + commandLabel.implicitWidth
                     ThemedIcon {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: workspace.shortLayout ? 24 : 28; height: width
+                        id: commandIcon
+                        objectName: "editorCommandIcon_" + command.modelData.name
+                        x: workspace.singleRowTransport ? (parent.width - parent.rowWidth) / 2 : (parent.width - width) / 2
+                        y: workspace.singleRowTransport ? (parent.height - height) / 2 : command.height > 70 ? 12 : workspace.shortLayout ? 3 : 5
+                        width: workspace.singleRowTransport ? 16 : workspace.shortLayout ? 24 : 28; height: width
                         source: Theme.icon(command.modelData.icon)
                         tint: command.modelData.name === "delete" ? Theme.error
                               : command.modelData.name === "importAudio" || command.modelData.name === "denoise"
@@ -89,9 +97,12 @@ Item {
                         opacity: command.enabled ? 1 : 0.4
                     }
                     Label {
-                        anchors.horizontalCenter: parent.horizontalCenter
+                        id: commandLabel
+                        objectName: "editorCommandLabel_" + command.modelData.name
+                        x: workspace.singleRowTransport ? commandIcon.x + commandIcon.width + parent.gap : (parent.width - width) / 2
+                        y: workspace.singleRowTransport ? (parent.height - height) / 2 : commandIcon.y + commandIcon.height + parent.gap
                         text: command.modelData.label
-                        font.pixelSize: workspace.width < 650 ? 11 : workspace.width < 900 ? 13 : 16
+                        font.pixelSize: workspace.singleRowTransport ? (workspace.width < 900 ? 11 : 13) : workspace.width < 650 ? 11 : workspace.width < 900 ? 13 : 16
                         color: command.enabled ? Theme.textPrimary : Theme.textDisabled
                     }
                 }
@@ -160,7 +171,8 @@ Item {
             Rectangle {
                 x: Math.max(0, Math.min(rulerBody.width - width, waveformCanvas.pixelAtFrame(AudioEditorController.playheadFrame) - width / 2))
                 y: 1; height: 27; width: timeCapsule.implicitWidth + 14; radius: 4
-                color: Theme.accent
+                objectName: "editorPlayheadTimeCapsule"
+                color: workspace.singleRowTransport ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.65) : Theme.accent
                 visible: AudioEditorController.hasDocument
                 Label { id: timeCapsule; anchors.centerIn: parent; color: "white"; text: workspace.timeText(AudioEditorController.playheadFrame, true) }
             }

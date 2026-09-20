@@ -243,18 +243,16 @@ Window {
         }
         var audioImportStarted = audioUrls.length > 0
                 && beginImport(audioUrls)
-        var registeredCount = 0
         for (var pathIndex = 0; pathIndex < directoryPaths.length;
              ++pathIndex) {
-            if (ResourceFolderController.addMonitoredFolder(
-                        directoryPaths[pathIndex]))
-                ++registeredCount
+            ResourceFolderController.addMonitoredFolder(directoryPaths[pathIndex])
         }
-        if (registeredCount <= 0)
+        if (directoryPaths.length === 0)
             return audioImportStarted
         // A synchronous true means accepted/pending only.  Completion is
         // reported after the shared scanner and importer signals finish.
         resourceDropStatus = "pending"
+        ResourceFolderController.rescanAll()
         return true
     }
     function resourceDropContainsPoint(x, y) {
