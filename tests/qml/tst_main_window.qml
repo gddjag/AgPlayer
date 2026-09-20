@@ -1061,7 +1061,7 @@ TestCase {
 
     function test_embedded_resource_folder_accepts_native_directory_drop(data) {
         for (let warning = 0;
-             !nativeDropHelper.supportsWindowsDropFiles() && warning < 4;
+             nativeDropHelper.usesOffscreenPlatform() && warning < 4;
              ++warning)
             ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
         const previousShell = SettingsController.playerShellMode
@@ -1116,7 +1116,7 @@ TestCase {
                "the QML fallback must reach the real asynchronous importer")
     }
 
-    function test_classic_resource_folder_drop_routes_and_counts_data() {
+    function test_zz_resource_folder_drop_routes_and_counts_data() {
         return [{tag: "qt", route: "qt"}, {tag: "fallback", route: "fallback"},
                   {tag: "qml-event", route: "qml-event"},
                   {tag: "owner-delivered", route: "owner"},
@@ -1126,12 +1126,15 @@ TestCase {
                 {tag: "windows-padding", route: "windows", padding: true}]
     }
 
-    function test_classic_resource_folder_drop_routes_and_counts(data) {
+    function test_zz_resource_folder_drop_routes_and_counts(data) {
         if (data.route === "windows" && !nativeDropHelper.supportsWindowsDropFiles())
             skip("Windows shell drop requires native Windows platform")
         const host = createTemporaryObject(listWindowComponent, testCase)
         verify(host)
         tryVerify(function() { return host.visible }, 1000)
+        host.requestActivate()
+        waitForRendering(host.contentItem)
+        wait(50)
         if (data.route !== "qml-event")
             verify(nativeDropHelper.registerListDropWindow(host))
         const navigation = findChild(host, "referenceSideNavigation")
@@ -1177,11 +1180,14 @@ TestCase {
             verify(count.x + count.width <= count.parent.width + 1)
         } finally {
             ResourceFolderController.removeMonitoredFolder(path)
+            removeResourceTestTracks([path])
             host.close()
         }
     }
 
-    function test_resource_folders_share_submission_and_counts_across_shells() {
+    function test_zz_resource_folders_share_submission_and_counts_across_shells() {
+        for (let warning = 0; nativeDropHelper.usesOffscreenPlatform() && warning < 4; ++warning)
+            ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
         const previousTheme = SettingsController.windowLayoutTheme
         const previousShell = SettingsController.playerShellMode
         const host = createTemporaryObject(listWindowComponent, testCase)
@@ -1234,9 +1240,23 @@ TestCase {
         } finally {
             for (let i = 0; i < paths.length; ++i)
                 ResourceFolderController.removeMonitoredFolder(paths[i])
+            removeResourceTestTracks(paths)
             host.close()
             SettingsController.windowLayoutTheme = previousTheme
             SettingsController.playerShellMode = previousShell
+        }
+    }
+
+    function removeResourceTestTracks(paths) {
+        for (let row = LibraryModel.count - 1; row >= 0; --row) {
+            const index = LibraryModel.index(row, 0)
+            const path = String(LibraryModel.data(index, LibraryModel.PathRole))
+            for (let root of paths) {
+                if (ResourceFolderController.pathIsWithin(path, root)) {
+                    LibraryModel.removeTrack(LibraryModel.data(index, LibraryModel.TrackIdRole))
+                    break
+                }
+            }
         }
     }
 
