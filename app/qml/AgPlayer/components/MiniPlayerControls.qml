@@ -141,7 +141,7 @@ Rectangle {
 
         ColumnLayout {
             objectName: "miniContentColumn"
-            Layout.fillWidth: true; Layout.fillHeight: !root.macAlignedContent
+            Layout.fillWidth: true
             Layout.preferredHeight: root.macAlignedContent ? 128 : -1
             Layout.alignment: Qt.AlignVCenter
             spacing: 2
@@ -290,8 +290,10 @@ Rectangle {
             RowLayout {
                 id: transport
                 objectName: "miniTransport"
-                Layout.fillWidth: true; Layout.fillHeight: !root.macAlignedContent
-                Layout.preferredHeight: root.macAlignedContent ? 36 : -1
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.macAlignedContent ? 36 : 34
+                Layout.minimumHeight: Layout.preferredHeight
+                Layout.maximumHeight: Layout.preferredHeight
                 spacing: 3
                 Item { Layout.fillWidth: true }
                 ToolButton {
@@ -406,7 +408,7 @@ Rectangle {
                         y: (parent.height - height) / 2
                         opacity: volumeControl.expanded ? 1 : 0
                         z: 20
-                        width: parent.width - muteButton.width
+                        width: 110
                         height: 32
                         radius: Theme.radiusSm
                         color: Theme.elevated

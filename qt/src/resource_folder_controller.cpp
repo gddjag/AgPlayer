@@ -384,7 +384,7 @@ void ResourceFolderController::setImportController(ImportController* controller)
                 if (track == nullptr) continue;
                 const QString key = resourceLookupKey(track->path);
                 pendingFileSignatures_.remove(key);
-                if (rejectedFileSignatures_.remove(key) > 0) rejectedStateDirty_ = true;
+                if (rejectedFileSignatures_.remove(key)) rejectedStateDirty_ = true;
                 const auto exclusion = excludedPaths_.constFind(key);
                 if (exclusion == excludedPaths_.cend()) continue;
                 removedExclusions.insert(key, exclusion.value());

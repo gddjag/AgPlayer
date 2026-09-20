@@ -234,6 +234,7 @@ if(WIN32)
 endif()
 
 if(APPLE)
+    find_package(Iconv REQUIRED)
     enable_language(OBJCXX)
     set_target_properties(agplayer_qt PROPERTIES
         OBJCXX_STANDARD 17
@@ -244,6 +245,7 @@ if(APPLE)
         src/macos_system_integration.mm
     )
     target_link_libraries(agplayer_qt PRIVATE
+        Iconv::Iconv
         "-framework AppKit"
         "-framework ServiceManagement"
         "-framework Carbon"

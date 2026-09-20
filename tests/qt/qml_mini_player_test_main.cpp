@@ -10,6 +10,7 @@
 #include "qml_registration.hpp"
 #include "settings_controller.hpp"
 #include "lyrics_service.hpp"
+#include "video_playback_controller.hpp"
 #include "waveform_provider.hpp"
 #include "window_controller.hpp"
 
@@ -105,6 +106,7 @@ public:
         lyricsService_.reset();
         audioFeatures_.reset();
         experience_.reset();
+        videoPlayback_.reset();
         playback_.reset();
         library_.reset();
         settings_.reset();
@@ -158,6 +160,8 @@ public slots:
         metadataTrack.available = true;
         library_->appendBatch({metadataTrack});
         playback_ = std::make_unique<PlaybackController>(core_, library_.get());
+        videoPlayback_ = std::make_unique<VideoPlaybackController>(
+            library_.get(), playback_.get());
         importer_ = std::make_unique<ImportController>(library_.get());
         windows_ = std::make_unique<WindowController>();
         audioTools_ = std::make_unique<AudioToolsController>();
@@ -178,7 +182,10 @@ public slots:
                                     audioTools_.get(), metadataEditor_.get(),
                                     formatConverter_.get(), filenameProcessor_.get(),
                                     settings_.get(), waveformProvider_.get(),
-                                    nullptr, nullptr, nullptr, {},
+                                    nullptr, nullptr, nullptr,
+                                    AgPlayerQmlRuntimeModels{
+                                        nullptr, nullptr, nullptr, nullptr, nullptr,
+                                        videoPlayback_.get()},
                                     experience_.get(), audioFeatures_.get(),
                                     lyricsService_.get());
     }
@@ -227,6 +234,7 @@ private:
     ag_player* core_ = nullptr;
     std::unique_ptr<LibraryModel> library_;
     std::unique_ptr<PlaybackController> playback_;
+    std::unique_ptr<VideoPlaybackController> videoPlayback_;
     std::unique_ptr<ImportController> importer_;
     std::unique_ptr<WindowController> windows_;
     std::unique_ptr<AudioToolsController> audioTools_;
