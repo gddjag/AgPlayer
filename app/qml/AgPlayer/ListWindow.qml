@@ -220,42 +220,7 @@ Window {
         return accepted.length > 0 && beginImport(accepted)
     }
     function handleResourceDropUrls(urls) {
-        if (!urls || urls.length === 0)
-            return false
-        var seenPaths = ({})
-        var audioUrls = []
-        var directoryPaths = []
-        for (var index = 0; index < urls.length; ++index) {
-            var classified = ResourceFolderController.classifyDropUrl(urls[index])
-            var path = String(classified.path || "")
-            if (!path)
-                continue
-            var identity = Qt.platform.os === "windows"
-                         ? path.toLocaleLowerCase() : path
-            if (seenPaths[identity])
-                continue
-            seenPaths[identity] = true
-            if (classified.kind === ResourceFolderController.Directory) {
-                directoryPaths.push(path)
-            } else if (classified.kind === ResourceFolderController.AudioFile) {
-                audioUrls.push(classified.url)
-            }
-        }
-        var audioImportStarted = audioUrls.length > 0
-                && beginImport(audioUrls)
-        var registeredCount = 0
-        for (var pathIndex = 0; pathIndex < directoryPaths.length;
-             ++pathIndex) {
-            if (ResourceFolderController.addMonitoredFolder(
-                        directoryPaths[pathIndex]))
-                ++registeredCount
-        }
-        if (registeredCount <= 0)
-            return audioImportStarted
-        // A synchronous true means accepted/pending only.  Completion is
-        // reported after the shared scanner and importer signals finish.
-        resourceDropStatus = "pending"
-        return true
+        return sideNavigation.submitResourceUrls(urls)
     }
     function resourceDropContainsPoint(x, y) {
         var local = sideNavigation.mapFromItem(null, x, y)
@@ -566,9 +531,10 @@ Window {
                         selectedTagKey: filterModel ? filterModel.tagKey : ""
                         selectedResourceFolder: filterModel
                                                 ? filterModel.resourceFolder : ""
-                        onResourceUrlsDropped: function(urls) {
-                            resourceDropAccepted =
-                                    listWindow.handleResourceDropUrls(urls)
+                        onResourceUrlsDropped: function(urls, directoriesAdded) {
+                            if (resourceDropAccepted)
+                                listWindow.resourceDropStatus = directoriesAdded ? "pending"
+                                    : ImportController.busy ? "importing" : "completed"
                         }
                         playlistModel: listWindow.playlistModel
                         onNavigationSelected: function(nodeType, nodeId,
@@ -762,7 +728,10 @@ Window {
         objectName: "listFileDropFallback"
         anchors.fill: parent
         z: -5
-        urlsSubmitter: function(urls) {
+        urlsSubmitter: function(urls, x, y) {
+            if (x !== undefined && y !== undefined
+                    && listWindow.resourceDropContainsPoint(x, y))
+                return listWindow.handleResourceDropUrls(urls)
             return listWindow.handleListDropUrls(urls)
         }
     }

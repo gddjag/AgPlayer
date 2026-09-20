@@ -10,7 +10,7 @@ DropArea {
     signal urlsDropped(var urls)
     property var urlsSubmitter: null
 
-    function submitUrls(urls) {
+    function submitUrls(urls, x, y) {
         if (!urls || urls.length === 0)
             return false
 
@@ -19,13 +19,13 @@ DropArea {
             acceptedUrls.push(urls[index])
 
         if (typeof root.urlsSubmitter === "function")
-            return root.urlsSubmitter(acceptedUrls) === true
+            return root.urlsSubmitter(acceptedUrls, x, y) === true
         root.urlsDropped(acceptedUrls)
         return true
     }
 
     onDropped: function(drop) {
-        if (root.submitUrls(drop.urls))
+        if (root.submitUrls(drop.urls, drop.x, drop.y))
             drop.acceptProposedAction()
         else
             drop.accepted = false
