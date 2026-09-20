@@ -74,20 +74,9 @@ Window {
                         onCloseRequested: windows.requestClose()
                     }
 
-                    Image {
-                        source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                        sourceSize.width: 18
-                        sourceSize.height: 18
-                        Layout.preferredWidth: 18
-                        Layout.preferredHeight: 18
-                        fillMode: Image.PreserveAspectFit
-                    }
-                    Text {
-                        text: "AgPlayer"
-                        color: Theme.primaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: Theme.fontSizeCaption
-                        font.weight: Font.Medium
+                    Item {
+                        visible: Qt.platform.os !== "osx"
+                        Layout.preferredWidth: miniBrand.implicitWidth
                     }
                     Item { Layout.fillWidth: true }
 
@@ -157,6 +146,30 @@ Window {
                         ToolTip.text: accessibleName
                         ToolTip.visible: hovered
                         onClicked: windows.requestClose()
+                    }
+                }
+
+                RowLayout {
+                    id: miniBrand
+                    objectName: "miniTitleBrand"
+                    x: Qt.platform.os === "osx" ? (titleArea.width - width) / 2 : 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 1
+
+                    Image {
+                        source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                        sourceSize.width: 18
+                        sourceSize.height: 18
+                        Layout.preferredWidth: 18
+                        Layout.preferredHeight: 18
+                        fillMode: Image.PreserveAspectFit
+                    }
+                    Text {
+                        text: "AgPlayer"
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeCaption
+                        font.weight: Font.Medium
                     }
                 }
 

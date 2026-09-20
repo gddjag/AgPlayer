@@ -81,6 +81,12 @@ private slots:
     }
 };
 
-QTEST_APPLESS_MAIN(PeakPyramidTest)
+// Keep the app-less runner compatible with Qt 6.7/6.8 and strict C++17.
+int main(int argc, char* argv[])
+{
+    PeakPyramidTest test;
+    QTEST_SET_MAIN_SOURCE_PATH
+    return QTest::qExec(&test, argc, argv);
+}
 
 #include "peak_pyramid_test.moc"

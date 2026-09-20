@@ -413,6 +413,14 @@ TestCase {
         verify(toolbar.width <= page.width)
         verify(content.width <= page.width)
         verify(bottom.width <= page.width)
+        if (page.macStackedLayout) {
+            verify(!findChild(page, "losslessCompactViewSwitch").visible)
+            verify(findChild(page, "losslessEvidencePanel").visible)
+            verify(findChild(page, "losslessConclusionPanel").visible)
+            testCase.width = 1672
+            testCase.height = 776
+            return
+        }
         verify(findChild(page, "losslessCompactViewSwitch").visible)
         const conclusion = findChild(page, "losslessCompactConclusionButton")
         const evidence = findChild(page, "losslessCompactEvidenceButton")

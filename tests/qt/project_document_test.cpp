@@ -179,7 +179,7 @@ private slots:
         const auto alias = temporary.filePath(QStringLiteral("source-alias.agproj"));
         std::error_code error;
         std::filesystem::create_hard_link(nativePath(project.sourcePath), nativePath(alias), error);
-        if (error) QSKIP("hard links are unavailable");
+        if (error) QSKIP("hard links are unavailable", "");
         QVERIFY(!ProjectDocument::save(alias, request(project)).ok());
         QCOMPARE(readBytes(project.sourcePath), before);
         QCOMPARE(readBytes(alias), before);

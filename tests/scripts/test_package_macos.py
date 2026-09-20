@@ -208,7 +208,7 @@ class PackageFlowTests(BundleFixture):
         for relative in ["assets/licenses", "LICENSES/runtime", "app/qml", "assets/brand"]:
             (self.repo / relative).mkdir(parents=True)
         (self.repo / "THIRD-PARTY-NOTICES.md").write_text("Windows inventory\n", encoding="utf-8")
-        (self.repo / "assets/brand/desktop-install-icon.png").write_bytes(b"source icon")
+        (self.repo / "assets/brand/macos-app-icon.png").write_bytes(b"source icon")
         for relative in packaging.REQUIRED_LICENSES:
             (self.repo / relative).parent.mkdir(parents=True, exist_ok=True)
             (self.repo / relative).write_text("license", encoding="utf-8")
@@ -239,7 +239,7 @@ class PackageFlowTests(BundleFixture):
                 self.assertIn("-no-plugins", args)
                 self.assertIn("-executable=" + str(self.staged / "Contents/MacOS/AgSeparationWorker"), args)
         elif tool == "sips":
-            self.assertIn(str(self.repo / "assets/brand/desktop-install-icon.png"), args)
+            self.assertIn(str(self.repo / "assets/brand/macos-app-icon.png"), args)
             Path(args[args.index("--out") + 1]).write_bytes(b"sized icon")
         elif tool == "iconutil":
             Path(args[args.index("-o") + 1]).write_bytes(b"icns")
@@ -344,6 +344,34 @@ class PackageFlowTests(BundleFixture):
     def test_missing_microphone_permission_plugin_prevents_signing(self):
         (self.qt / "plugins/permissions/libqdarwinmicrophonepermission.dylib").unlink()
         with self.assertRaisesRegex(packaging.PackageError, "microphonepermission"):
+            self.package()
+        self.assertFalse(any("--sign" in args or "hdiutil" in args for args in self.commands))
+
+    def test_static_microphone_permission_backend_is_checked_in_both_slices(self):
+        plugin = self.qt / "plugins/permissions/libqdarwinmicrophonepermission.dylib"
+        plugin.unlink()
+        plugin.with_suffix(".a").write_bytes(b"static archive fixture")
+        original_run = self.fake_run
+
+        def static_backend(argv, **kwargs):
+            if str(argv[0]) == "nm":
+                self.commands.append([str(value) for value in argv])
+                return subprocess.CompletedProcess(argv, 0, stdout=
+                    "0000000100001000 T __Z58qt_static_plugin_QDarwinMicrophonePermissionPluginv\n",
+                    stderr="")
+            return original_run(argv, **kwargs)
+
+        self.fake_run = static_backend
+        result = self.package()
+        self.assertEqual({args[2] for args in self.commands if args[0] == "nm"},
+                         {"arm64", "x86_64"})
+        self.assertFalse((Path(result["app"]) / "Contents/PlugIns/permissions").exists())
+
+    def test_static_microphone_archive_alone_does_not_prove_it_was_linked(self):
+        plugin = self.qt / "plugins/permissions/libqdarwinmicrophonepermission.dylib"
+        plugin.unlink()
+        plugin.with_suffix(".a").write_bytes(b"static archive fixture")
+        with self.assertRaisesRegex(packaging.PackageError, "not linked for arm64"):
             self.package()
         self.assertFalse(any("--sign" in args or "hdiutil" in args for args in self.commands))
 

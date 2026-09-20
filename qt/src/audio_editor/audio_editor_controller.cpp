@@ -3394,9 +3394,14 @@ bool AudioEditorController::playPause()
     if (!playback_prepared_
         || playback_adapter_->snapshot(snapshot) != AG_OK
         || snapshot.state == AG_STOPPED || snapshot.state == AG_ERROR) {
-        if (!preparePlayback()) return false;
+        if (!preparePlayback()) {
+            setState(EditorSessionState::Error);
+            return false;
+        }
     }
     if (playback_adapter_->play() != AG_OK) {
+        releaseEditorPlaybackOutput();
+        setState(EditorSessionState::Error);
         setError(tr("无法开始编辑预览"));
         return false;
     }

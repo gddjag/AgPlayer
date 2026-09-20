@@ -979,6 +979,12 @@ private slots:
     }
 };
 
-QTEST_APPLESS_MAIN(AudioDocumentTest)
+// Keep the app-less runner compatible with Qt 6.7/6.8 and strict C++17.
+int main(int argc, char* argv[])
+{
+    AudioDocumentTest test;
+    QTEST_SET_MAIN_SOURCE_PATH
+    return QTest::qExec(&test, argc, argv);
+}
 
 #include "audio_document_test.moc"

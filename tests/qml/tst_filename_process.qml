@@ -67,7 +67,13 @@ TestCase {
         compare(scroller.contentWidth, scroller.width)
         const rulesTab = findChild(compactPage, "filenameCompactRulesTab")
         verify(rulesTab)
-        mouseClick(rulesTab, rulesTab.width / 2, rulesTab.height / 2)
+        if (!compactPage.macStackedLayout)
+            mouseClick(rulesTab, rulesTab.width / 2, rulesTab.height / 2)
+        else {
+            verify(!rulesTab.visible)
+            verify(findChild(compactPage, "filenameFilePanel").visible)
+            verify(findChild(compactPage, "filenameRulesPanel").visible)
+        }
         wait(0)
         verify(scroller.contentHeight > scroller.height)
         const commandPosition = commandBar.mapToItem(compactPage, 0, 0)
@@ -109,7 +115,10 @@ TestCase {
             compare(scroller.contentWidth, scroller.width)
             const rulesTab = findChild(candidate, "filenameCompactRulesTab")
             verify(rulesTab)
-            mouseClick(rulesTab, rulesTab.width / 2, rulesTab.height / 2)
+            if (!candidate.macStackedLayout)
+                mouseClick(rulesTab, rulesTab.width / 2, rulesTab.height / 2)
+            else
+                verify(!rulesTab.visible)
             wait(0)
             verify(scroller.contentHeight > scroller.height)
         }

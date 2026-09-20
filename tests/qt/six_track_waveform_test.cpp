@@ -108,6 +108,7 @@ private slots:
         controller.setViewportWaveformTaskObserverForTesting([&](bool starting) {
             if (starting) ++starts; else ++finishes;
         });
+        // Both changes occur within the current 75 ms debounce interval.
         controller.viewport()->setViewportWidth(200);
         QVERIFY(controller.viewport()->setVisibleRange(3'996, 4'020));
         QTest::qWait(20);

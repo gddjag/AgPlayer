@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import AgPlayer
@@ -12,6 +13,7 @@ Rectangle {
 
     property var controller: LosslessAnalysisController
     readonly property bool compactLayout: width < 1080 || height < 620
+    readonly property bool macStackedLayout: Qt.platform.os === "osx" && compactLayout
     readonly property real widePanelBudget: Math.max(0, content.width
                                                      - Theme.spacingXs * 2
                                                      - Theme.spacingSm * 2 - 2)
@@ -265,7 +267,7 @@ Rectangle {
                     Row {
                         id: compactViewSwitch
                         objectName: "losslessCompactViewSwitch"
-                        visible: page.compactLayout
+                        visible: page.compactLayout && !page.macStackedLayout
                         spacing: Theme.spacingXs
                         ThemedButton {
                             objectName: "losslessCompactEvidenceButton"
@@ -292,23 +294,42 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            RowLayout {
+            Flickable {
+                id: losslessContentScroller
+                objectName: "losslessContentScroller"
                 anchors.fill: parent
-                anchors.leftMargin: Theme.spacingXs
-                anchors.rightMargin: Theme.spacingXs
-                spacing: Theme.spacingSm
+                contentWidth: width
+                contentHeight: page.macStackedLayout ? Math.max(height, 1260) : height
+                interactive: page.macStackedLayout
+                flickableDirection: Flickable.VerticalFlick
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {
+                    policy: page.macStackedLayout ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                }
+
+            GridLayout {
+                width: losslessContentScroller.contentWidth
+                height: losslessContentScroller.contentHeight
+                columns: page.macStackedLayout ? 1 : 3
+                columnSpacing: Theme.spacingSm
+                rowSpacing: Theme.spacingSm
 
                 LosslessTaskPanel {
                     id: taskPanel
                     controller: page.controller
                     compact: page.compactLayout
-                    Layout.fillHeight: true
+                    Layout.fillHeight: !page.macStackedLayout
+                    Layout.preferredHeight: page.macStackedLayout ? 260 : -1
+                    Layout.fillWidth: page.macStackedLayout
                     Layout.preferredWidth: page.compactLayout
                                            ? Math.max(300, content.width * 0.38)
                                            : page.widePanelBudget
                                              * 622 / 1638
-                    Layout.minimumWidth: page.compactLayout ? 300 : 360
-                    Layout.maximumWidth: page.compactLayout
+                    Layout.minimumWidth: page.macStackedLayout ? 0
+                                         : page.compactLayout ? 300 : 360
+                    Layout.maximumWidth: page.macStackedLayout ? 10000
+                                         : page.compactLayout
                                          ? Math.max(300, content.width * 0.42)
                                          : 10000
                 }
@@ -316,15 +337,18 @@ Rectangle {
                 LosslessEvidencePanel {
                     id: evidencePanel
                     result: page.controller ? page.controller.selectedResult : ({})
-                    visible: !page.compactLayout || page.compactView === 0
-                    Layout.fillHeight: true
+                    visible: page.macStackedLayout || !page.compactLayout
+                             || page.compactView === 0
+                    Layout.fillHeight: !page.macStackedLayout
+                    Layout.preferredHeight: page.macStackedLayout ? 480 : -1
                     Layout.fillWidth: page.compactLayout
                     Layout.preferredWidth: page.compactLayout
                                            ? Math.max(420, content.width - taskPanel.width
                                                       - Theme.spacingSm)
                                            : page.widePanelBudget
                                              * 600 / 1638
-                    Layout.minimumWidth: page.compactLayout ? 420 : 350
+                    Layout.minimumWidth: page.macStackedLayout ? 0
+                                         : page.compactLayout ? 420 : 350
                     onSpectrogramRequested: {
                         if (page.controller)
                             page.controller.requestSpectrogram()
@@ -334,20 +358,24 @@ Rectangle {
                 LosslessConclusionPanel {
                     id: conclusionPanel
                     result: page.controller ? page.controller.selectedResult : ({})
-                    visible: !page.compactLayout || page.compactView === 1
-                    Layout.fillHeight: true
+                    visible: page.macStackedLayout || !page.compactLayout
+                             || page.compactView === 1
+                    Layout.fillHeight: !page.macStackedLayout
+                    Layout.preferredHeight: page.macStackedLayout ? 500 : -1
                     Layout.fillWidth: page.compactLayout
                     Layout.preferredWidth: page.compactLayout
                                            ? Math.max(420, content.width - taskPanel.width
                                                       - Theme.spacingSm)
                                            : page.widePanelBudget
                                              * 416 / 1638
-                    Layout.minimumWidth: page.compactLayout ? 420 : 300
+                    Layout.minimumWidth: page.macStackedLayout ? 0
+                                         : page.compactLayout ? 420 : 300
                     onExportRequested: page.openReportDialog()
                     onLocateRequested: function(path) {
                         page.locateRequested(path)
                     }
                 }
+            }
             }
         }
 

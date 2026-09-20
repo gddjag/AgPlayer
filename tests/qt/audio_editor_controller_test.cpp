@@ -593,7 +593,7 @@ private slots:
     {
         QFETCH(bool, pauseBeforeActivation);
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
 
         ag_player_config config{};
         config.backend = AG_AUDIO_BACKEND_NULL;
@@ -649,7 +649,7 @@ private slots:
     void failedPreviewPreparationReleasesPlaybackOwnership()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -672,7 +672,9 @@ private slots:
         QVERIFY(editor.editorPlaybackOwnsPlayer());
         QVERIFY(QFile::remove(source));
 
-        QVERIFY(editor.playPause());
+        // Missing-source errors can be reported immediately or by the decoder.
+        const bool accepted = editor.playPause();
+        if (!accepted) QCOMPARE(editor.state(), EditorSessionState::Error);
         QTRY_COMPARE_WITH_TIMEOUT(editor.state(), EditorSessionState::Error,
                                   10'000);
         QVERIFY(!editor.editorPlaybackOwnsPlayer());
@@ -902,7 +904,7 @@ private slots:
     void validEmbeddedBpmSkipsAutomaticAnalysis()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString tagged = temporary.filePath(QStringLiteral("tagged-bpm.mp3"));
@@ -984,7 +986,7 @@ private slots:
     void timePitchChangesResumePlayingAtCurrentTimelineFrame()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
         QVERIFY(controller.seekFrame(std::min<qint64>(
@@ -1035,7 +1037,7 @@ private slots:
     void viewportWidthBeforeFirstOpenDoesNotCreateDiscardPrompt()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QSignalSpy discardRequested(
             &controller, &AudioEditorController::discardConfirmationRequested);
@@ -1077,7 +1079,7 @@ private slots:
     void qmlEventViewsKeepLargeIdsAsStringsAndGesturesCoalesce()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -1583,7 +1585,7 @@ private slots:
     void successfulDocumentReplacementClearsEventGestureAfterPreparation()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString project = temporary.filePath(QStringLiteral("replacement.agproj"));
@@ -1633,7 +1635,7 @@ private slots:
     void failedDocumentOpenPreservesEventGesture()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const auto exercise = [&](const auto& openMissing) {
@@ -1716,7 +1718,7 @@ private slots:
     void projectReloadRestoresSelectionLoopByDefault()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("loop-source.wav"));
@@ -2036,7 +2038,7 @@ private slots:
     {
         QFETCH(QString, actionId);
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -2075,7 +2077,7 @@ private slots:
     void undoThatShrinksTimelineClampsPlayheadAndViewportBeforeSave()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -2104,7 +2106,7 @@ private slots:
     void clearingTimelinePublishesZeroViewport()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -2158,7 +2160,7 @@ private slots:
     void undoToSavedTimelineStaysDirtyWhenPersistedViewWasClamped()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -2190,7 +2192,7 @@ private slots:
     void saveAndOpenProjectRoundTripsControllerStateWithoutRendering()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString sourceDirectory = temporary.filePath(QString::fromUtf8("音频"));
@@ -2252,7 +2254,7 @@ private slots:
     void saveActionRequestsProjectPathAndThenUsesIt()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString sourceDirectory = temporary.filePath(QString::fromUtf8("项目源"));
@@ -2289,7 +2291,7 @@ private slots:
     void openProjectReportsOfflineSourceAndRelinksIt()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QString::fromUtf8("离线源.wav"));
@@ -2334,7 +2336,7 @@ private slots:
         QFETCH(bool, removeSource);
         QFETCH(QString, issueKind);
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("original.wav"));
@@ -2421,7 +2423,7 @@ private slots:
     void explicitInvalidProjectSaveAsNeverFallsBackToCurrentProject()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -2446,7 +2448,7 @@ private slots:
     void legacyAudioSaveAsStillWritesAudioNotProjectJson()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString output = temporary.filePath(QStringLiteral("saved.wav"));
@@ -2466,7 +2468,7 @@ private slots:
     {
         using agplayer::editor::ProjectExportSettings;
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -2496,7 +2498,7 @@ private slots:
     void configuredDirectoryExportPreservesFileCreatedAfterNameSelection()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -2535,7 +2537,7 @@ private slots:
     void explicitAudioSaveAsOverwritesConfirmedTarget()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString target = temporary.filePath(QStringLiteral("saved.wav"));
@@ -2556,7 +2558,7 @@ private slots:
     {
         using agplayer::editor::ProjectExportSettings;
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
 
@@ -2629,7 +2631,7 @@ private slots:
         using agplayer::editor::AudioFileAnalyzer;
         using agplayer::editor::ProjectExportSettings;
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
 
@@ -2685,7 +2687,7 @@ private slots:
         using agplayer::editor::AudioFileAnalyzer;
         using agplayer::editor::ProjectExportSettings;
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const auto sourceAnalysis = AudioFileAnalyzer::analyze(
@@ -2743,7 +2745,7 @@ private slots:
         using agplayer::editor::ProjectExportSettings;
         QFETCH(int, bitDepth);
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
@@ -2768,7 +2770,7 @@ private slots:
     void formalExportAppliesSpeedPitchKeepPitchAndFormantProcessing()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
@@ -2835,7 +2837,7 @@ private slots:
     void modifiedProjectOpenUsesDiscardConfirmationBeforeReplacement()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -2891,7 +2893,7 @@ private slots:
     void persistedEditorStateTracksDirtyAgainstTheSavepoint()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -2939,7 +2941,7 @@ private slots:
     void playbackProgressAndStopUsePersistedPlayheadDirtyTracking()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -2965,7 +2967,7 @@ private slots:
     void playbackTransportTransitionsImmediatelyWithoutRenderingPreview()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
 
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
@@ -2979,10 +2981,10 @@ private slots:
         QVERIFY(!controller.playing());
     }
 
-    void selectionPlayheadJumpTracksDirtyBeforeAsyncPreviewFailure()
+    void selectionPlayheadJumpTracksDirtyBeforePreviewFailure()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -2998,7 +3000,9 @@ private slots:
         QVERIFY(QFile::remove(source));
 
         QSignalSpy documentChanges(&controller, &AudioEditorController::documentChanged);
-        QVERIFY(controller.playPause());
+        // A nonzero selection start can fail synchronously while preparing seek.
+        const bool accepted = controller.playPause();
+        if (!accepted) QCOMPARE(controller.state(), EditorSessionState::Error);
         QCOMPARE(controller.playheadFrame(), qint64{100});
         QVERIFY(controller.modified());
         QCOMPARE(documentChanges.count(), 1);
@@ -3009,7 +3013,7 @@ private slots:
     void failedStopAndSeekKeepPublishedTransportState()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -3020,9 +3024,16 @@ private slots:
         QVERIFY(controller.seekFrame(123));
         controller.cancelAndWaitForBpmTaskForTesting();
         QVERIFY(QFile::remove(source));
-        QVERIFY(controller.playPause());
+        // A nonzero starting position can discover the missing source during
+        // prepare/seek, before playback starts, or on the decoder thread.
+        const bool accepted = controller.playPause();
+        if (!accepted) {
+            QCOMPARE(controller.state(), EditorSessionState::Error);
+            QCOMPARE(controller.playheadFrame(), qint64{123});
+        }
         QTRY_COMPARE_WITH_TIMEOUT(controller.state(), EditorSessionState::Error,
                                   10'000);
+        QVERIFY(!controller.playing());
 
         const qint64 frameBefore = controller.playheadFrame();
         const qint64 positionBefore = controller.positionMs();
@@ -3041,7 +3052,7 @@ private slots:
     void unavailableProjectSourceRelinkClearsIssue()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -3101,7 +3112,7 @@ private slots:
     void offlineGateTracksOnlySourcesReferencedByTheCurrentTimeline()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString firstSource = temporary.filePath(QStringLiteral("first.wav"));
@@ -3170,7 +3181,7 @@ private slots:
     void obsoleteProjectSourcesAreDiscardedAfterTheirUndoHistoryExpires()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString firstSource = temporary.filePath(QStringLiteral("first.wav"));
@@ -3225,7 +3236,7 @@ private slots:
     void clipboardKeepsOfflineSourceIdentityAfterCutHistoryExpires()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString firstSource = temporary.filePath(QStringLiteral("first.wav"));
@@ -3297,7 +3308,7 @@ private slots:
     void redoBackToSavedHistoryPointClearsDirtyState()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -3319,7 +3330,7 @@ private slots:
     {
         using agplayer::editor::ProjectExportSettings;
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));
@@ -3375,7 +3386,7 @@ private slots:
     void opensRealAudioAndPublishesSummary()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY2(openFileAndWait(controller, QUrl::fromLocalFile(fixture)),
                  qPrintable(controller.errorMessage()));
@@ -3387,7 +3398,7 @@ private slots:
     void opensUnicodeAudioPathThroughProductionEntryPoint()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString mediaDirectory = temporary.filePath(
@@ -3408,7 +3419,7 @@ private slots:
     void timelineMutationRetainsLastGoodWaveformUntilNewestGenerationPublishes()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY(openFileAndWait(controller, QUrl::fromLocalFile(fixture)));
         controller.viewport()->setViewportWidth(96.0);
@@ -4542,7 +4553,7 @@ private slots:
     void metadataEditKeepsFixturePeaksAndDefersViewportDecode()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         const QDir fixtureDirectory = QFileInfo(fixture).dir();
         const QStringList filesBefore = fixtureDirectory.entryList(
             QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
@@ -4576,7 +4587,7 @@ private slots:
     void visibleTimelineWaveformKeepsGapsBlankAndLatestRequestWins()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         AudioEditorController controller(AG_AUDIO_BACKEND_NULL);
         QVERIFY2(openFileAndWait(controller, QUrl::fromLocalFile(fixture)),
                  qPrintable(controller.errorMessage()));
@@ -4628,7 +4639,7 @@ private slots:
     void viewportDecodeIsSingleFlightAndPublishesOnlyLatestPendingRequest()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QSemaphore firstStarted;
         QSemaphore releaseFirst;
         std::atomic_int active{0};
@@ -4685,7 +4696,7 @@ private slots:
     void invalidViewportRequestCancelsActiveAndDropsPendingDecode()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QSemaphore firstStarted;
         QSemaphore releaseFirst;
         std::atomic_int active{0};
@@ -4768,7 +4779,7 @@ private slots:
     void noiseReductionCommitsOneUndoablePersistentReplacement()
     {
         const QString fixture = qEnvironmentVariable("AGPLAYER_EDITOR_FIXTURE");
-        if (fixture.isEmpty()) QSKIP("fixture not configured");
+        if (fixture.isEmpty()) QSKIP("fixture not configured", "");
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QString source = temporary.filePath(QStringLiteral("source.wav"));

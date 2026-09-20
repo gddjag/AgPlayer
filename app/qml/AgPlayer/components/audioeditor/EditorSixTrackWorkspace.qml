@@ -13,6 +13,7 @@ Item {
     readonly property real headerWidth: width < 800 ? 180 : 220
     readonly property bool shortLayout: height < 500
     readonly property bool compactTransport: width < 1000
+        || (Qt.platform.os === "osx" && width < 1100)
     readonly property bool tinyTransport: width < 620
     readonly property rect rulerGeometry: Qt.rect(ruler.x, ruler.y, ruler.width, ruler.height)
     readonly property real trackHeight: height < 760 ? 72 : 82

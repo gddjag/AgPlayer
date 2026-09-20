@@ -342,10 +342,20 @@ def deploy_qt(app, qt_root, repo_root):
     # Copy into staging only; the installed Qt SDK is never modified.
     plugin_root = qt_root / "plugins"
     for required in ("platforms/libqcocoa.dylib", "platforms/libqoffscreen.dylib",
-                     "sqldrivers/libqsqlite.dylib",
-                     "permissions/libqdarwinmicrophonepermission.dylib"):
+                     "sqldrivers/libqsqlite.dylib"):
         if not (plugin_root / required).is_file():
             raise PackageError(f"Missing required Qt runtime plugin: {required}")
+    # Qt 6.8 distributes the Darwin permission backend as a static archive,
+    # imported into the executable by qt_import_plugins, not as a dylib.
+    microphone = plugin_root / "permissions/libqdarwinmicrophonepermission"
+    if not microphone.with_suffix(".dylib").is_file():
+        if not microphone.with_suffix(".a").is_file():
+            raise PackageError("Missing Qt microphonepermission backend")
+        for arch in ARCHITECTURES:
+            symbols = run(["nm", "-arch", arch, app / "Contents/MacOS/AgPlayer"])
+            if not re.search(r"(?m)^\s*[0-9a-fA-F]+\s+[Tt]\s+\S*"
+                             r"qt_static_plugin_QDarwinMicrophonePermissionPlugin", symbols):
+                raise PackageError(f"Qt microphonepermission backend not linked for {arch}")
     plugin_binaries = []
     for family in ("platforms", "styles", "imageformats", "iconengines", "printsupport",
                    "accessible", "platforminputcontexts", "tls", "networkinformation",
@@ -399,7 +409,7 @@ def clean_development_rpaths(app):
 
 def add_resources(app, repo_root, temporary):
     required = [repo_root / value for value in REQUIRED_LICENSES]
-    required += [repo_root / "THIRD-PARTY-NOTICES.md", repo_root / "assets/brand/desktop-install-icon.png"]
+    required += [repo_root / "THIRD-PARTY-NOTICES.md", repo_root / "assets/brand/macos-app-icon.png"]
     for path in required:
         if not path.is_file():
             raise PackageError(f"Required packaging resource missing: {path}")
@@ -411,7 +421,7 @@ def add_resources(app, repo_root, temporary):
     shutil.copytree(repo_root / "LICENSES", licenses, dirs_exist_ok=True)
     iconset = temporary / "AgPlayer.iconset"
     iconset.mkdir()
-    source = repo_root / "assets/brand/desktop-install-icon.png"
+    source = repo_root / "assets/brand/macos-app-icon.png"
     for size in (16, 32, 128, 256, 512):
         for scale in (1, 2):
             name = f"icon_{size}x{size}{'@2x' if scale == 2 else ''}.png"

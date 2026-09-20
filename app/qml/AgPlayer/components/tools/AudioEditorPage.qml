@@ -12,9 +12,10 @@ Rectangle {
     focus: true
 
     readonly property bool narrowLayout: width < 1100
+    readonly property bool macStackedLayout: Qt.platform.os === "osx" && narrowLayout
     readonly property bool compactHeight: height < 800
     readonly property real inspectorWidth: narrowLayout ? 300 : 380
-    readonly property real mainWidth: width - inspectorWidth
+    readonly property real mainWidth: macStackedLayout ? width : width - inspectorWidth
     property bool pendingExportAfterDirectory: false
     property bool pendingSelectionExport: false
     property string pendingRelinkSourceId: ""
@@ -279,7 +280,8 @@ Rectangle {
     function handleDropUrls(urls, x, y) {
         if (urls.length === 1 && urls[0].toString().toLowerCase().endsWith(".agproj"))
             return AudioEditorController.openProject(urls[0])
-        return mainColumn.dropAudio(urls, x, y)
+        const point = mainColumn.mapFromItem(page, x, y)
+        return mainColumn.dropAudio(urls, point.x, point.y)
     }
     DropArea {
         id: editorAudioDropArea
@@ -291,12 +293,31 @@ Rectangle {
             drop.acceptProposedAction()
         }
     }
+    Flickable {
+        id: editorPageScroller
+        objectName: "editorPageScroller"
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: editorContent.height
+        flickableDirection: Flickable.VerticalFlick
+        interactive: page.macStackedLayout
+        boundsBehavior: Flickable.StopAtBounds
+        clip: true
+        ScrollBar.vertical: ScrollBar {
+            policy: page.macStackedLayout ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+        }
+
+    Item {
+        id: editorContent
+        width: editorPageScroller.width
+        height: page.macStackedLayout ? mainColumn.height + inspector.height : page.height
+
     EditorSixTrackWorkspace {
         id: mainColumn
         objectName: "editorMainColumn"
         shortcutsEnabled: page.editorShortcutAvailable()
         width: page.mainWidth
-        height: page.height
+        height: page.macStackedLayout ? Math.max(820, page.height) : page.height
         onImportRequested: openDialog.open()
         onSaveProjectRequested: AudioEditorController.save()
     }
@@ -331,10 +352,10 @@ Rectangle {
     Rectangle {
         id: inspector
         objectName: "editorInspector"
-        x: page.mainWidth
-        y: 0
-        width: page.inspectorWidth
-        height: page.height
+        x: page.macStackedLayout ? 0 : page.mainWidth
+        y: page.macStackedLayout ? mainColumn.height : 0
+        width: page.macStackedLayout ? page.width : page.inspectorWidth
+        height: page.macStackedLayout ? 440 : page.height
         z: 2
         color: Theme.background
         border.color: Theme.borderStrong
@@ -1114,6 +1135,8 @@ Rectangle {
                 }
             }
         }
+    }
+    }
     }
 
 }
