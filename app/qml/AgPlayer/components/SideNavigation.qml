@@ -33,7 +33,6 @@ Item {
         Theme.navigationIconVisualSize
     readonly property int navigationActionExtent:
         Theme.navigationActionExtent
-    readonly property int navigationChevronWidth: 20
 
     signal categorySelected(string category)
     signal navigationSelected(string nodeType, string nodeId,
@@ -535,7 +534,7 @@ Item {
                                   || nodeRow.nodeType === "resourceFolder")
                                  && nodeRow.hasChildren)
                     Layout.preferredWidth: visible
-                                           ? root.navigationChevronWidth : 0
+                                           ? root.navigationActionExtent : 0
                     Layout.preferredHeight: root.navigationActionExtent
                     icon.source: Theme.icon(nodeRow.expanded
                                             ? "arrow-down-s-line"
@@ -553,7 +552,7 @@ Item {
                                 || nodeRow.nodeType === "resourceFolder")
                                && nodeRow.hasChildren))
                     Layout.preferredWidth: visible
-                                           ? root.navigationChevronWidth : 0
+                                           ? root.navigationActionExtent : 0
                     Layout.preferredHeight: 1
                 }
                 Image {

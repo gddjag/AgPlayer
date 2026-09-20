@@ -1501,6 +1501,11 @@ TestCase {
         var favorites = findChild(side, "navigationNode-favorites:favorites")
         compare(history.index, favorites.index + 1)
         verify(history.y >= favorites.y + favorites.height)
+        var libraryRow = findChild(side, "navigationNode-library:all")
+        var expandButton = findChild(libraryRow, "navigationExpandButton")
+        compare(expandButton.width, side.navigationActionExtent)
+        compare(expandButton.icon.width, side.navigationIconVisualSize)
+        compare(expandButton.icon.height, side.navigationIconVisualSize)
         compare(history.displayName, "最近播放")
         compare(side.iconForNode("history"), "time-line")
         compare(findChild(side, "suppliedNodeIcon-library").sourceSize.width,
