@@ -107,27 +107,42 @@ void ResourceFolderController::rescan()
             emit controller->resourceTopologyChanged();
             if (controller.isNull()) return;
         }
+        QStringList newFiles;
+        const QStringList files = result.value(QStringLiteral("files")).toStringList();
+        for (const QString& path : files) {
+            if (!controller->excludedPaths_.contains(resourceLookupKey(path))
+                && (controller->library_ == nullptr || !controller->library_->containsPath(path)))
+                newFiles.append(path);
+        }
+        controller->scanSummary_ = controller->monitoredRoots_.isEmpty()
+            ? tr("尚未添加资源文件夹，请先添加文件夹。")
+            : tr("扫描完成：发现 %1 个音频文件，%2 个新文件已提交导入。已有歌曲和主动移除的歌曲不会重复加入。")
+                .arg(files.size()).arg(controller->importer_ ? newFiles.size() : 0);
+        if (!newFiles.isEmpty() && !controller->importer_)
+            controller->scanSummary_ += tr("\n导入服务未就绪，请稍后重试。");
+        const QStringList unavailable = result.value(QStringLiteral("unavailable")).toStringList();
+        if (!unavailable.isEmpty())
+            controller->scanSummary_ += tr("\n以下文件夹不可访问，请检查磁盘连接或权限：\n%1").arg(unavailable.join('\n'));
         controller->scanning_ = false;
         emit controller->scanningChanged();
         if (controller.isNull()) return;
         emit controller->scanFinished();
         if (controller.isNull()) return;
 
-        if (controller->importer_ != nullptr && !controller->importer_->busy()) {
-            QStringList newFiles;
-            for (const QString& path : result.value(QStringLiteral("files")).toStringList()) {
-                if (!controller->excludedPaths_.contains(resourceLookupKey(path))
-                    && (controller->library_ == nullptr
-                        || !controller->library_->containsPath(path)))
-                    newFiles.append(path);
-            }
+        if (controller->importer_ != nullptr) {
+            // ImportController queues requests while busy; never discard discovery.
             if (!newFiles.isEmpty()) controller->importer_->importPaths(newFiles);
         }
     });
     watcher->setFuture(QtConcurrent::run([roots, cancelled] {
-        QStringList directories, files;
+        QStringList directories, files, unavailable;
         for (const QString& root : roots) {
             if (cancelled->load()) break;
+            const QFileInfo rootInfo(root);
+            if (!rootInfo.isDir() || !rootInfo.isReadable()) {
+                unavailable.append(root);
+                continue;
+            }
             QDirIterator iterator(root, QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot,
                                   QDirIterator::Subdirectories);
             while (!cancelled->load() && iterator.hasNext()) {
@@ -139,7 +154,8 @@ void ResourceFolderController::rescan()
         }
         files.removeDuplicates();
         return QVariantMap{{QStringLiteral("directories"), directories},
-                           {QStringLiteral("files"), files}};
+                           {QStringLiteral("files"), files},
+                           {QStringLiteral("unavailable"), unavailable}};
     }));
 }
 

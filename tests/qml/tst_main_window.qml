@@ -63,6 +63,10 @@ TestCase {
         id: fileDropAreaComponent
         FileDropArea {}
     }
+    Component {
+        id: resourceDropPointComponent
+        Item { width: 2; height: 2 }
+    }
 
     Component {
         id: signalSpyComponent
@@ -1110,6 +1114,130 @@ TestCase {
         verify(ImportController.errors.length === 0)
         verify(LibraryModel.count > previousCount,
                "the QML fallback must reach the real asynchronous importer")
+    }
+
+    function test_classic_resource_folder_drop_routes_and_counts_data() {
+        return [{tag: "qt", route: "qt"}, {tag: "fallback", route: "fallback"},
+                  {tag: "qml-event", route: "qml-event"},
+                  {tag: "owner-delivered", route: "owner"},
+                {tag: "windows", route: "windows"},
+                {tag: "sidebar-padding", route: "padding"},
+                {tag: "qt-padding", route: "qt", padding: true},
+                {tag: "windows-padding", route: "windows", padding: true}]
+    }
+
+    function test_classic_resource_folder_drop_routes_and_counts(data) {
+        if (data.route === "windows" && !nativeDropHelper.supportsWindowsDropFiles())
+            skip("Windows shell drop requires native Windows platform")
+        const host = createTemporaryObject(listWindowComponent, testCase)
+        verify(host)
+        tryVerify(function() { return host.visible }, 1000)
+        if (data.route !== "qml-event")
+            verify(nativeDropHelper.registerListDropWindow(host))
+        const navigation = findChild(host, "referenceSideNavigation")
+        const target = findChild(navigation, "resourceFolderDropTarget")
+        const folder = nativeDropHelper.createAudioDropDirectory(testAudioUrl, 1)
+        verify(folder && target)
+        const path = nativeDropHelper.localFilePath(folder).replace(/\\/g, "/")
+        const dropPoint = data.padding ? createTemporaryObject(resourceDropPointComponent,
+            navigation, {x: 3, y: navigation.height - 5}) : target
+        try {
+            if (data.route === "fallback" || data.route === "padding") {
+                const fallback = findChild(host, "listFileDropFallback")
+                const point = data.route === "padding"
+                    ? navigation.mapToItem(fallback, 4, navigation.height - 4)
+                    : target.mapToItem(fallback, target.width / 2, target.height / 2)
+                verify(fallback.submitUrls([folder], point.x, point.y))
+              } else if (data.route === "windows") {
+                  verify(nativeDropHelper.sendWindowsDropFiles(dropPoint, [folder]))
+              } else if (data.route === "owner") {
+                  verify(nativeDropHelper.sendOwnerDeliveredUrls(dropPoint, [folder]))
+            } else {
+                verify(nativeDropHelper.sendUrls(dropPoint, [folder]))
+            }
+            tryVerify(function() { return ResourceFolderController.monitoredFolders.indexOf(path) >= 0 }, 2000)
+            let rootId = ""
+            tryVerify(function() {
+                for (let i = 0; i < LibraryNavigationModel.rowCount(); ++i) {
+                    const ix = LibraryNavigationModel.index(i, 0)
+                    if (LibraryNavigationModel.data(ix, LibraryNavigationModel.ResourceFolderRole) === path) {
+                        rootId = LibraryNavigationModel.data(ix, LibraryNavigationModel.NodeIdRole)
+                        return LibraryNavigationModel.data(ix, LibraryNavigationModel.CountRole) === 1
+                    }
+                }
+                return false
+            }, 5000)
+            const list = findChild(navigation, "libraryNavigationList")
+            list.positionViewAtEnd()
+            wait(0)
+            const count = findChild(navigation, "navigationNodeCount-" + rootId)
+            verify(count && count.visible)
+            compare(count.text, "1")
+            verify(count.width >= count.implicitWidth)
+            verify(count.x + count.width <= count.parent.width + 1)
+        } finally {
+            ResourceFolderController.removeMonitoredFolder(path)
+            host.close()
+        }
+    }
+
+    function test_resource_folders_share_submission_and_counts_across_shells() {
+        const previousTheme = SettingsController.windowLayoutTheme
+        const previousShell = SettingsController.playerShellMode
+        const host = createTemporaryObject(listWindowComponent, testCase)
+        const classic = findChild(host, "referenceSideNavigation")
+        const paths = []
+        const modes = [{mode: 0, theme: "classic"},
+                       {mode: 1, theme: "single-window", name: "integratedLibraryNavigation"},
+                       {mode: 2, theme: "rolling-player", name: "rollingLibraryNavigation"}]
+        function checkCounts(navigation) {
+            compare(navigation.navigationModel, classic.navigationModel)
+            for (let p = 0; p < paths.length; ++p) {
+                tryVerify(function() {
+                    for (let row = 0; row < LibraryNavigationModel.rowCount(); ++row) {
+                        const ix = LibraryNavigationModel.index(row, 0)
+                        if (LibraryNavigationModel.data(ix, LibraryNavigationModel.ResourceFolderRole) === paths[p])
+                            return LibraryNavigationModel.data(ix, LibraryNavigationModel.CountRole) === 1
+                    }
+                    return false
+                }, 5000, "every shell must see each imported root and its real song count")
+            }
+        }
+        try {
+            for (let i = 0; i < modes.length; ++i) {
+                SettingsController.windowLayoutTheme = modes[i].theme
+                SettingsController.playerShellMode = modes[i].mode
+                let navigation = classic
+                if (i > 0) {
+                    tryVerify(function() {
+                        navigation = findChild(mainWindow, modes[i].name)
+                        return navigation && navigation.visible
+                    }, 2000)
+                }
+                const folder = nativeDropHelper.createAudioDropDirectory(testAudioUrl, 1)
+                paths.push(nativeDropHelper.localFilePath(folder).replace(/\\/g, "/"))
+                verify(navigation.submitResourceUrls([folder]))
+                checkCounts(navigation)
+                checkCounts(classic)
+            }
+            // Recreate the integrated shell: no per-shell copy of resource state.
+            SettingsController.playerShellMode = 1
+            let integrated = null
+            tryVerify(function() {
+                integrated = findChild(mainWindow, "integratedLibraryNavigation")
+                return integrated && integrated.visible
+            }, 2000)
+            checkCounts(integrated)
+            verify(ResourceFolderController.removeMonitoredFolder(paths[0]))
+            compare(ResourceFolderController.monitoredFolders.indexOf(paths[0]), -1)
+            compare(integrated.navigationModel, classic.navigationModel)
+        } finally {
+            for (let i = 0; i < paths.length; ++i)
+                ResourceFolderController.removeMonitoredFolder(paths[i])
+            host.close()
+            SettingsController.windowLayoutTheme = previousTheme
+            SettingsController.playerShellMode = previousShell
+        }
     }
 
     function test_zzz_list_window_has_a_qml_drop_fallback_for_shell_drag_routes() {
@@ -5116,6 +5244,12 @@ TestCase {
         mouseClick(rescanAction, rescanAction.width / 2,
                    rescanAction.height / 2)
         tryCompare(scanFinished, "count", 1, 3000)
+        var scanDialog = findChild(navigation, "resourceScanDialog")
+        verify(scanDialog && scanDialog.visible, "manual rescan must provide visible feedback")
+        var scanStatus = findChild(scanDialog, "resourceScanStatus")
+        verify(scanStatus && scanStatus.text.length > 0)
+        compare(scanStatus.text, ResourceFolderController.scanSummary)
+        scanDialog.close()
 
         mouseClick(rootNode, rootNode.width / 2, rootNode.height / 2,
                    Qt.RightButton)

@@ -30,6 +30,7 @@ private slots:
     void receivesQtUrlDropEvents();
     void leavesQtDirectoryDropsForQmlHitTesting();
     void routesQtAudioDropsToResourceHitTarget();
+    void routesOwnerDeliveredDropToWindowUnderPosition();
 #ifdef Q_OS_WIN
     void receivesARealWindowsDropFilesMessage();
 #endif
@@ -169,6 +170,46 @@ void NativeDropRouterTest::routesQtAudioDropsToResourceHitTarget()
              NativeDropRouter::Target::ResourceFolder);
     QCOMPARE(dropped.front().at(1).toStringList(),
              QStringList({path}));
+}
+
+void NativeDropRouterTest::routesOwnerDeliveredDropToWindowUnderPosition()
+{
+    NativeDropRouter router;
+    QWindow owner;
+    QWindow list;
+    owner.setGeometry(100, 100, 320, 180);
+    list.setTransientParent(&owner);
+    list.setGeometry(100, 300, 320, 300);
+    owner.show();
+    list.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&owner));
+    QVERIFY(QTest::qWaitForWindowExposed(&list));
+    router.registerWindow(&owner, NativeDropRouter::Target::Main);
+    router.registerWindow(&list, NativeDropRouter::Target::List);
+    router.registerHitTarget(&list, NativeDropRouter::Target::ResourceFolder,
+        [](const QPointF& p) { return p.x() < 100 && p.y() >= 100; });
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QMimeData mime;
+    mime.setUrls({QUrl::fromLocalFile(directory.path())});
+    QSignalSpy dropped(&router, &NativeDropRouter::pathsDropped);
+    // Real Explorer failure: Qt delivers to the owner, with a position outside it.
+    const QPoint point = owner.mapFromGlobal(list.mapToGlobal(QPoint(40, 150)));
+    QVERIFY(!QRect(QPoint(), owner.size()).contains(point));
+    QDragEnterEvent enter(point, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(&owner, &enter);
+    QVERIFY(enter.isAccepted());
+    QDragMoveEvent move(point, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(&owner, &move);
+    QVERIFY(move.isAccepted());
+    QDropEvent drop(point, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(&owner, &drop);
+    QVERIFY(drop.isAccepted());
+    QCOMPARE(dropped.count(), 1);
+    QCOMPARE(dropped.front().at(0).value<NativeDropRouter::Target>(),
+             NativeDropRouter::Target::ResourceFolder);
+    QCOMPARE(dropped.front().at(1).toStringList(), QStringList{directory.path()});
+    QCOMPARE(dropped.front().at(2).toPointF(), QPointF(40, 150));
 }
 
 #ifdef Q_OS_WIN
