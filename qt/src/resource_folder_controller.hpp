@@ -43,6 +43,7 @@ public:
     Q_INVOKABLE bool pathIsWithin(const QString& candidate, const QString& root) const;
     Q_INVOKABLE bool removeTrackFromLibrary(const QString& trackId);
     Q_INVOKABLE void rescan();
+    Q_INVOKABLE void rescanAll();
     bool scanning() const noexcept;
     QString scanSummary() const { return scanSummary_; }
     ImportController* importController() const noexcept;
@@ -61,6 +62,7 @@ signals:
     void storagePathChanged();
     void persistenceStateChanged();
 private:
+    bool prepareManualScan(const QStringList& roots);
     void scheduleRescan();
     void rebuildDirectoryWatches();
     void applyDirectoryWatches(const QStringList& directories);
@@ -72,6 +74,9 @@ private:
     QTimer debounce_;
     QStringList monitoredRoots_;
     QHash<QString, QString> excludedPaths_;
+    QHash<QString, QString> rejectedFileSignatures_;
+    QHash<QString, QString> pendingFileSignatures_;
+    bool rejectedStateDirty_ = false;
     QStringList resourceDirectories_;
     QString storagePath_;
     QString lastPersistenceError_;

@@ -1,12 +1,17 @@
 #include "resource_folder_controller.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "library_navigation_model.hpp"
 #include <QFile>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QSignalSpy>
+#include <QSemaphore>
 #include <QTest>
 #include <QThread>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <filesystem>
 
 class ResourceFolderControllerTest final : public QObject {
@@ -22,7 +27,180 @@ private slots:
     void removedLibraryTrackStaysExcludedUntilManualImport();
     void failedExclusionPersistenceKeepsTrackInLibrary();
     void discoveryDoesNotRunTrackMaintenance();
+    void rejectedAudioIsSkippedAcrossRescansAndRestartUntilChanged();
+    void resourceReadErrorsRemainVisibleAndRetryable();
+    void folderScanWaitsForBusyImporter();
+    void manualRescanRetriesRejectedAudio();
+    void explicitFolderActionRestoresExcludedSongs_data();
+    void explicitFolderActionRestoresExcludedSongs();
 };
+
+void ResourceFolderControllerTest::explicitFolderActionRestoresExcludedSongs_data()
+{
+    QTest::addColumn<int>("action");
+    QTest::newRow("manual-rescan") << 0;
+    QTest::newRow("drop-existing-folder") << 1;
+    QTest::newRow("add-new-folder-with-historical-exclusions") << 2;
+}
+
+void ResourceFolderControllerTest::explicitFolderActionRestoresExcludedSongs()
+{
+    QFETCH(int, action);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString root = dir.filePath("music");
+    QVERIFY(QDir().mkpath(root + "/nested"));
+    const QString song = root + "/nested/song.wav";
+    QFile audio(song);
+    QVERIFY(audio.open(QIODevice::WriteOnly));
+    audio.write("audio");
+    audio.close();
+    const QString excludedElsewhere = dir.filePath("music-other/removed.wav");
+    const QString state = dir.filePath("roots.json");
+    QFile settings(state);
+    QVERIFY(settings.open(QIODevice::WriteOnly));
+    settings.write(QJsonDocument(QJsonObject{
+        {"version", 1},
+        {"folders", action == 2 ? QJsonArray{} : QJsonArray{root}},
+        {"excludedPaths", QJsonArray{song, excludedElsewhere}},
+        {"rejectedFiles", QJsonObject{}},
+    }).toJson());
+    settings.close();
+    const auto probe = [](const QString& path) {
+        TrackRecord track;
+        track.path = path;
+        track.title = "Recovered";
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    };
+    {
+        LibraryModel library;
+        ImportController importer(&library, probe);
+        ResourceFolderController folders;
+        folders.setStoragePath(state);
+        folders.setLibraryModel(&library);
+        folders.setImportController(&importer);
+        LibraryNavigationModel navigation(&library, nullptr, nullptr, &folders);
+        QSignalSpy scans(&folders, &ResourceFolderController::scanFinished);
+        folders.rescan();
+        QTRY_COMPARE(scans.count(), 1);
+        QCOMPARE(library.count(), 0); // Automatic scanning still respects removal.
+        if (action == 0) folders.rescanAll();
+        else QCOMPARE(folders.addMonitoredFolderUrl(QUrl::fromLocalFile(root)), action == 2);
+        QTRY_COMPARE_WITH_TIMEOUT(library.count(), 1, 3000);
+        QTRY_VERIFY(!importer.busy());
+        int rootCount = -1;
+        for (int row = 0; row < navigation.rowCount(); ++row) {
+            const auto index = navigation.index(row, 0);
+            if (navigation.data(index, LibraryNavigationModel::ResourceFolderRole).toString()
+                    == canonicalLibraryPath(root))
+                rootCount = navigation.data(index, LibraryNavigationModel::CountRole).toInt();
+        }
+        QCOMPARE(rootCount, 1);
+        folders.rescanAll();
+        QTRY_VERIFY(!folders.scanning());
+        QCOMPARE(library.count(), 1); // No duplicate insertion.
+    }
+    QVERIFY(settings.open(QIODevice::ReadOnly));
+    const auto saved = QJsonDocument::fromJson(settings.readAll()).object();
+    settings.close();
+    QCOMPARE(saved.value("excludedPaths").toArray(), QJsonArray{excludedElsewhere});
+    LibraryModel restartedLibrary;
+    ImportController restartedImporter(&restartedLibrary, probe);
+    ResourceFolderController restarted;
+    restarted.setStoragePath(state);
+    restarted.setLibraryModel(&restartedLibrary);
+    restarted.setImportController(&restartedImporter);
+    restarted.rescan();
+    QTRY_COMPARE_WITH_TIMEOUT(restartedLibrary.count(), 1, 3000);
+    QTRY_VERIFY(!restartedImporter.busy());
+}
+
+void ResourceFolderControllerTest::folderScanWaitsForBusyImporter()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString music = dir.filePath(QStringLiteral("music"));
+    QVERIFY(QDir().mkpath(music));
+    const QString existing = dir.filePath(QStringLiteral("existing.wav"));
+    const QString added = QDir(music).filePath(QStringLiteral("added.wav"));
+    for (const QString& path : {existing, added}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("audio");
+    }
+    QSemaphore entered, release;
+    LibraryModel library;
+    ImportController importer(&library, [&](const QString& path) {
+        if (path == canonicalLibraryPath(existing)) {
+            entered.release();
+            release.tryAcquire(1, 5000);
+        }
+        TrackRecord track;
+        track.path = path;
+        track.title = QFileInfo(path).baseName();
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    });
+    ResourceFolderController folders;
+    folders.setLibraryModel(&library);
+    folders.setImportController(&importer);
+    LibraryNavigationModel navigation(&library, nullptr, nullptr, &folders);
+    QSignalSpy scanned(&folders, &ResourceFolderController::scanFinished);
+    importer.importPaths({existing});
+    QVERIFY(entered.tryAcquire(1, 3000));
+    QVERIFY(folders.addMonitoredFolder(music));
+    folders.rescan();
+    QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 3000);
+    QVERIFY(importer.busy());
+    release.release();
+    QTRY_COMPARE_WITH_TIMEOUT(library.count(), 2, 5000);
+    QVERIFY(library.containsPath(added));
+    bool resourceCountUpdated = false;
+    for (int row = 0; row < navigation.rowCount(); ++row) {
+        const QModelIndex index = navigation.index(row, 0);
+        if (navigation.data(index, LibraryNavigationModel::ResourceFolderRole).toString()
+                == canonicalLibraryPath(music)) {
+            QCOMPARE(navigation.data(index, LibraryNavigationModel::CountRole).toInt(), 1);
+            resourceCountUpdated = true;
+        }
+    }
+    QVERIFY(resourceCountUpdated);
+}
+
+void ResourceFolderControllerTest::manualRescanRetriesRejectedAudio()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("retry.mp3"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("audio");
+    file.close();
+    std::atomic_bool readable{false};
+    LibraryModel library;
+    ImportController importer(&library, [&](const QString& input) {
+        if (!readable.load()) return ProbeResult{AG_DECODE_ERROR, {}, "decode failed"};
+        TrackRecord track;
+        track.path = input;
+        track.title = QStringLiteral("Recovered");
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    });
+    ResourceFolderController folders;
+    folders.setLibraryModel(&library);
+    folders.setImportController(&importer);
+    QSignalSpy finished(&importer, &ImportController::finished);
+    QVERIFY(folders.addMonitoredFolder(dir.path()));
+    folders.rescan();
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 3000);
+    QCOMPARE(importer.filteredCount(), 1);
+    readable.store(true);
+    folders.rescanAll();
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 2, 3000);
+    QCOMPARE(library.count(), 1);
+    QVERIFY(library.containsPath(path));
+}
 
 namespace {
 QString writeFile(const QString& path, const QByteArray& bytes)
@@ -392,6 +570,82 @@ void ResourceFolderControllerTest::discoveryDoesNotRunTrackMaintenance()
     QVERIFY(finished.wait(3000));
     QCOMPARE(library.trackForId(track.trackId), before);
     QCOMPARE(changed.count(), 0);
+}
+
+void ResourceFolderControllerTest::rejectedAudioIsSkippedAcrossRescansAndRestartUntilChanged()
+{
+    QTemporaryDir dir;
+    const QString music = dir.filePath(QStringLiteral("音乐"));
+    QVERIFY(QDir().mkpath(music));
+    const QString good = writeFile(music + QStringLiteral("/good.mp3"), "good");
+    const QString bad = writeFile(music + QStringLiteral("/bad.mp3"), "bad");
+    const QString storage = dir.filePath(QStringLiteral("roots.json"));
+    std::atomic_int probes{0};
+    LibraryModel library;
+    ImportController importer(&library, [&probes](const QString& path) {
+        ++probes;
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) return ProbeResult{AG_IO_ERROR, {}, "read error"};
+        if (file.readAll() == "bad") return ProbeResult{AG_UNSUPPORTED_FORMAT, {}, "unsupported format"};
+        TrackRecord track;
+        track.path = path;
+        track.title = QFileInfo(path).baseName();
+        return ProbeResult{AG_OK, track, {}};
+    });
+    QSignalSpy finished(&importer, &ImportController::finished);
+    {
+        ResourceFolderController folders;
+        folders.setStoragePath(storage);
+        folders.setLibraryModel(&library);
+        folders.setImportController(&importer);
+        QVERIFY(folders.addMonitoredFolder(music));
+        folders.rescan();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(library.count(), 1);
+        QCOMPARE(importer.filteredCount(), 1);
+        QVERIFY(importer.errors().isEmpty());
+        QSignalSpy scanned(&folders, &ResourceFolderController::scanFinished);
+        folders.rescan();
+        QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+        QCOMPARE(probes.load(), 2);
+    }
+    ResourceFolderController restored;
+    restored.setStoragePath(storage);
+    restored.setLibraryModel(&library);
+    restored.setImportController(&importer);
+    QSignalSpy scanned(&restored, &ResourceFolderController::scanFinished);
+    restored.rescan();
+    QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 5000);
+    QCOMPARE(probes.load(), 2);
+    QVERIFY(!writeFile(bad, "repaired music").isEmpty());
+    restored.rescan();
+    QTRY_COMPARE_WITH_TIMEOUT(library.count(), 2, 5000);
+    QCOMPARE(probes.load(), 3);
+    QVERIFY(library.containsPath(good));
+}
+
+void ResourceFolderControllerTest::resourceReadErrorsRemainVisibleAndRetryable()
+{
+    QTemporaryDir dir;
+    QVERIFY(!writeFile(dir.filePath(QStringLiteral("locked.mp3")), "audio").isEmpty());
+    LibraryModel library;
+    std::atomic_int probes{0};
+    ImportController importer(&library, [&probes](const QString&) {
+        ++probes;
+        return ProbeResult{AG_IO_ERROR, {}, "permission denied"};
+    });
+    ResourceFolderController folders;
+    folders.setLibraryModel(&library);
+    folders.setImportController(&importer);
+    QSignalSpy finished(&importer, &ImportController::finished);
+    QVERIFY(folders.addMonitoredFolder(dir.path()));
+    for (int scan = 1; scan <= 2; ++scan) {
+        folders.rescan();
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), scan, 5000);
+        QCOMPARE(probes.load(), scan);
+        QCOMPARE(importer.filteredCount(), 0);
+        QCOMPARE(importer.errors().size(), 1);
+    }
 }
 
 QTEST_MAIN(ResourceFolderControllerTest)

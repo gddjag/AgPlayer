@@ -13,6 +13,7 @@ Rectangle {
     property var windows: WindowController
     property var waveformSession: null
     property bool waveformActive: true
+    property bool macAlignedContent: Qt.platform.os === "osx"
     readonly property var frequencyWaveformSettings:
         SettingsController.frequencyColorWaveform
     property var rawWaveformLayers: ({})
@@ -139,7 +140,11 @@ Rectangle {
         }
 
         ColumnLayout {
-            Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter; spacing: 2
+            objectName: "miniContentColumn"
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.macAlignedContent ? 128 : -1
+            Layout.alignment: Qt.AlignVCenter
+            spacing: 2
             Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 20
@@ -171,7 +176,7 @@ Rectangle {
             }
             RowLayout {
                 objectName: "miniMetadataRow"
-                Layout.fillWidth: true; Layout.preferredHeight: 26; spacing: 4
+                Layout.fillWidth: true; Layout.preferredHeight: root.macAlignedContent ? 22 : 26; spacing: 4
                 Text {
                     id: miniArtist
                     objectName: "miniArtist"
@@ -245,7 +250,7 @@ Rectangle {
             Item {
                 objectName: "miniWaveformContainer"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 50
+                Layout.preferredHeight: root.macAlignedContent ? 44 : 50
                 clip: true
 
                 FullTrackWaveformView {
@@ -254,7 +259,7 @@ Rectangle {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    height: 36
+                    height: root.macAlignedContent ? 30 : 36
                     waveformObjectName: "miniWaveform"
                     playedClipObjectName: "miniWaveformPlayedClip"
                     playedWaveformObjectName: "miniPlayedWaveform"
@@ -285,8 +290,11 @@ Rectangle {
             RowLayout {
                 id: transport
                 objectName: "miniTransport"
-                Layout.fillWidth: true; Layout.preferredHeight: 34
-                Layout.minimumHeight: 34; Layout.maximumHeight: 34; spacing: 3
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.macAlignedContent ? 36 : 34
+                Layout.minimumHeight: Layout.preferredHeight
+                Layout.maximumHeight: Layout.preferredHeight
+                spacing: 3
                 Item { Layout.fillWidth: true }
                 ToolButton {
                     id: waveformModeButton

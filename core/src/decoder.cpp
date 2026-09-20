@@ -20,6 +20,8 @@ extern "C" {
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <new>
 #include <utility>
@@ -32,6 +34,33 @@ namespace {
 constexpr std::size_t kMaxProbeTagBytes = 4U * 1024U * 1024U;
 constexpr std::size_t kMaxProbeCoverBytes = 32U * 1024U * 1024U;
 constexpr int kMaxMetadataProbePackets = 32;
+
+// Some music files contain an ID3v2 tag before a RIFF/WAVE container
+// (including MP3-in-WAVE). FFmpeg detects WAV but its header reader starts
+// at the ID3 bytes. Skip only a validated tag followed by a WAVE signature;
+// retain physical file offsets so seeking works without rewriting the file.
+void set_wave_prefix_option(const std::string& path, AVDictionary** options)
+{
+    std::ifstream input(std::filesystem::u8path(path), std::ios::binary);
+    unsigned char header[10]{};
+    if (!input.read(reinterpret_cast<char*>(header), sizeof header)
+        || std::memcmp(header, "ID3", 3) != 0
+        || header[3] < 2 || header[3] > 4 || header[4] == 0xff)
+        return;
+    std::int64_t size = 0;
+    for (int i = 6; i < 10; ++i) {
+        if (header[i] & 0x80) return;
+        size = (size << 7) | header[i];
+    }
+    const std::int64_t offset = 10 + size
+        + ((header[3] == 4 && (header[5] & 0x10)) ? 10 : 0);
+    input.seekg(offset);
+    char signature[12]{};
+    if (input.read(signature, sizeof signature)
+        && std::memcmp(signature, "RIFF", 4) == 0
+        && std::memcmp(signature + 8, "WAVE", 4) == 0)
+        av_dict_set_int(options, "skip_initial_bytes", offset, 0);
+}
 
 bool format_uses_shared_year_date(const AVFormatContext* context) noexcept
 {
@@ -315,8 +344,11 @@ ag_result probe_media_metadata(const std::string& utf8_path,
             throw std::bad_alloc{};
         }
         if (utf8_path.empty()) return AG_INVALID_ARGUMENT;
+        AVDictionary* input_options = nullptr;
+        set_wave_prefix_option(utf8_path, &input_options);
         const int open_result = avformat_open_input(&context, utf8_path.c_str(),
-                                                    nullptr, nullptr);
+                                                    nullptr, &input_options);
+        av_dict_free(&input_options);
         if (open_result < 0) return map_open_error(open_result);
         const auto finish = [&context](const ag_result result) noexcept {
             avformat_close_input(&context);
@@ -527,8 +559,12 @@ public:
             format_context_->flags |= AVFMT_FLAG_CUSTOM_IO;
         }
 
+        AVDictionary* input_options = nullptr;
+        if (custom_read_ == nullptr)
+            set_wave_prefix_option(utf8_path, &input_options);
         int result = avformat_open_input(&format_context_, utf8_path.c_str(),
-                                         input_format, nullptr);
+                                         input_format, &input_options);
+        av_dict_free(&input_options);
         if (result < 0) {
             const bool interrupted = interrupt_triggered_;
             reset();

@@ -4,6 +4,7 @@
 #include "resource_path.hpp"
 
 #include <QDir>
+#include <QDateTime>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
@@ -17,6 +18,13 @@
 #include <utility>
 
 namespace {
+
+QString fileSignature(const QString& path)
+{
+    const QFileInfo info(path);
+    return info.isFile() ? QString::number(info.size()) + QLatin1Char(':')
+        + QString::number(info.lastModified().toMSecsSinceEpoch()) : QString{};
+}
 
 QString resourceLookupKey(const QString& path)
 {
@@ -75,6 +83,41 @@ void ResourceFolderController::setLibraryModel(LibraryModel* model)
 
 bool ResourceFolderController::scanning() const noexcept { return scanning_; }
 
+void ResourceFolderController::rescanAll()
+{
+    // Explicit discovery restores on-disk songs; startup/watcher scans retain
+    // removal choices. Never clear records belonging to unmonitored folders.
+    if (!prepareManualScan(monitoredRoots_)) return;
+    rescan();
+}
+
+bool ResourceFolderController::prepareManualScan(const QStringList& roots)
+{
+    const auto excludedBefore = excludedPaths_;
+    const auto rejectedBefore = rejectedFileSignatures_;
+    const auto belongsToRoots = [&roots](const QString& path) {
+        return std::any_of(roots.cbegin(), roots.cend(), [&path](const QString& root) {
+            return agplayer::qt::resourcePathIsWithin(path, root);
+        });
+    };
+    for (auto it = excludedPaths_.begin(); it != excludedPaths_.end();) {
+        if (belongsToRoots(it.value())) it = excludedPaths_.erase(it);
+        else ++it;
+    }
+    for (auto it = rejectedFileSignatures_.begin(); it != rejectedFileSignatures_.end();) {
+        if (belongsToRoots(it.key())) it = rejectedFileSignatures_.erase(it);
+        else ++it;
+    }
+    if (excludedBefore == excludedPaths_ && rejectedBefore == rejectedFileSignatures_)
+        return true;
+    if (saveMonitoredFolders()) return true;
+    excludedPaths_ = excludedBefore;
+    rejectedFileSignatures_ = rejectedBefore;
+    scanSummary_ = tr("无法恢复资源文件夹中的歌曲：%1").arg(lastPersistenceError_);
+    emit scanFinished();
+    return false;
+}
+
 void ResourceFolderController::rescan()
 {
     debounce_.stop();
@@ -111,12 +154,19 @@ void ResourceFolderController::rescan()
         const QStringList files = result.value(QStringLiteral("files")).toStringList();
         for (const QString& path : files) {
             if (!controller->excludedPaths_.contains(resourceLookupKey(path))
-                && (controller->library_ == nullptr || !controller->library_->containsPath(path)))
+                && (controller->library_ == nullptr || !controller->library_->containsPath(path))) {
+                const QString key = resourceLookupKey(canonicalLibraryPath(path));
+                const QString signature = fileSignature(path);
+                if (!signature.isEmpty()
+                    && controller->rejectedFileSignatures_.value(key) == signature)
+                    continue;
+                controller->pendingFileSignatures_.insert(key, signature);
                 newFiles.append(path);
+            }
         }
         controller->scanSummary_ = controller->monitoredRoots_.isEmpty()
             ? tr("尚未添加资源文件夹，请先添加文件夹。")
-            : tr("扫描完成：发现 %1 个音频文件，%2 个新文件已提交导入。已有歌曲和主动移除的歌曲不会重复加入。")
+            : tr("扫描完成：发现 %1 个音频文件，%2 个文件已提交导入，歌曲数量将在导入后更新。已有歌曲不会重复加入；手动重新扫描会恢复目录中曾移除的歌曲。")
                 .arg(files.size()).arg(controller->importer_ ? newFiles.size() : 0);
         if (!newFiles.isEmpty() && !controller->importer_)
             controller->scanSummary_ += tr("\n导入服务未就绪，请稍后重试。");
@@ -131,7 +181,7 @@ void ResourceFolderController::rescan()
 
         if (controller->importer_ != nullptr) {
             // ImportController queues requests while busy; never discard discovery.
-            if (!newFiles.isEmpty()) controller->importer_->importPaths(newFiles);
+            if (!newFiles.isEmpty()) controller->importer_->importResourcePaths(newFiles);
         }
     });
     watcher->setFuture(QtConcurrent::run([roots, cancelled] {
@@ -184,11 +234,15 @@ QString ResourceFolderController::audioFileNameFilter() const
 bool ResourceFolderController::addMonitoredFolder(const QString& folder)
 {
     const QString path = agplayer::qt::resourcePathIdentity(folder);
-    if (!QFileInfo(folder).isDir()
-        || std::any_of(monitoredRoots_.cbegin(), monitoredRoots_.cend(),
+    if (!QFileInfo(folder).isDir()) return false;
+    if (!prepareManualScan({path})) return false;
+    if (std::any_of(monitoredRoots_.cbegin(), monitoredRoots_.cend(),
                        [&path](const QString& candidate) {
             return agplayer::qt::resourcePathsEqual(candidate, path);
-        })) return false;
+        })) {
+        scheduleRescan();
+        return false; // Existing root: retry its songs without duplicating it.
+    }
     monitoredRoots_.append(path);
     resourceDirectories_ = normalizedResourcePaths(
         resourceDirectories_ + QStringList{path});
@@ -304,7 +358,23 @@ void ResourceFolderController::setImportController(ImportController* controller)
     if (importer_ == controller) return;
     if (importer_ != nullptr) importer_->disconnect(this);
     importer_ = controller;
+    pendingFileSignatures_.clear();
     if (importer_ != nullptr) {
+        connect(importer_, &ImportController::fileRejected, this,
+                [this](const QString& path, int result) {
+            // Permission and temporary I/O failures must remain retryable.
+            if (result != AG_UNSUPPORTED_FORMAT && result != AG_DECODE_ERROR) return;
+            const QString key = resourceLookupKey(path);
+            const QString before = pendingFileSignatures_.take(key);
+            if (before.isEmpty() || before != fileSignature(path)) return;
+            rejectedFileSignatures_.insert(key, before);
+            rejectedStateDirty_ = true;
+        });
+        connect(importer_, &ImportController::finished, this, [this] {
+            // A finished batch can have a resource batch queued behind it.
+            // Keep those signatures until their own rejection/success arrives.
+            if (rejectedStateDirty_) rejectedStateDirty_ = !saveMonitoredFolders();
+        });
         connect(importer_, &ImportController::importedTrackIdsChanged, this,
                 [this] {
             if (library_ == nullptr || importer_ == nullptr) return;
@@ -313,6 +383,8 @@ void ResourceFolderController::setImportController(ImportController* controller)
                 const TrackRecord* const track = library_->recordForId(trackId);
                 if (track == nullptr) continue;
                 const QString key = resourceLookupKey(track->path);
+                pendingFileSignatures_.remove(key);
+                if (rejectedFileSignatures_.remove(key) > 0) rejectedStateDirty_ = true;
                 const auto exclusion = excludedPaths_.constFind(key);
                 if (exclusion == excludedPaths_.cend()) continue;
                 removedExclusions.insert(key, exclusion.value());
@@ -372,6 +444,9 @@ void ResourceFolderController::loadMonitoredFolders()
 {
     monitoredRoots_.clear();
     excludedPaths_.clear();
+    rejectedFileSignatures_.clear();
+    pendingFileSignatures_.clear();
+    rejectedStateDirty_ = false;
     QFile file(storagePath_);
     if (file.open(QIODevice::ReadOnly)) {
         const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
@@ -393,6 +468,12 @@ void ResourceFolderController::loadMonitoredFolders()
             }
             const QJsonArray excluded = document.object()
                 .value(QStringLiteral("excludedPaths")).toArray();
+            const QJsonObject rejected = document.object()
+                .value(QStringLiteral("rejectedFiles")).toObject();
+            for (auto it = rejected.begin(); it != rejected.end(); ++it) {
+                if (it.value().isString())
+                    rejectedFileSignatures_.insert(resourceLookupKey(it.key()), it.value().toString());
+            }
             for (const QJsonValue& value : excluded) {
                 const QString path = canonicalLibraryPath(value.toString());
                 if (!path.isEmpty())
@@ -424,10 +505,14 @@ bool ResourceFolderController::saveMonitoredFolders()
                                                    const QString& right) {
         return left.compare(right, agplayer::qt::resourcePathCaseSensitivity()) < 0;
     });
+    QJsonObject rejected;
+    for (auto it = rejectedFileSignatures_.cbegin(); it != rejectedFileSignatures_.cend(); ++it)
+        rejected.insert(it.key(), it.value());
     const QByteArray data = QJsonDocument(QJsonObject{
         {QStringLiteral("version"), 1},
         {QStringLiteral("folders"), QJsonArray::fromStringList(monitoredRoots_)},
         {QStringLiteral("excludedPaths"), QJsonArray::fromStringList(excluded)},
+        {QStringLiteral("rejectedFiles"), rejected},
     }).toJson(QJsonDocument::Compact);
     QSaveFile file(storagePath_);
     if (!file.open(QIODevice::WriteOnly)) {

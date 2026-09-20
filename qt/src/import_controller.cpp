@@ -17,6 +17,7 @@
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <atomic>
+#include <algorithm>
 #include <condition_variable>
 #include <cmath>
 #include <map>
@@ -289,6 +290,7 @@ void ImportController::cancel()
     // busy_ to avoid double delivery.
     markCancelled(callbackState_, true);
     pendingUrls_.clear();
+    pendingFilterFormatFailures_ = true;
     if (busy_) {
         busy_ = false;
         emit busyChanged();
@@ -328,7 +330,23 @@ void ImportController::importFolder(const QUrl& folder)
 
 void ImportController::importUrls(const QList<QUrl>& urls)
 {
+    const bool folderImport = std::any_of(urls.cbegin(), urls.cend(), [](const QUrl& url) {
+        return url.isLocalFile() && QFileInfo(url.toLocalFile()).isDir();
+    });
+    importUrlsImpl(urls, folderImport);
+}
+
+void ImportController::importResourcePaths(const QStringList& paths)
+{
+    QList<QUrl> urls;
+    for (const QString& path : paths) urls.append(QUrl::fromLocalFile(path));
+    importUrlsImpl(urls, true);
+}
+
+void ImportController::importUrlsImpl(const QList<QUrl>& urls, bool filterFormatFailures)
+{
     if (busy_) {
+        pendingFilterFormatFailures_ = pendingFilterFormatFailures_ && filterFormatFailures;
         for (const QUrl& url : urls) {
             if (url.isValid() && !pendingUrls_.contains(url)) {
                 pendingUrls_.append(url);
@@ -343,8 +361,9 @@ void ImportController::importUrls(const QList<QUrl>& urls)
     importedTrackIds_.clear();
     importedTrackIdSet_.clear();
     emit importedTrackIdsChanged();
-    if (skippedCount_ != 0) {
+    if (skippedCount_ != 0 || filteredCount_ != 0) {
         skippedCount_ = 0;
+        filteredCount_ = 0;
         emit skippedCountChanged();
     }
     progress_ = 0.0;
@@ -373,7 +392,7 @@ void ImportController::importUrls(const QList<QUrl>& urls)
         knownTracks.insert(track.path, track);
 #endif
     }
-    future_ = QtConcurrent::run([callbackState, urls, probe, discovery, knownTracks] {
+    future_ = QtConcurrent::run([callbackState, urls, probe, discovery, knownTracks, filterFormatFailures] {
         QStringList discoveredPaths = discovery(urls);
         QSet<QString> seen;
         QStringList paths;
@@ -410,7 +429,7 @@ void ImportController::importUrls(const QList<QUrl>& urls)
         workers.reserve(workerCount);
         for (int worker = 0; worker < workerCount; ++worker) {
             workers.append(QtConcurrent::run(
-                &probePool, [callbackState, pipeline, paths, probe, knownTracks] {
+                &probePool, [callbackState, pipeline, paths, probe, knownTracks, filterFormatFailures] {
                     while (!isCancelled(callbackState)) {
                         const qsizetype index = pipeline->next.fetch_add(1);
                         if (index >= paths.size()) {
@@ -419,6 +438,7 @@ void ImportController::importUrls(const QList<QUrl>& urls)
                         Outcome outcome;
                         outcome.ordinal = index;
                         outcome.path = paths[index];
+                        outcome.filterFormatFailures = filterFormatFailures;
 #ifdef Q_OS_WIN
                         const QString key = outcome.path.toCaseFolded();
 #else
@@ -521,6 +541,10 @@ void ImportController::finishWithoutImport(const QString& error)
 
 void ImportController::clearErrors()
 {
+    if (filteredCount_ != 0) {
+        filteredCount_ = 0;
+        emit skippedCountChanged();
+    }
     if (errors_.isEmpty()) {
         return;
     }
@@ -558,6 +582,15 @@ void ImportController::handleBatch(QList<Outcome> outcomes, int completed, int t
         }
         const QString detail = outcome.result.error.isEmpty()
             ? errorFor(outcome.result.result) : outcome.result.error;
+        emit fileRejected(outcome.path, static_cast<int>(outcome.result.result));
+        if (outcome.filterFormatFailures
+            && (outcome.result.result == AG_UNSUPPORTED_FORMAT
+                || outcome.result.result == AG_DECODE_ERROR)) {
+            ++filteredCount_;
+            ++skippedCount_;
+            emit skippedCountChanged();
+            continue;
+        }
         errors_.append(QStringLiteral("%1: %2").arg(outcome.path, detail));
         errorsChangedInBatch = true;
     }
@@ -626,7 +659,8 @@ void ImportController::completeImport()
     emit finished();
     if (!pendingUrls_.isEmpty()) {
         const QList<QUrl> queued = std::exchange(pendingUrls_, {});
-        QMetaObject::invokeMethod(this, [this, queued] { importUrls(queued); },
+        const bool filter = std::exchange(pendingFilterFormatFailures_, true);
+        QMetaObject::invokeMethod(this, [this, queued, filter] { importUrlsImpl(queued, filter); },
                                   Qt::QueuedConnection);
     }
 }

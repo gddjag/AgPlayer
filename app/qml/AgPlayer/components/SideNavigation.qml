@@ -21,6 +21,35 @@ Item {
     property int favoriteCount: 0
     property int historyCount: 0
     property int recentAddedCount: 0
+    property bool resourceRefreshActive: false
+    property bool resourceRefreshCompleted: false
+    Connections {
+        target: ResourceFolderController
+        function onScanningChanged() {
+            if (ResourceFolderController.scanning) {
+                root.resourceRefreshActive = true
+                root.resourceRefreshCompleted = false
+                resourceRefreshDismiss.stop()
+            }
+        }
+        function onScanFinished() { Qt.callLater(root.finishResourceRefresh) }
+    }
+    Connections {
+        target: ImportController
+        function onFinished() { Qt.callLater(root.finishResourceRefresh) }
+    }
+    function finishResourceRefresh() {
+        if (!resourceRefreshActive || ResourceFolderController.scanning || ImportController.busy)
+            return
+        resourceRefreshActive = false
+        resourceRefreshCompleted = true
+        resourceRefreshDismiss.restart()
+    }
+    Timer {
+        id: resourceRefreshDismiss
+        interval: 4000
+        onTriggered: root.resourceRefreshCompleted = false
+    }
     property int neverPlayedCount: 0
     property string contextPlaylistId: ""
     property string contextResourceFolder: ""
@@ -57,14 +86,17 @@ Item {
         for (var i = 0; i < urls.length; ++i) {
             var entry = ResourceFolderController.classifyDropUrl(urls[i])
             if (entry.kind === ResourceFolderController.Directory) {
-                if (ResourceFolderController.addMonitoredFolder(entry.path))
+                var alreadyMonitored = ResourceFolderController.monitoredFolders.indexOf(entry.path) >= 0
+                if (ResourceFolderController.addMonitoredFolder(entry.path) || alreadyMonitored)
                     resourceDropAccepted = true
             } else if (entry.kind === ResourceFolderController.AudioFile) {
                 audioUrls.push(entry.url)
             }
         }
         var directoriesAdded = resourceDropAccepted
-        if (audioUrls.length) {
+        if (directoriesAdded)
+            ResourceFolderController.rescan()
+        if (audioUrls.length && !ImportController.busy) {
             ImportController.importUrls(audioUrls)
             resourceDropAccepted = true
         }
@@ -312,7 +344,7 @@ Item {
             text: qsTr("重新扫描全部资源文件夹")
             enabled: !ResourceFolderController.scanning
             onTriggered: {
-                ResourceFolderController.rescan()
+                ResourceFolderController.rescanAll()
                 resourceScanDialog.open()
             }
         }
@@ -473,10 +505,14 @@ Item {
                         Layout.preferredHeight: root.navigationIconVisualSize
                     }
                     Text {
-                        text: qsTr("资源文件夹")
+                        objectName: "resourceFolderRefreshLabel"
+                        text: root.resourceRefreshActive ? qsTr("资源文件夹 · 刷新中…")
+                              : root.resourceRefreshCompleted ? qsTr("资源文件夹 · 已刷新")
+                              : qsTr("资源文件夹")
                         color: Theme.tagSecondaryText
                         font.family: Theme.fontPrimary
                         font.pixelSize: Theme.fontSizeCaption
+                        elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
                     ToolButton {

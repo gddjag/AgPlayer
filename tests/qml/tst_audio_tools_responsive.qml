@@ -21,25 +21,27 @@ TestCase {
     }
     function inside(item, owner) {
         var p = item ? item.mapToItem(owner, 0, 0) : null
+        var end = item ? item.mapToItem(owner, item.width, item.height) : null
         var visible = item && item.visible
         var clipped = []
         for (var ancestor = item ? item.parent : null; ancestor && ancestor !== owner;
              ancestor = ancestor.parent) {
             if (ancestor.clip)
-                clipped.push({owner: ancestor, point: item.mapToItem(ancestor, 0, 0)})
+                clipped.push({owner: ancestor, point: item.mapToItem(ancestor, 0, 0),
+                              end: item.mapToItem(ancestor, item.width, item.height)})
         }
         verify(item, "missing control")
         verify(visible, item.objectName + " is hidden")
-        verify(p.x >= -1 && p.y >= -1 && p.x + item.width <= owner.width + 1
-               && p.y + item.height <= owner.height + 1,
+        verify(p.x >= -1 && p.y >= -1 && end.x <= owner.width + 1
+               && end.y <= owner.height + 1,
                item.objectName + " outside " + owner.width + "x" + owner.height
                + ": " + p.x + "," + p.y + " " + item.width + "x" + item.height)
         for (var clippedItem of clipped) {
             var local = clippedItem.point
             var clipOwner = clippedItem.owner
             verify(local.x >= -1 && local.y >= -1
-                   && local.x + item.width <= clipOwner.width + 1
-                   && local.y + item.height <= clipOwner.height + 1,
+                   && clippedItem.end.x <= clipOwner.width + 1
+                   && clippedItem.end.y <= clipOwner.height + 1,
                    item.objectName + " clipped by " + clipOwner.objectName
                    + ": " + local.x + "," + local.y + " " + item.width + "x" + item.height
                    + " in " + clipOwner.width + "x" + clipOwner.height)

@@ -12,9 +12,11 @@ Rectangle {
     focus: true
 
     readonly property bool narrowLayout: width < 1100
-    readonly property bool macStackedLayout: Qt.platform.os === "osx" && narrowLayout
+    property bool macDesktopLayout: Qt.platform.os === "osx"
+    readonly property bool macStackedLayout: false
     readonly property bool compactHeight: height < 800
-    readonly property real inspectorWidth: narrowLayout ? 300 : 380
+    readonly property real inspectorWidth: macDesktopLayout
+        ? Math.max(220, Math.min(280, width * 0.24)) : narrowLayout ? 300 : 380
     readonly property real mainWidth: macStackedLayout ? width : width - inspectorWidth
     property bool pendingExportAfterDirectory: false
     property bool pendingSelectionExport: false
@@ -316,6 +318,7 @@ Rectangle {
         id: mainColumn
         objectName: "editorMainColumn"
         shortcutsEnabled: page.editorShortcutAvailable()
+        singleRowTransport: page.macDesktopLayout
         width: page.mainWidth
         height: page.macStackedLayout ? Math.max(820, page.height) : page.height
         onImportRequested: openDialog.open()
@@ -368,13 +371,15 @@ Rectangle {
             anchors.margins: 8
             anchors.rightMargin: 14
             contentWidth: width
-            contentHeight: inspectorGroups.height
+            contentHeight: inspectorGroups.height * inspectorGroups.scale
             clip: true
             boundsBehavior: Flickable.StopAtBounds
 
             Column {
                 id: inspectorGroups
-                width: inspectorScroller.width
+                width: page.macDesktopLayout ? Math.max(278, inspectorScroller.width) : inspectorScroller.width
+                scale: inspectorScroller.width / width
+                transformOrigin: Item.TopLeft
                 spacing: Theme.spacingSm
 
                 Rectangle {

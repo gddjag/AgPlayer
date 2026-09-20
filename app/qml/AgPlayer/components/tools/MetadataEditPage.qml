@@ -12,8 +12,11 @@ Rectangle {
     focus: true
 
     readonly property real desktopMinimumWidth: 1206
-    readonly property bool compactLayout: width < desktopMinimumWidth
-    readonly property bool macStackedLayout: Qt.platform.os === "osx" && compactLayout
+    readonly property bool compactLayout: !macDesktopLayout && width < desktopMinimumWidth
+    property bool macDesktopLayout: Qt.platform.os === "osx"
+    readonly property bool macStackedLayout: false
+    readonly property real layoutWidth: macDesktopLayout ? Math.max(width, 1280) : width
+    readonly property real layoutScale: macDesktopLayout ? Math.max(1, width) / layoutWidth : 1
     readonly property real inspectorRatio: 0.44
     readonly property color canvasColor: Theme.editorCanvas
     readonly property color panelColor: Theme.panel
@@ -599,8 +602,11 @@ Rectangle {
     }
 
     ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 10
+        x: 10 * page.layoutScale; y: 10 * page.layoutScale
+        width: page.layoutWidth - 20
+        height: page.height / page.layoutScale - 20
+        scale: page.layoutScale
+        transformOrigin: Item.TopLeft
         spacing: 8
 
         RowLayout {
@@ -755,7 +761,7 @@ Rectangle {
                     Layout.preferredWidth: page.compactLayout
                                            ? 0
                                            : workbench.width - 26
-                                             - (page.width * page.inspectorRatio - 12)
+                                             - (page.layoutWidth * page.inspectorRatio - 12)
                     Layout.minimumWidth: page.compactLayout ? 0 : 560
                     color: page.panelColor
                     border.width: 1
@@ -1027,7 +1033,7 @@ Rectangle {
                     Layout.preferredHeight: page.macStackedLayout ? 650 : -1
                     Layout.preferredWidth: page.compactLayout
                                            ? 0
-                                           : page.width * page.inspectorRatio - 12
+                                           : page.layoutWidth * page.inspectorRatio - 12
                     Layout.minimumWidth: page.compactLayout ? 0 : 620
                     color: page.panelColor
                     border.width: 1

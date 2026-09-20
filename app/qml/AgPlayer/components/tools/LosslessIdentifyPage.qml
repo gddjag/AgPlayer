@@ -12,8 +12,11 @@ Rectangle {
     focus: true
 
     property var controller: LosslessAnalysisController
-    readonly property bool compactLayout: width < 1080 || height < 620
-    readonly property bool macStackedLayout: Qt.platform.os === "osx" && compactLayout
+    readonly property bool compactLayout: !macDesktopLayout && (width < 1080 || height < 620)
+    property bool macDesktopLayout: Qt.platform.os === "osx"
+    readonly property bool macStackedLayout: false
+    readonly property real layoutWidth: macDesktopLayout ? Math.max(width, 1160) : width
+    readonly property real layoutScale: macDesktopLayout ? Math.max(1, width) / layoutWidth : 1
     readonly property real widePanelBudget: Math.max(0, content.width
                                                      - Theme.spacingXs * 2
                                                      - Theme.spacingSm * 2 - 2)
@@ -155,8 +158,11 @@ Rectangle {
     }
 
     ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: Theme.spacingXs
+        x: Theme.spacingXs * page.layoutScale; y: Theme.spacingXs * page.layoutScale
+        width: page.layoutWidth - Theme.spacingXs * 2
+        height: page.height / page.layoutScale - Theme.spacingXs * 2
+        scale: page.layoutScale
+        transformOrigin: Item.TopLeft
         spacing: Theme.spacingSm
 
         Text {

@@ -214,7 +214,11 @@ public:
         auto* item = qobject_cast<QQuickItem*>(target);
         if (!item || !item->window() || !listDrops_ || urls.isEmpty()) return false;
         QWindow owner;
+#if defined(Q_OS_MACOS)
+        owner.setGeometry(20, 20, 100, 80);
+#else
         owner.setGeometry(item->window()->x(), item->window()->y() - 190, 320, 180);
+#endif
         owner.show();
         listDrops_->registerWindow(&owner, NativeDropRouter::Target::Main);
         const QPoint point = owner.mapFromGlobal(item->mapToGlobal(
@@ -387,6 +391,11 @@ public:
         Q_UNUSED(urls)
         return false;
 #endif
+    }
+
+    Q_INVOKABLE bool usesOffscreenPlatform() const
+    {
+        return QGuiApplication::platformName() == QStringLiteral("offscreen");
     }
 
     Q_INVOKABLE bool supportsWindowsDropFiles() const
