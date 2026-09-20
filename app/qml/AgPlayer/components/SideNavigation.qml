@@ -148,9 +148,9 @@ Item {
         return false
     }
 
-    function resourceNodeAt(x, y) {
+    function resourceNodeAt(x, y, sourceItem) {
         var contentPoint = navigationList.contentItem.mapFromItem(
-                    navigationList, x, y)
+                    sourceItem || navigationList, x, y)
         var row = navigationList.indexAt(contentPoint.x, contentPoint.y)
         if (row < 0)
             return null
@@ -356,6 +356,7 @@ Item {
         parent: root.Window.window ? root.Window.window.contentItem : root
         anchors.centerIn: parent
         title: qsTr("扫描资源文件夹")
+        width: Math.min(480, parent ? parent.width - 2 * Theme.spacingLg : 480)
         modal: false
         standardButtons: Dialog.Close
         contentItem: Label {
@@ -420,16 +421,19 @@ Item {
         // on the stable view so a reset between press and release cannot
         // destroy the handler that owns the gesture.
         TapHandler {
+            // Flickable reparents handlers to contentItem. Map from the actual
+            // parent so scrolling is not added to the hit position a second time.
+            objectName: "resourceNavigationTapHandler"
             property var pressedResourceNode: null
             acceptedButtons: Qt.LeftButton
             onPressedChanged: {
                 if (pressed)
                     pressedResourceNode = root.resourceNodeAt(
-                                point.position.x, point.position.y)
+                                point.position.x, point.position.y, parent)
             }
             onTapped: function(eventPoint) {
                 var releasedNode = root.resourceNodeAt(
-                            eventPoint.position.x, eventPoint.position.y)
+                            eventPoint.position.x, eventPoint.position.y, parent)
                 var pressedNode = pressedResourceNode
                 pressedResourceNode = null
                 if (!pressedNode || !releasedNode

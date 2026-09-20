@@ -30,7 +30,7 @@ Assert-Match $main 'WaveformSession\s*\{[\s\S]*id:\s*sharedWaveformSession' 'Mai
 Assert-Match $shell 'property int topBarHeight:\s*Theme\.titleBarHeight' 'Integrated top bar must use the shared title-bar height.'
 Assert-Match $shell 'property int leftColumnWidth:\s*width < 1300\s*\?\s*Theme\.navigationWidthCompact\s*:\s*Theme\.navigationWidth' 'Integrated left column must use the shared responsive navigation widths.'
 Assert-Match $shell 'property int rightColumnWidth:\s*Theme\.playerInspectorWidth' 'Integrated right column must use the shared inspector width.'
-Assert-Match $shell 'property int waveformHeight:\s*120' 'Integrated waveform must be 120px.'
+Assert-Match $shell 'property int waveformHeight:\s*Qt\.platform\.os === "osx"\s*\?\s*100\s*:\s*120' 'Integrated waveform must be 100px on macOS and 120px on other platforms.'
 Assert-Match $shell 'property int bottomBarHeight:\s*Theme\.playerBottomBarHeight' 'Integrated bottom bar must use the shared player-bar height.'
 Assert-Match $shell 'SideNavigation\s*\{[\s\S]*showTagManagementEntry:\s*false' 'Integrated navigation must hide the tag-management entry.'
 Assert-Match $shell 'LibrarySidePanel\s*\{[\s\S]*objectNamePrefix:\s*"integrated"[\s\S]*expandedWidth:\s*root\.rightColumnWidth' 'Integrated must reuse the shared library side panel.'
