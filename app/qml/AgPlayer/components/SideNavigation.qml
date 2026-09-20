@@ -94,7 +94,7 @@ Item {
         }
         var directoriesAdded = resourceDropAccepted
         if (directoriesAdded)
-            ResourceFolderController.rescanAll()
+            ResourceFolderController.rescan()
         if (audioUrls.length && !ImportController.busy) {
             ImportController.importUrls(audioUrls)
             resourceDropAccepted = true

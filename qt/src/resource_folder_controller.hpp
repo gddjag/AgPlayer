@@ -62,6 +62,7 @@ signals:
     void storagePathChanged();
     void persistenceStateChanged();
 private:
+    bool prepareManualScan(const QStringList& roots);
     void scheduleRescan();
     void rebuildDirectoryWatches();
     void applyDirectoryWatches(const QStringList& directories);
