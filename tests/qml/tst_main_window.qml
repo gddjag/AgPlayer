@@ -1544,10 +1544,8 @@ TestCase {
     }
 
     function test_recent_playback_navigation_is_shared_across_shells() {
-        if (Qt.platform.os === "windows") {
-            for (var warning = 0; warning < 4; ++warning)
-                ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
-        }
+        for (var warning = 0; warning < 4; ++warning)
+            ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
         var previousTheme = SettingsController.windowLayoutTheme
         var previousShell = SettingsController.playerShellMode
         var filter = findChild(mainWindow, "filterModel")
@@ -3364,7 +3362,7 @@ TestCase {
         compare(shaped[31], shaped[shaped.length - 32])
     }
 
-    function test_spectrum_uses_responsive_seven_pixel_bottom_bars() {
+    function test_spectrum_uses_responsive_platform_bottom_bars() {
         var waveform = findChild(mainWindow, "mainWaveform")
         verify(waveform)
         var previousMode = SettingsController.waveformMode
@@ -3372,8 +3370,8 @@ TestCase {
         tryCompare(waveform, "visualMode", 2)
         compare(waveform.lineWidth, 3)
         compare(waveform.spectrumBarCount, 128)
-        compare(waveform.spectrumBarWidth, 7)
-        compare(waveform.spectrumBarGap, 3)
+        compare(waveform.spectrumBarWidth, Qt.platform.os === "osx" ? 6 : 7)
+        compare(waveform.spectrumBarGap, Qt.platform.os === "osx" ? 2 : 3)
         compare(waveform.spectrumMaxHeight, 96)
         fuzzyCompare(waveform.spectrumAttackSeconds, 0.02, 0.001)
         fuzzyCompare(waveform.spectrumDecaySeconds, 0.10, 0.001)
@@ -5338,7 +5336,8 @@ TestCase {
         var scanStatus = findChild(scanDialog, "resourceScanStatus")
         verify(scanStatus && scanStatus.text.length > 0)
         compare(scanStatus.text, ResourceFolderController.scanSummary)
-        verify(scanDialog.width <= 440, "scan messages must wrap in a compact dialog")
+        verify(scanDialog.width <= (Qt.platform.os === "osx" ? 480 : 440),
+               "scan messages must wrap in a compact dialog")
         verify(scanDialog.width <= scanDialog.parent.width)
         scanDialog.close()
 

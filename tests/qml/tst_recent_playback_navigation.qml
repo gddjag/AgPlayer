@@ -84,11 +84,16 @@ TestCase {
             verify(navigation)
             verify(navigation.revealNode("history:history"))
             wait(50)
-            var recent = findChild(navigation, "historyCategoryButton")
-            var favorites = findChild(navigation, "navigationNode-favorites:favorites")
-            verify(recent && favorites)
+            var recent = null
+            tryVerify(function() {
+                recent = findChild(navigation, "historyCategoryButton")
+                return recent && recent.visible
+            }, 2000)
             compare(recent.displayName, "最近播放")
-            compare(recent.index, favorites.index + 1)
+            compare(navigation.navigationModel.data(
+                        navigation.navigationModel.index(recent.index - 1, 0),
+                        LibraryNavigationModel.NodeIdRole),
+                    "favorites:favorites")
             compare(recent.count, 2)
             mouseClick(recent, recent.width * 0.6, recent.height / 2, Qt.LeftButton)
             tryCompare(filterModel, "category", "history")

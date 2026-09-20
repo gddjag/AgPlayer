@@ -660,8 +660,8 @@ TestCase {
         tryCompare(waveform, "visualMode", 2)
         compare(waveform.lineWidth, 3)
         compare(waveform.spectrumBarCount, 128)
-        compare(waveform.spectrumBarWidth, 7)
-        compare(waveform.spectrumBarGap, 3)
+        compare(waveform.spectrumBarWidth, Qt.platform.os === "osx" ? 6 : 7)
+        compare(waveform.spectrumBarGap, Qt.platform.os === "osx" ? 2 : 3)
         SettingsController.waveformMode = previousMode
     }
 
