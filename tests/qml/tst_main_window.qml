@@ -3338,7 +3338,7 @@ TestCase {
         compare(shaped[31], shaped[shaped.length - 32])
     }
 
-    function test_spectrum_uses_responsive_five_pixel_bottom_bars() {
+    function test_spectrum_uses_responsive_seven_pixel_bottom_bars() {
         var waveform = findChild(mainWindow, "mainWaveform")
         verify(waveform)
         var previousMode = SettingsController.waveformMode
@@ -3346,8 +3346,8 @@ TestCase {
         tryCompare(waveform, "visualMode", 2)
         compare(waveform.lineWidth, 3)
         compare(waveform.spectrumBarCount, 128)
-        compare(waveform.spectrumBarWidth, 5)
-        compare(waveform.spectrumBarGap, 2)
+        compare(waveform.spectrumBarWidth, 7)
+        compare(waveform.spectrumBarGap, 3)
         compare(waveform.spectrumMaxHeight, 96)
         fuzzyCompare(waveform.spectrumAttackSeconds, 0.02, 0.001)
         fuzzyCompare(waveform.spectrumDecaySeconds, 0.10, 0.001)
