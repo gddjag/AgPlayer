@@ -320,7 +320,11 @@ int main(int argc, char* argv[])
         QString::fromLatin1(agplayer::version::kVersion));
     app.setOrganizationName(QStringLiteral("AgPlayer"));
     const QIcon applicationIcon(QStringLiteral(
+#ifdef Q_OS_MACOS
+        ":/qt/qml/AgPlayer/assets/brand/macos-app-icon.png"));
+#else
         ":/qt/qml/AgPlayer/assets/brand/desktop-install-icon.ico"));
+#endif
     app.setWindowIcon(applicationIcon);
 #ifdef Q_OS_WIN
     WindowsShellIdentityFilter shellIdentityFilter(
@@ -1011,6 +1015,13 @@ int main(int argc, char* argv[])
             QStringLiteral("resource-roots.json")));
         resourceFolders.setLibraryModel(&library);
         resourceFolders.setImportController(&importer);
+#ifdef Q_OS_MACOS
+        // Preserve concrete failures after the transient import banner clears.
+        QObject::connect(&importer, &ImportController::finished, &app, [&importer] {
+            for (const QString& error : importer.errors())
+                qWarning().noquote() << "macOS import failed:" << error;
+        });
+#endif
         LibraryNavigationModel libraryNavigation(
             &library, &playlists, &tagModel, &resourceFolders);
         QObject::connect(&settings, &SettingsController::autoReadBpmChanged, &app,

@@ -18,38 +18,38 @@ TestCase {
     Component { id: filenamePage; FilenameProcessPage { width: 980; height: 720 } }
     Component { id: evidencePage; LosslessIdentifyPage { width: 980; height: 720 } }
 
-    function test_compactMacToolsUseOneScrollingPage() {
+    function test_compactMacToolsKeepDesktopColumns() {
         if (Qt.platform.os !== "osx") skip("macOS compact tool layout")
         const editor = createTemporaryObject(editorPage, main.contentItem)
         const metadata = createTemporaryObject(metadataPage, main.contentItem)
         const filename = createTemporaryObject(filenamePage, main.contentItem)
         const lossless = createTemporaryObject(evidencePage, main.contentItem)
         verify(editor && metadata && filename && lossless)
-        verify(editor.macStackedLayout)
+        verify(editor.macDesktopLayout)
         const tracks = findChild(editor, "editorTrackScroller")
         verify(tracks && tracks.height >= tracks.contentHeight)
         const inspector = findChild(editor, "editorInspector")
-        verify(inspector.y >= findChild(editor, "editorMainColumn").height)
-        verify(findChild(editor, "editorPageScroller").contentHeight > editor.height)
+        compare(inspector.x, editor.mainWidth)
+        compare(findChild(editor, "editorPageScroller").contentHeight, editor.height)
 
-        verify(metadata.macStackedLayout)
+        verify(metadata.macDesktopLayout)
         verify(!findChild(metadata, "metadataCompactTabs").visible)
         const files = findChild(metadata, "metadataFilePanel")
         const fields = findChild(metadata, "metadataInspectorPanel")
-        verify(files.visible && fields.visible && fields.y >= files.y + files.height)
+        verify(files.visible && fields.visible && fields.x >= files.x + files.width)
         verify(findChild(metadata, "metadataWorkbenchScroller").contentHeight > 0)
 
-        verify(filename.macStackedLayout)
+        verify(filename.macDesktopLayout)
         verify(!findChild(filename, "filenameCompactTabs").visible)
         verify(findChild(filename, "filenameFilePanel").visible)
         verify(findChild(filename, "filenameRulesPanel").visible)
-        verify(findChild(filename, "filenameWorkspaceScroller").contentHeight > filename.height)
+        verify(findChild(filename, "filenameRulesPanel").x >= findChild(filename, "filenameFilePanel").width)
 
-        verify(lossless.macStackedLayout)
+        verify(lossless.macDesktopLayout)
         verify(!findChild(lossless, "losslessCompactViewSwitch").visible)
         verify(findChild(lossless, "losslessEvidencePanel").visible)
         verify(findChild(lossless, "losslessConclusionPanel").visible)
-        verify(findChild(lossless, "losslessContentScroller").contentHeight > lossless.height)
+        verify(findChild(lossless, "losslessEvidencePanel").x > 0)
     }
 
     function test_miniBrandStaysCenteredOnMac() {

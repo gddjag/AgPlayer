@@ -42,8 +42,9 @@ TestCase {
     function inside(item, owner) {
         verify(item && item.visible, "Missing visible control")
         const p = item.mapToItem(owner, 0, 0)
-        verify(p.x >= -1 && p.y >= -1 && p.x + item.width <= owner.width + 1
-            && p.y + item.height <= owner.height + 1,
+        const end = item.mapToItem(owner, item.width, item.height)
+        verify(p.x >= -1 && p.y >= -1 && end.x <= owner.width + 1
+            && end.y <= owner.height + 1,
             item.objectName + " outside page: " + p.x + "," + p.y + " " + item.width + "x" + item.height)
     }
     function createEditorHost() {
@@ -82,7 +83,7 @@ TestCase {
         compare(inspector.x, page.macStackedLayout ? 0 : page.mainWidth)
         if (page.macStackedLayout)
             verify(inspector.y >= visualChild(page, "editorMainColumn").height)
-        verify(inspector.width >= 300)
+        verify(inspector.width >= (page.macDesktopLayout ? 220 : 300))
         inside(inspector, layoutOwner)
         const device = visualChild(page, "editorInputDevice")
         const meter = visualChild(page, "editorRecordingLevel")

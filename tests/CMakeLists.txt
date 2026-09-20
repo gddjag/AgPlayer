@@ -1818,6 +1818,13 @@ set_tests_properties(qml_six_track_editor_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
 
+add_test(NAME qml_macos_compact_workspace_test
+    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_macos_compact_workspace.qml)
+set_tests_properties(qml_macos_compact_workspace_test PROPERTIES
+    TIMEOUT 30 RESOURCE_LOCK qml_audio_tools_runtime
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+
 add_test(NAME qml_six_track_native_input_test
     COMMAND qml_audio_tools_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_six_track_native_input.qml

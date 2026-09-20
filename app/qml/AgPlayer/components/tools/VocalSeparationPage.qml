@@ -6,6 +6,7 @@ import AgPlayer
 
 Rectangle {
     id: page
+    property bool macCompactPlayback: Qt.platform.os === "osx"
     objectName: "vocalSeparationPage"
     color: Theme.background
     focus: true
@@ -1580,8 +1581,9 @@ Rectangle {
                         id: timeline
                         objectName: "separationTimeline"
                         Layout.fillWidth: true
-                        Layout.preferredHeight: page.compact ? 350
-                                                        : page.fullDesktop ? 280 : 320
+                        Layout.preferredHeight: (page.compact ? 350
+                                                        : page.fullDesktop ? 280 : 320)
+                            + (page.macCompactPlayback ? 24 : 0)
                         color: page.input; border.color: page.border; radius: 7
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 8; spacing: 3
@@ -2217,14 +2219,15 @@ Rectangle {
              id: bottomBar
              objectName: "separationBottomBar"
              Layout.fillWidth: true
-             Layout.preferredHeight: page.compact ? 124 : 82
+             Layout.preferredHeight: (page.compact ? 124 : 82) - (page.macCompactPlayback ? 24 : 0)
             Layout.leftMargin: 14
             Layout.rightMargin: 14
             Layout.bottomMargin: 10
             color: "transparent"
             border.width: 0
              GridLayout {
-                 anchors.fill: parent; anchors.margins: 6; rowSpacing: 8; columnSpacing: 8
+                 anchors.fill: parent; anchors.margins: page.macCompactPlayback ? 2 : 6
+                 rowSpacing: page.macCompactPlayback ? 4 : 8; columnSpacing: 8
                 columns: page.compact ? 4 : 14
                 Rectangle {
                     id: transport
@@ -2234,14 +2237,14 @@ Rectangle {
                      Layout.columnSpan: page.compact ? 2 : 3
                      Layout.fillWidth: page.compact
                      Layout.preferredWidth: page.compact ? 0 : 330
-                     Layout.preferredHeight: 56
+                     Layout.preferredHeight: page.macCompactPlayback ? 48 : 56
                     Layout.fillHeight: true
                     color: "transparent"
                     border.width: 0
                     radius: 6
                     RowLayout {
                          anchors.fill: parent
-                         anchors.margins: 5
+                         anchors.margins: page.macCompactPlayback ? 3 : 5
                          spacing: 10
                          TransportIconButton {
                              implicitWidth: 38
@@ -2260,8 +2263,8 @@ Rectangle {
                              objectName: "separationTransportPlay"
                              implicitWidth: 46
                              implicitHeight: 46
-                             Layout.preferredWidth: 46
-                             Layout.preferredHeight: 46
+                             Layout.preferredWidth: page.macCompactPlayback ? 40 : 46
+                             Layout.preferredHeight: page.macCompactPlayback ? 40 : 46
                              enabled: page.hasAvailableResultStem()
                              iconName: page.resultPreviewCurrent
                                        && AudioPreviewController.playing

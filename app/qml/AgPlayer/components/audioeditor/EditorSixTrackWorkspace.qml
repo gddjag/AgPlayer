@@ -8,12 +8,13 @@ Item {
     signal importRequested()
     signal saveProjectRequested()
     property bool shortcutsEnabled: false
+    property bool singleRowTransport: Qt.platform.os === "osx"
     readonly property var recorder: AudioEditorController.recorder
     readonly property bool recordingActive: recorder.state === 1 || recorder.state === 2 || recorder.state === 3
     readonly property real headerWidth: width < 800 ? 180 : 220
     readonly property bool shortLayout: height < 500
-    readonly property bool compactTransport: width < 1000
-        || (Qt.platform.os === "osx" && width < 1100)
+    readonly property bool compactTransport: singleRowTransport || width < 1000
+    readonly property bool wrapTransport: compactTransport && !singleRowTransport
     readonly property bool tinyTransport: width < 620
     readonly property rect rulerGeometry: Qt.rect(ruler.x, ruler.y, ruler.width, ruler.height)
     readonly property real trackHeight: height < 760 ? 72 : 82
@@ -190,7 +191,7 @@ Item {
         x: ruler.x; y: ruler.y + ruler.height
         width: ruler.width
         height: Math.min(workspace.trackHeight * 6, Math.max(82,
-            workspace.height - recordingTransport.height - (workspace.shortLayout ? 4 : 10)
+            workspace.height - recordingTransport.height * recordingTransport.scale - (workspace.shortLayout ? 4 : 10)
             - y - 30 - statusLabel.height))
         contentWidth: width
         contentHeight: workspace.trackHeight * 6
@@ -373,10 +374,13 @@ Item {
         id: recordingTransport
         objectName: "editorRecordingTransport"
         x: commandBar.x
-        y: (Math.min(parent.height - height - (workspace.shortLayout ? 4 : 10),
+        y: (Math.min(parent.height - height * scale - (workspace.shortLayout ? 4 : 10),
                      trackScroller.y + trackScroller.height + 30 + statusLabel.height)
-            + parent.height - height - (workspace.shortLayout ? 4 : 10)) / 2
-        width: commandBar.width; height: workspace.compactTransport ? 104 : 82
+            + parent.height - height * scale - (workspace.shortLayout ? 4 : 10)) / 2
+        width: workspace.singleRowTransport ? Math.max(commandBar.width, 1040) : commandBar.width
+        height: workspace.singleRowTransport ? 64 : workspace.compactTransport ? 104 : 82
+        scale: workspace.singleRowTransport ? commandBar.width / width : 1
+        transformOrigin: Item.TopLeft
         color: Theme.background
         Row {
             id: deviceControls
@@ -449,7 +453,10 @@ Item {
             objectName: "editorRecordButton"
             x: deviceControls.x + deviceControls.width + (workspace.compactTransport ? 10 : 26)
             y: deviceControls.y
-            width: workspace.compactTransport ? 78 : 100; height: deviceControls.height
+            width: workspace.singleRowTransport
+                ? Math.max(100, stopRecordingMetrics.width + 19 + 7 + leftPadding + rightPadding)
+                : workspace.compactTransport ? 78 : 100
+            height: deviceControls.height
             text: workspace.recordingActive ? qsTr("停止录音") : qsTr("录音")
             icon.source: Theme.icon(workspace.recordingActive ? "stop-fill" : "record-circle-fill")
             available: workspace.recorder.state === 1 || workspace.recorder.state === 2
@@ -464,8 +471,14 @@ Item {
             }
             contentItem: RowLayout {
                 spacing: 7
-                Rectangle { width: 19; height: 19; radius: workspace.recordingActive ? 2 : 10; color: Theme.error; opacity: recordButton.enabled ? 1 : 0.4 }
+                Rectangle { Layout.preferredWidth: 19; Layout.preferredHeight: 19; radius: workspace.recordingActive ? 2 : 10; color: Theme.error; opacity: recordButton.enabled ? 1 : 0.4 }
                 Label { text: recordButton.text; color: recordButton.enabled ? Theme.textPrimary : Theme.textDisabled; font.pixelSize: workspace.compactTransport ? 13 : 15 }
+            }
+            TextMetrics {
+                id: stopRecordingMetrics
+                font.family: recordButton.font.family
+                font.pixelSize: workspace.compactTransport ? 13 : 15
+                text: qsTr("停止录音")
             }
         }
         ThemedButton {
@@ -493,8 +506,8 @@ Item {
         Row {
             id: playbackButtons
             objectName: "editorPlaybackTransport"
-            x: workspace.compactTransport ? 0 : pauseRecordingButton.x + pauseRecordingButton.width + 16
-            y: workspace.compactTransport ? 56 : 18
+            x: workspace.wrapTransport ? 0 : pauseRecordingButton.x + pauseRecordingButton.width + 16
+            y: workspace.wrapTransport ? 56 : deviceControls.y
             spacing: workspace.compactTransport ? 6 : 10
             height: workspace.compactTransport ? 44 : 64
             Repeater {
@@ -534,7 +547,7 @@ Item {
         }
         Column {
             x: Math.max(playbackButtons.x + playbackButtons.width + 24, recordingTransport.width - 150)
-            y: workspace.compactTransport ? 53 : 21
+            y: workspace.wrapTransport ? 53 : workspace.singleRowTransport ? 2 : 21
             width: Math.max(0, recordingTransport.width - x)
             spacing: 0
             Label {

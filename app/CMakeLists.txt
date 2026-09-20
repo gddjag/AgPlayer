@@ -99,6 +99,9 @@ set(BRAND_FILES
     ${CMAKE_SOURCE_DIR}/assets/brand/desktop-install-icon.ico
     ${CMAKE_SOURCE_DIR}/assets/brand/logo-mark.png
 )
+if(APPLE)
+    list(APPEND BRAND_FILES ${CMAKE_SOURCE_DIR}/assets/brand/macos-app-icon.png)
+endif()
 
 foreach(resource_file ${BRAND_FILES} ${ICON_FILES})
     file(RELATIVE_PATH alias ${CMAKE_SOURCE_DIR} ${resource_file})

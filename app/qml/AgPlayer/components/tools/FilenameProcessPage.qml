@@ -18,8 +18,11 @@ Control {
     readonly property color actionBlue: Theme.accent
     readonly property bool compactLayout: width < 1500
     readonly property real desktopWorkspaceWidth: 1440
-    readonly property bool narrowLayout: width < desktopWorkspaceWidth
-    readonly property bool macStackedLayout: Qt.platform.os === "osx" && narrowLayout
+    readonly property bool narrowLayout: !macDesktopLayout && width < desktopWorkspaceWidth
+    property bool macDesktopLayout: Qt.platform.os === "osx"
+    readonly property bool macStackedLayout: false
+    readonly property real layoutWidth: macDesktopLayout ? Math.max(width, 1440) : width
+    readonly property real layoutScale: macDesktopLayout ? Math.max(1, width) / layoutWidth : 1
 
     component AccentCheckBox: ThemedCheckBox {}
 
@@ -333,11 +336,12 @@ Control {
     }
 
     ColumnLayout {
-        anchors.fill: parent
-        anchors.leftMargin: Theme.spacingXs
-        anchors.rightMargin: Theme.spacingSm
-        anchors.topMargin: Theme.spacingSm
-        anchors.bottomMargin: Theme.spacingXs
+        x: Theme.spacingXs * page.layoutScale
+        y: Theme.spacingSm * page.layoutScale
+        width: page.layoutWidth - Theme.spacingXs - Theme.spacingSm
+        height: page.height / page.layoutScale - Theme.spacingSm - Theme.spacingXs
+        scale: page.layoutScale
+        transformOrigin: Item.TopLeft
         spacing: Theme.spacingXs
 
         Rectangle {
@@ -455,7 +459,7 @@ Control {
                 Layout.fillWidth: page.narrowLayout
                 Layout.fillHeight: !page.macStackedLayout
                 Layout.preferredHeight: page.macStackedLayout ? 260 : -1
-                Layout.preferredWidth: page.narrowLayout ? 0 : Math.max(380, Math.round(page.width * 0.3711))
+                Layout.preferredWidth: page.narrowLayout ? 0 : Math.max(380, Math.round(page.layoutWidth * 0.3711))
                 Layout.maximumWidth: page.narrowLayout ? 10000 : Layout.preferredWidth
                 color: page.panelColor
                 border.color: Theme.border
@@ -619,7 +623,7 @@ Control {
                 Layout.fillWidth: true
                 Layout.fillHeight: !page.macStackedLayout
                 Layout.preferredHeight: page.macStackedLayout ? 850 : -1
-                Layout.preferredWidth: page.narrowLayout ? 0 : Math.max(620, page.width * 0.61)
+                Layout.preferredWidth: page.narrowLayout ? 0 : Math.max(620, page.layoutWidth * 0.61)
                 spacing: 6
 
                 Rectangle {
@@ -681,7 +685,7 @@ Control {
                                     id: prefixField
                                     objectName: "filenamePrefixField"
                                     Layout.fillWidth: true
-                                    Layout.leftMargin: 28
+                                    Layout.leftMargin: page.macDesktopLayout ? 16 : 28
                                     Layout.rightMargin: 9
                                     Layout.preferredHeight: Theme.controlHeight
                                     enabled: prefixAddRadio.checked
@@ -701,7 +705,7 @@ Control {
                                     id: removePrefixField
                                     objectName: "filenameRemovePrefixField"
                                     Layout.fillWidth: true
-                                    Layout.leftMargin: 28
+                                    Layout.leftMargin: page.macDesktopLayout ? 16 : 28
                                     Layout.rightMargin: 9
                                     Layout.preferredHeight: Theme.controlHeight
                                     enabled: prefixRemoveRadio.checked
@@ -732,7 +736,7 @@ Control {
                                     id: suffixField
                                     objectName: "filenameSuffixField"
                                     Layout.fillWidth: true
-                                    Layout.leftMargin: 28
+                                    Layout.leftMargin: page.macDesktopLayout ? 16 : 28
                                     Layout.rightMargin: 9
                                     Layout.preferredHeight: Theme.controlHeight
                                     enabled: suffixAddRadio.checked
@@ -752,7 +756,7 @@ Control {
                                     id: removeSuffixField
                                     objectName: "filenameRemoveSuffixField"
                                     Layout.fillWidth: true
-                                    Layout.leftMargin: 28
+                                    Layout.leftMargin: page.macDesktopLayout ? 16 : 28
                                     Layout.rightMargin: 9
                                     Layout.preferredHeight: Theme.controlHeight
                                     enabled: suffixRemoveRadio.checked
