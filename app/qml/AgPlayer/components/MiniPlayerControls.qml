@@ -139,7 +139,7 @@ Rectangle {
         }
 
         ColumnLayout {
-            Layout.fillWidth: true; Layout.fillHeight: true; spacing: 2
+            Layout.fillWidth: true; Layout.alignment: Qt.AlignVCenter; spacing: 2
             Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 20
@@ -285,7 +285,8 @@ Rectangle {
             RowLayout {
                 id: transport
                 objectName: "miniTransport"
-                Layout.fillWidth: true; Layout.fillHeight: true; spacing: 3
+                Layout.fillWidth: true; Layout.preferredHeight: 34
+                Layout.minimumHeight: 34; Layout.maximumHeight: 34; spacing: 3
                 Item { Layout.fillWidth: true }
                 ToolButton {
                     id: waveformModeButton
