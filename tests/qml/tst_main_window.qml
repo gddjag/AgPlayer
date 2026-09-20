@@ -3649,7 +3649,7 @@ TestCase {
         side.destroy()
     }
 
-    function test_task1b_duplicate_and_invalid_resource_drops_are_rejected() {
+    function test_task1b_duplicate_resource_drop_refreshes_without_duplicate_roots() {
         var filterModel = findChild(mainWindow, "filterModel")
         var window = listWindowComponent.createObject(null, {
             "filterModel": filterModel,
@@ -3661,8 +3661,10 @@ TestCase {
         var invalid = nativeDropHelper.createNonAudioDropFile()
         verify(folder && invalid)
         verify(window.handleResourceDropUrls([folder]))
-        compare(window.handleResourceDropUrls([folder]), false,
-                "an already registered directory must not report success")
+        var rootCount = ResourceFolderController.monitoredFolders.length
+        verify(window.handleResourceDropUrls([folder]),
+                "an already registered directory must accept a refresh")
+        compare(ResourceFolderController.monitoredFolders.length, rootCount)
         compare(window.handleResourceDropUrls([invalid]), false)
         var path = ResourceFolderController.classifyDropUrl(folder).path
         verify(ResourceFolderController.removeMonitoredFolder(path))
