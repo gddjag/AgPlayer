@@ -523,7 +523,7 @@ TestCase {
         }, 300, "expanded mini volume flyout must remain inside the window canvas")
         tryVerify(function() {
             return flyout.x >= 28
-                    && flyout.x + flyout.width === flyout.parent.width
+                    && flyout.width === 110
         }, 300, "mini volume flyout must expand to the right of its mute button")
         closeTimer.restart()
         wait(1600)

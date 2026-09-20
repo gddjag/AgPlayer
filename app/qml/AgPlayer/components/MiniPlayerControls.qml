@@ -408,7 +408,7 @@ Rectangle {
                         y: (parent.height - height) / 2
                         opacity: volumeControl.expanded ? 1 : 0
                         z: 20
-                        width: parent.width - muteButton.width
+                        width: 110
                         height: 32
                         radius: Theme.radiusSm
                         color: Theme.elevated
