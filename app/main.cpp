@@ -319,10 +319,11 @@ int main(int argc, char* argv[])
     app.setApplicationVersion(
         QString::fromLatin1(agplayer::version::kVersion));
     app.setOrganizationName(QStringLiteral("AgPlayer"));
-    const QIcon applicationIcon(QStringLiteral(
 #ifdef Q_OS_MACOS
+    const QIcon applicationIcon(QStringLiteral(
         ":/qt/qml/AgPlayer/assets/brand/macos-app-icon.png"));
 #else
+    const QIcon applicationIcon(QStringLiteral(
         ":/qt/qml/AgPlayer/assets/brand/desktop-install-icon.ico"));
 #endif
     app.setWindowIcon(applicationIcon);
