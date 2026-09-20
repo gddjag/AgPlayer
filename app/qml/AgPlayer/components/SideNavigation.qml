@@ -324,6 +324,7 @@ Item {
         parent: root.Window.window ? root.Window.window.contentItem : root
         anchors.centerIn: parent
         title: qsTr("扫描资源文件夹")
+        width: Math.min(440, fittedContentWidth)
         modal: false
         standardButtons: Dialog.Close
         contentItem: Label {

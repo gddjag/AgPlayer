@@ -5249,6 +5249,8 @@ TestCase {
         var scanStatus = findChild(scanDialog, "resourceScanStatus")
         verify(scanStatus && scanStatus.text.length > 0)
         compare(scanStatus.text, ResourceFolderController.scanSummary)
+        verify(scanDialog.width <= 440, "scan messages must wrap in a compact dialog")
+        verify(scanDialog.width <= scanDialog.parent.width)
         scanDialog.close()
 
         mouseClick(rootNode, rootNode.width / 2, rootNode.height / 2,
