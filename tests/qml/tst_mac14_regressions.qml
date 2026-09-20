@@ -43,7 +43,10 @@ TestCase {
         verify(!findChild(filename, "filenameCompactTabs").visible)
         verify(findChild(filename, "filenameFilePanel").visible)
         verify(findChild(filename, "filenameRulesPanel").visible)
-        verify(findChild(filename, "filenameRulesPanel").x >= findChild(filename, "filenameFilePanel").width)
+        const filenameFiles = findChild(filename, "filenameFilePanel")
+        const filenameRules = findChild(filename, "filenameRulesPanel")
+        verify(filenameRules.mapToItem(filename, 0, 0).x
+               >= filenameFiles.mapToItem(filename, filenameFiles.width, 0).x)
 
         verify(lossless.macDesktopLayout)
         verify(!findChild(lossless, "losslessCompactViewSwitch").visible)

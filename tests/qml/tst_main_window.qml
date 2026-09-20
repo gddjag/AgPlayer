@@ -3741,7 +3741,7 @@ TestCase {
         window.destroy()
     }
 
-    function test_task1b_resource_drop_reports_import_failure() {
+    function test_task1b_resource_drop_filters_invalid_audio() {
         tryVerify(function() {
             return !ResourceFolderController.scanning
                     && !ImportController.busy
@@ -3762,9 +3762,12 @@ TestCase {
         verify(importFinished)
         verify(window.handleResourceDropUrls([folder]))
         tryCompare(importFinished, "count", 1, 5000)
-        tryCompare(window, "resourceDropStatus", "failed", 1000)
+        tryCompare(window, "resourceDropStatus", "completed", 1000)
+        compare(ImportController.errors.length, 0)
+        verify(ImportController.filteredCount > 0)
+        compare(ImportController.importedTrackIds.length, 0)
         var statusLabel = findChild(window, "resourceDropStatusLabel")
-        verify(statusLabel && statusLabel.text.indexOf("失败") >= 0)
+        verify(statusLabel && statusLabel.text.indexOf("失败") < 0)
         var path = ResourceFolderController.classifyDropUrl(folder).path
         verify(ResourceFolderController.removeMonitoredFolder(path))
         ImportController.clearErrors()
