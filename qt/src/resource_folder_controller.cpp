@@ -83,9 +83,21 @@ void ResourceFolderController::setLibraryModel(LibraryModel* model)
 
 bool ResourceFolderController::scanning() const noexcept { return scanning_; }
 
+void ResourceFolderController::rescanAll()
+{
+    // An explicit retry must not reuse a previous decoder rejection. Automatic
+    // watcher/startup scans still skip unchanged rejected files.
+    if (!rejectedFileSignatures_.isEmpty()) {
+        rejectedFileSignatures_.clear();
+        rejectedStateDirty_ = !saveMonitoredFolders();
+    }
+    rescan();
+}
+
 void ResourceFolderController::rescan()
 {
     debounce_.stop();
+    rescanAfterImport_ = false;
     if (scanCancel_) scanCancel_->store(true);
     const quint64 generation = ++scanGeneration_;
     const auto cancelled = std::make_shared<std::atomic_bool>(false);
@@ -121,7 +133,11 @@ void ResourceFolderController::rescan()
         emit controller->scanFinished();
         if (controller.isNull()) return;
 
-        if (controller->importer_ != nullptr && !controller->importer_->busy()) {
+        if (controller->importer_ != nullptr && controller->importer_->busy()) {
+            // Keep this request until the shared importer is available. Folder
+            // discovery must not silently disappear during an unrelated import.
+            controller->rescanAfterImport_ = true;
+        } else if (controller->importer_ != nullptr) {
             QStringList newFiles;
             for (const QString& path : result.value(QStringLiteral("files")).toStringList()) {
                 if (!controller->excludedPaths_.contains(resourceLookupKey(path))
@@ -318,6 +334,7 @@ void ResourceFolderController::setImportController(ImportController* controller)
         connect(importer_, &ImportController::finished, this, [this] {
             pendingFileSignatures_.clear();
             if (rejectedStateDirty_) rejectedStateDirty_ = !saveMonitoredFolders();
+            if (rescanAfterImport_) scheduleRescan();
         });
         connect(importer_, &ImportController::importedTrackIdsChanged, this,
                 [this] {

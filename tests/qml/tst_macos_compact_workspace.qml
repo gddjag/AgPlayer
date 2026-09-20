@@ -60,6 +60,23 @@ TestCase {
         waitForRendering(page); wait(0)
         const main = findChild(page, "editorMainColumn")
         verify(main.singleRowTransport, "live workspace must use the Mac transport")
+        const commandBar = findChild(page, "editorCommandBar")
+        verify(commandBar.height <= 40)
+        verify(main.trackHeight >= 76, "space saved by compact commands goes to the tracks")
+        for (const action of ["importAudio", "saveProject", "undo", "split", "denoise", "delete", "clear"]) {
+            const command = findChild(page, "editorCommand_" + action)
+            const icon = findChild(page, "editorCommandIcon_" + action)
+            const label = findChild(page, "editorCommandLabel_" + action)
+            const iconCenter = icon.mapToItem(command, icon.width / 2, icon.height / 2)
+            const labelCenter = label.mapToItem(command, label.width / 2, label.height / 2)
+            verify(labelCenter.x > iconCenter.x)
+            verify(Math.abs(iconCenter.y - command.height / 2) < 1)
+            verify(Math.abs(labelCenter.y - command.height / 2) < 1)
+            verify(icon.mapToItem(command, 0, 0).x >= 7)
+            verify(label.mapToItem(command, label.width, 0).x <= command.width - 7)
+        }
+        const capsule = findChild(page, "editorPlayheadTimeCapsule")
+        verify(capsule.color.a > 0 && capsule.color.a < 1)
         const button = findChild(page, "editorRecordButton")
         button.text = "停止录音"
         wait(0)
@@ -90,5 +107,47 @@ TestCase {
         inside(findChild(page, "separationPrimaryAction"), bar)
         if (typeof visualFixtureOutput !== "undefined" && visualFixtureOutput.length)
             grabImage(page).save(visualFixtureOutput + "-separation-" + data.tag + ".png")
+    }
+
+    function test_mini_cover_alignment_data() {
+        return [{tag: "compact", w: 584, h: 150}, {tag: "wide", w: 800, h: 160}]
+    }
+    function test_mini_cover_alignment(data) {
+        const page = createTemporaryObject(component("../MiniPlayerControls"), suite,
+            {width: data.w, height: data.h, color: Theme.background, macAlignedContent: true, waveformActive: false})
+        verify(page)
+        waitForRendering(page); wait(0)
+        const cover = findChild(page, "miniCover")
+        const column = findChild(page, "miniContentColumn")
+        const coverTop = cover.mapToItem(page, 0, 0).y
+        const contentTop = column.mapToItem(page, 0, 0).y
+        verify(Math.abs(coverTop - contentTop) < 1)
+        verify(Math.abs(column.height - cover.height) < 1)
+        for (const name of ["miniTrackTitle", "miniMetadataRow", "miniWaveformContainer", "miniTransport"])
+            inside(findChild(page, name), column)
+        if (typeof visualFixtureOutput !== "undefined" && visualFixtureOutput.length)
+            grabImage(page).save(visualFixtureOutput + "-mini-" + data.tag + ".png")
+    }
+    function test_format_four_columns_data() {
+        return [{tag: "compact", w: 350}, {tag: "wide", w: 430}]
+    }
+    function test_format_four_columns(data) {
+        const page = createTemporaryObject(component("FormatSettingsPanel"), suite,
+            {width: data.w, height: 800, converter: FormatConverter, macFourColumnFormats: true})
+        verify(page)
+        waitForRendering(page); wait(0)
+        const grid = findChild(page, "formatOutputFormatGrid")
+        compare(grid.columns, 4)
+        const buttons = []
+        for (const child of grid.children)
+            if (child.objectName.indexOf("formatOutputFormatButton-") === 0) buttons.push(child)
+        compare(buttons.length, 8)
+        for (let i = 0; i < buttons.length; ++i) {
+            inside(buttons[i], page)
+            compare(buttons[i].y, buttons[i < 4 ? 0 : 4].y)
+        }
+        verify(buttons[4].y > buttons[0].y)
+        if (typeof visualFixtureOutput !== "undefined" && visualFixtureOutput.length)
+            grabImage(page).save(visualFixtureOutput + "-formats-" + data.tag + ".png")
     }
 }

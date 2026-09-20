@@ -1,10 +1,12 @@
 #include "resource_folder_controller.hpp"
 #include "import_controller.hpp"
 #include "library_model.hpp"
+#include "library_navigation_model.hpp"
 #include <QFile>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QSignalSpy>
+#include <QSemaphore>
 #include <QTest>
 #include <filesystem>
 
@@ -22,7 +24,95 @@ private slots:
     void discoveryDoesNotRunTrackMaintenance();
     void rejectedAudioIsSkippedAcrossRescansAndRestartUntilChanged();
     void resourceReadErrorsRemainVisibleAndRetryable();
+    void folderScanWaitsForBusyImporter();
+    void manualRescanRetriesRejectedAudio();
 };
+
+void ResourceFolderControllerTest::folderScanWaitsForBusyImporter()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString music = dir.filePath(QStringLiteral("music"));
+    QVERIFY(QDir().mkpath(music));
+    const QString existing = dir.filePath(QStringLiteral("existing.wav"));
+    const QString added = QDir(music).filePath(QStringLiteral("added.wav"));
+    for (const QString& path : {existing, added}) {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("audio");
+    }
+    QSemaphore entered, release;
+    LibraryModel library;
+    ImportController importer(&library, [&](const QString& path) {
+        if (path == canonicalLibraryPath(existing)) {
+            entered.release();
+            release.tryAcquire(1, 5000);
+        }
+        TrackRecord track;
+        track.path = path;
+        track.title = QFileInfo(path).baseName();
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    });
+    ResourceFolderController folders;
+    folders.setLibraryModel(&library);
+    folders.setImportController(&importer);
+    LibraryNavigationModel navigation(&library, nullptr, nullptr, &folders);
+    QSignalSpy scanned(&folders, &ResourceFolderController::scanFinished);
+    importer.importPaths({existing});
+    QVERIFY(entered.tryAcquire(1, 3000));
+    QVERIFY(folders.addMonitoredFolder(music));
+    folders.rescan();
+    QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 3000);
+    QVERIFY(importer.busy());
+    release.release();
+    QTRY_COMPARE_WITH_TIMEOUT(library.count(), 2, 5000);
+    QVERIFY(library.containsPath(added));
+    bool resourceCountUpdated = false;
+    for (int row = 0; row < navigation.rowCount(); ++row) {
+        const QModelIndex index = navigation.index(row, 0);
+        if (navigation.data(index, LibraryNavigationModel::ResourceFolderRole).toString()
+                == canonicalLibraryPath(music)) {
+            QCOMPARE(navigation.data(index, LibraryNavigationModel::CountRole).toInt(), 1);
+            resourceCountUpdated = true;
+        }
+    }
+    QVERIFY(resourceCountUpdated);
+}
+
+void ResourceFolderControllerTest::manualRescanRetriesRejectedAudio()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("retry.mp3"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("audio");
+    file.close();
+    std::atomic_bool readable{false};
+    LibraryModel library;
+    ImportController importer(&library, [&](const QString& input) {
+        if (!readable.load()) return ProbeResult{AG_DECODE_ERROR, {}, "decode failed"};
+        TrackRecord track;
+        track.path = input;
+        track.title = QStringLiteral("Recovered");
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    });
+    ResourceFolderController folders;
+    folders.setLibraryModel(&library);
+    folders.setImportController(&importer);
+    QSignalSpy finished(&importer, &ImportController::finished);
+    QVERIFY(folders.addMonitoredFolder(dir.path()));
+    folders.rescan();
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 3000);
+    QCOMPARE(importer.filteredCount(), 1);
+    readable.store(true);
+    folders.rescanAll();
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 2, 3000);
+    QCOMPARE(library.count(), 1);
+    QVERIFY(library.containsPath(path));
+}
 
 namespace {
 QString writeFile(const QString& path, const QByteArray& bytes)
