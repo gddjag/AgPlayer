@@ -18,6 +18,7 @@ class LibraryNavigationModelTest final : public QObject {
 
 private slots:
     void buildsRequiredLibraryAndTopLevelHierarchy();
+    void updatesHistoryCountWithoutRebuildingNavigation();
     void keepsLibraryExpandableWhenThereAreNoCustomPlaylists();
     void expandsOnlyTheRequestedFolderRange();
     void expandsThreeLevelsIndependentlyFromIndexedTopology();
@@ -51,8 +52,8 @@ int rowForNode(const LibraryNavigationModel& model, const QString& nodeId)
 
 void LibraryNavigationModelTest::buildsRequiredLibraryAndTopLevelHierarchy()
 {
-    // Catches custom playlists returning to the top level, legacy history
-    // filters becoming visible again, or the library node losing expansion.
+    // Keep recent playback directly below favorites without exposing the
+    // other legacy filters or moving custom playlists to the top level.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     LibraryModel library;
@@ -89,7 +90,6 @@ void LibraryNavigationModelTest::buildsRequiredLibraryAndTopLevelHierarchy()
         const QModelIndex index = navigation.index(row, 0);
         const QString type = navigation.data(
             index, LibraryNavigationModel::NodeTypeRole).toString();
-        QVERIFY(type != QStringLiteral("history"));
         QVERIFY(type != QStringLiteral("recentAdded"));
         QVERIFY(type != QStringLiteral("neverPlayed"));
         if (navigation.data(index, LibraryNavigationModel::DepthRole).toInt() == 0
@@ -100,16 +100,52 @@ void LibraryNavigationModelTest::buildsRequiredLibraryAndTopLevelHierarchy()
     QCOMPARE(topLevelTypes,
              QStringList({QStringLiteral("library"),
                           QStringLiteral("favorites"),
+                          QStringLiteral("history"),
                           QStringLiteral("tags")}));
 
     QVERIFY(navigation.setExpanded(libraryId, false));
     QCOMPARE(rowForNode(navigation, firstId), -1);
     QCOMPARE(rowForNode(navigation, secondId), -1);
     QVERIFY(rowForNode(navigation, QStringLiteral("favorites:favorites")) >= 0);
+    QVERIFY(rowForNode(navigation, QStringLiteral("history:history")) >= 0);
     QVERIFY(rowForNode(navigation, QStringLiteral("tags:manage")) >= 0);
     QVERIFY(navigation.setExpanded(libraryId, true));
     QVERIFY(rowForNode(navigation, firstId) >= 0);
     QVERIFY(rowForNode(navigation, secondId) >= 0);
+}
+
+void LibraryNavigationModelTest::updatesHistoryCountWithoutRebuildingNavigation()
+{
+    LibraryModel library;
+    TrackRecord first;
+    first.trackId = QStringLiteral("first");
+    first.path = QDir::temp().filePath(QStringLiteral("history-first.wav"));
+    first.playCount = 1;
+    first.lastPlayedAtMs = 1000;
+    TrackRecord second;
+    second.trackId = QStringLiteral("second");
+    second.path = QDir::temp().filePath(QStringLiteral("history-second.wav"));
+    library.replaceAll({first, second});
+    LibraryNavigationModel navigation(&library, nullptr, nullptr, nullptr);
+    const int row = rowForNode(navigation, QStringLiteral("history:history"));
+    QVERIFY(row >= 0);
+    const auto count = [&] {
+        return navigation.data(navigation.index(row, 0),
+                               LibraryNavigationModel::CountRole).toInt();
+    };
+    QSignalSpy resets(&navigation, &QAbstractItemModel::modelReset);
+    QCOMPARE(count(), 1);
+    QVERIFY(library.markPlayed(second.trackId, 2000));
+    QCOMPARE(count(), 2);
+    QVERIFY(library.markPlayed(second.trackId, 3000));
+    QCOMPARE(count(), 2);
+    QVERIFY(library.removeFromHistory(first.trackId));
+    QCOMPARE(count(), 1);
+    QVERIFY(library.removeFromHistory(second.trackId));
+    QCOMPARE(count(), 0);
+    QCOMPARE(resets.count(), 0);
+    library.replaceAll({first});
+    QCOMPARE(count(), 1);
 }
 
 void LibraryNavigationModelTest::keepsLibraryExpandableWhenThereAreNoCustomPlaylists()

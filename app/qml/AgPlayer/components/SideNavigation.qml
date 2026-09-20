@@ -356,6 +356,7 @@ Item {
         parent: root.Window.window ? root.Window.window.contentItem : root
         anchors.centerIn: parent
         title: qsTr("扫描资源文件夹")
+        width: Math.min(440, fittedContentWidth)
         modal: false
         standardButtons: Dialog.Close
         contentItem: Label {
@@ -453,7 +454,7 @@ Item {
             required property string resourceFolder
             required property bool hasChildren
             readonly property int nodeIconVisualSize:
-                nodeType === "library" ? root.navigationIconVisualSize + 2
+                nodeType === "library" ? root.navigationIconVisualSize + 4
                                          : root.navigationIconVisualSize
 
             readonly property bool selected: root.nodeIsSelected(
@@ -493,7 +494,7 @@ Item {
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
                     height: 42
-                    anchors.leftMargin: 8
+                    anchors.leftMargin: 4
                     anchors.rightMargin: 4
                     spacing: 4
                     Image {
@@ -505,13 +506,13 @@ Item {
                         Layout.preferredHeight: root.navigationIconVisualSize
                     }
                     Text {
-                        objectName: "resourceFolderRefreshLabel"
+                        objectName: "resourceFolderSectionLabel"
                         text: root.resourceRefreshActive ? qsTr("资源文件夹 · 刷新中…")
                               : root.resourceRefreshCompleted ? qsTr("资源文件夹 · 已刷新")
                               : qsTr("资源文件夹")
                         color: Theme.tagSecondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: Theme.fontSizeCaption
+                        font.pixelSize: Theme.fontSizeBody
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
@@ -555,9 +556,9 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 6 + nodeRow.depth * 12
-                anchors.rightMargin: 8
-                spacing: 4
+                anchors.leftMargin: 2 + nodeRow.depth * 12
+                anchors.rightMargin: 6
+                spacing: 2
                 visible: nodeRow.nodeType !== "resourceSection"
                 z: 4
 

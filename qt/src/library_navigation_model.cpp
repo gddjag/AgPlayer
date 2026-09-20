@@ -41,6 +41,10 @@ LibraryNavigationModel::LibraryNavigationModel(
                 });
         connect(library_, &QAbstractItemModel::modelReset, this,
                 [this] { rebuildBaseRows(); });
+        connect(library_, &LibraryModel::historyCountChanged, this, [this] {
+            updateNodeCount(rowForNodeId(QStringLiteral("history:history")),
+                            library_->historyCount(), {CountRole});
+        });
     }
     if (playlists_ != nullptr) {
         connect(playlists_, &QAbstractItemModel::rowsInserted, this,
@@ -258,6 +262,9 @@ void LibraryNavigationModel::rebuildBaseRows()
                                   QStringLiteral("favorites")),
                  QStringLiteral("favorites"), 0, tr("我的收藏"), favoriteCount,
                  false, {}});
+    rows.append({navigationNodeId(QStringLiteral("history"), QStringLiteral("history")),
+                 QStringLiteral("history"), 0, tr("最近播放"),
+                 library_ == nullptr ? 0 : library_->historyCount(), false, {}});
     rows.append({navigationNodeId(QStringLiteral("tags"), QStringLiteral("manage")),
                  QStringLiteral("tags"), 0, tr("标签管理"),
                  tags_ == nullptr ? 0 : tags_->count(), false, {}});

@@ -117,6 +117,8 @@ Window {
             return enterCategory("all", "library")
         if (nodeType === "favorites")
             return enterCategory("favorites", "favorites")
+        if (nodeType === "history")
+            return enterCategory("history", "history")
         if (nodeType === "playlist")
             return enterCategory(nodeId.substring("playlist:".length),
                                  "playlist")

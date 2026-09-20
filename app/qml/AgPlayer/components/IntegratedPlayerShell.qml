@@ -37,7 +37,7 @@ Item {
                                   ? Theme.navigationWidthCompact
                                   : Theme.navigationWidth
     property int rightColumnWidth: Theme.playerInspectorWidth
-    property int waveformHeight: 120
+    property int waveformHeight: 96
     property int waveformNavigatorHeight: 8
     property int bottomBarHeight: Theme.playerBottomBarHeight
     property int contentSpacing: Theme.spacingSm

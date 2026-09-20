@@ -660,7 +660,8 @@ TestCase {
         tryCompare(waveform, "visualMode", 2)
         compare(waveform.lineWidth, 3)
         compare(waveform.spectrumBarCount, 128)
-        compare(waveform.spectrumBarGap, 2)
+        compare(waveform.spectrumBarWidth, 7)
+        compare(waveform.spectrumBarGap, 3)
         SettingsController.waveformMode = previousMode
     }
 
