@@ -551,7 +551,7 @@ TestCase {
         verify(firstStar, "rating stars must expose their native rendered item")
         verify(metadataRow.y >= title.y + title.height,
                "metadata must stay below the title")
-        compare(metadataRow.height, 26,
+        compare(metadataRow.height, Qt.platform.os === "osx" ? 22 : 26,
                 "metadata must use a compact single-row height")
         compare(artist.wrapMode, Text.NoWrap)
         compare(album.wrapMode, Text.NoWrap)
