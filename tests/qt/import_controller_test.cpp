@@ -733,8 +733,10 @@ void ImportControllerTest::importsTenThousandLightweightRecordsWithinBudget()
 
 void ImportControllerTest::performanceRealImportResponsiveness()
 {
-    if (!qEnvironmentVariableIsSet("AGPLAYER_RUN_PERFORMANCE"))
-        QSKIP("Opt-in real-file performance measurement");
+    if (!qEnvironmentVariableIsSet("AGPLAYER_RUN_PERFORMANCE")) {
+        QTest::qSkip("Opt-in real-file performance measurement", __FILE__, __LINE__);
+        return;
+    }
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const QString source = dir.filePath(QStringLiteral("source.wav"));
