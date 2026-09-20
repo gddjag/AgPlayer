@@ -97,7 +97,6 @@ void ResourceFolderController::rescanAll()
 void ResourceFolderController::rescan()
 {
     debounce_.stop();
-    rescanAfterImport_ = false;
     if (scanCancel_) scanCancel_->store(true);
     const quint64 generation = ++scanGeneration_;
     const auto cancelled = std::make_shared<std::atomic_bool>(false);
@@ -127,38 +126,49 @@ void ResourceFolderController::rescan()
             emit controller->resourceTopologyChanged();
             if (controller.isNull()) return;
         }
+        QStringList newFiles;
+        const QStringList files = result.value(QStringLiteral("files")).toStringList();
+        for (const QString& path : files) {
+            if (!controller->excludedPaths_.contains(resourceLookupKey(path))
+                && (controller->library_ == nullptr || !controller->library_->containsPath(path))) {
+                const QString key = resourceLookupKey(canonicalLibraryPath(path));
+                const QString signature = fileSignature(path);
+                if (!signature.isEmpty()
+                    && controller->rejectedFileSignatures_.value(key) == signature)
+                    continue;
+                controller->pendingFileSignatures_.insert(key, signature);
+                newFiles.append(path);
+            }
+        }
+        controller->scanSummary_ = controller->monitoredRoots_.isEmpty()
+            ? tr("尚未添加资源文件夹，请先添加文件夹。")
+            : tr("扫描完成：发现 %1 个音频文件，%2 个新文件已提交导入。已有歌曲和主动移除的歌曲不会重复加入。")
+                .arg(files.size()).arg(controller->importer_ ? newFiles.size() : 0);
+        if (!newFiles.isEmpty() && !controller->importer_)
+            controller->scanSummary_ += tr("\n导入服务未就绪，请稍后重试。");
+        const QStringList unavailable = result.value(QStringLiteral("unavailable")).toStringList();
+        if (!unavailable.isEmpty())
+            controller->scanSummary_ += tr("\n以下文件夹不可访问，请检查磁盘连接或权限：\n%1").arg(unavailable.join('\n'));
         controller->scanning_ = false;
         emit controller->scanningChanged();
         if (controller.isNull()) return;
         emit controller->scanFinished();
         if (controller.isNull()) return;
 
-        if (controller->importer_ != nullptr && controller->importer_->busy()) {
-            // Keep this request until the shared importer is available. Folder
-            // discovery must not silently disappear during an unrelated import.
-            controller->rescanAfterImport_ = true;
-        } else if (controller->importer_ != nullptr) {
-            QStringList newFiles;
-            for (const QString& path : result.value(QStringLiteral("files")).toStringList()) {
-                if (!controller->excludedPaths_.contains(resourceLookupKey(path))
-                    && (controller->library_ == nullptr
-                        || !controller->library_->containsPath(path))) {
-                    const QString key = resourceLookupKey(canonicalLibraryPath(path));
-                    const QString signature = fileSignature(path);
-                    if (!signature.isEmpty()
-                        && controller->rejectedFileSignatures_.value(key) == signature)
-                        continue;
-                    controller->pendingFileSignatures_.insert(key, signature);
-                    newFiles.append(path);
-                }
-            }
+        if (controller->importer_ != nullptr) {
+            // ImportController queues requests while busy; never discard discovery.
             if (!newFiles.isEmpty()) controller->importer_->importResourcePaths(newFiles);
         }
     });
     watcher->setFuture(QtConcurrent::run([roots, cancelled] {
-        QStringList directories, files;
+        QStringList directories, files, unavailable;
         for (const QString& root : roots) {
             if (cancelled->load()) break;
+            const QFileInfo rootInfo(root);
+            if (!rootInfo.isDir() || !rootInfo.isReadable()) {
+                unavailable.append(root);
+                continue;
+            }
             QDirIterator iterator(root, QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot,
                                   QDirIterator::Subdirectories);
             while (!cancelled->load() && iterator.hasNext()) {
@@ -170,7 +180,8 @@ void ResourceFolderController::rescan()
         }
         files.removeDuplicates();
         return QVariantMap{{QStringLiteral("directories"), directories},
-                           {QStringLiteral("files"), files}};
+                           {QStringLiteral("files"), files},
+                           {QStringLiteral("unavailable"), unavailable}};
     }));
 }
 
@@ -326,15 +337,15 @@ void ResourceFolderController::setImportController(ImportController* controller)
             // Permission and temporary I/O failures must remain retryable.
             if (result != AG_UNSUPPORTED_FORMAT && result != AG_DECODE_ERROR) return;
             const QString key = resourceLookupKey(path);
-            const QString before = pendingFileSignatures_.value(key);
+            const QString before = pendingFileSignatures_.take(key);
             if (before.isEmpty() || before != fileSignature(path)) return;
             rejectedFileSignatures_.insert(key, before);
             rejectedStateDirty_ = true;
         });
         connect(importer_, &ImportController::finished, this, [this] {
-            pendingFileSignatures_.clear();
+            // A finished batch can have a resource batch queued behind it.
+            // Keep those signatures until their own rejection/success arrives.
             if (rejectedStateDirty_) rejectedStateDirty_ = !saveMonitoredFolders();
-            if (rescanAfterImport_) scheduleRescan();
         });
         connect(importer_, &ImportController::importedTrackIdsChanged, this,
                 [this] {
@@ -344,6 +355,7 @@ void ResourceFolderController::setImportController(ImportController* controller)
                 const TrackRecord* const track = library_->recordForId(trackId);
                 if (track == nullptr) continue;
                 const QString key = resourceLookupKey(track->path);
+                pendingFileSignatures_.remove(key);
                 if (rejectedFileSignatures_.remove(key) > 0) rejectedStateDirty_ = true;
                 const auto exclusion = excludedPaths_.constFind(key);
                 if (exclusion == excludedPaths_.cend()) continue;

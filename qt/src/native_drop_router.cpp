@@ -10,6 +10,7 @@
 #include <QMimeData>
 #include <QSet>
 #include <QWindow>
+#include <QDebug>
 
 #ifdef Q_OS_WIN
 #define WIN32_LEAN_AND_MEAN
@@ -80,11 +81,38 @@ void NativeDropRouter::unregisterWindow(QWindow* window)
 #endif
 }
 
+QWindow* NativeDropRouter::windowAtDropPosition(QWindow* receiver, QPointF& position) const
+{
+    if (QRectF(QPointF(), receiver->size()).contains(position)) return receiver;
+    // Owned top-level windows can deliver OLE drops to their owner. The event
+    // remains in the owner's coordinates, even when the cursor is over the list.
+    const QPointF global = QPointF(receiver->mapToGlobal(QPoint())) + position;
+    for (auto* candidate : QGuiApplication::allWindows()) {
+        if (candidate == receiver || !candidate->isVisible()
+            || candidate->visibility() == QWindow::Minimized
+            || !targets_.contains(static_cast<quintptr>(candidate->winId()))) continue;
+        const QPointF local = global - QPointF(candidate->mapToGlobal(QPoint()));
+        if (QRectF(QPointF(), candidate->size()).contains(local)) {
+            position = local;
+            return candidate;
+        }
+    }
+    return receiver;
+}
+
 bool NativeDropRouter::eventFilter(QObject* watched, QEvent* event)
 {
     QWindow* window = qobject_cast<QWindow*>(watched);
     if (window == nullptr || event == nullptr) {
         return QObject::eventFilter(watched, event);
+    }
+    if (!targets_.contains(static_cast<quintptr>(window->winId())))
+        return QObject::eventFilter(watched, event);
+    QPointF position;
+    if (event->type() == QEvent::DragEnter || event->type() == QEvent::DragMove
+        || event->type() == QEvent::Drop) {
+        position = static_cast<QDropEvent*>(event)->position();
+        window = windowAtDropPosition(window, position);
     }
     const auto target = targets_.constFind(static_cast<quintptr>(window->winId()));
     if (target == targets_.cend()) {
@@ -116,7 +144,8 @@ bool NativeDropRouter::eventFilter(QObject* watched, QEvent* event)
         // QML never received DragEnter when this router consumed it above.
         auto* drag = static_cast<QDragMoveEvent*>(event);
         if (drag->mimeData() != nullptr && drag->mimeData()->hasUrls()) {
-            if (*target == Target::List
+            if (window == watched && *target == Target::List
+                && resolvedTargetAt(position) != Target::ResourceFolder
                 && containsLocalDirectory(drag->mimeData())) {
                 return QObject::eventFilter(watched, event);
             }
@@ -129,8 +158,12 @@ bool NativeDropRouter::eventFilter(QObject* watched, QEvent* event)
         if (drop->mimeData() == nullptr || !drop->mimeData()->hasUrls()) {
             return true;
         }
-        const Target resolvedTarget = resolvedTargetAt(drop->position());
-        if (*target == Target::List
+        const Target resolvedTarget = resolvedTargetAt(position);
+        if (window != watched)
+            qInfo() << "Routed owner-window drop to" << window->objectName()
+                    << position << static_cast<int>(resolvedTarget);
+        if (window == watched && *target == Target::List
+            && resolvedTarget != Target::ResourceFolder
             && containsLocalDirectory(drop->mimeData())) {
             return QObject::eventFilter(watched, event);
         }
@@ -143,7 +176,7 @@ bool NativeDropRouter::eventFilter(QObject* watched, QEvent* event)
             }
         }
         if (!paths.isEmpty()) {
-            routeLocalPaths(resolvedTarget, paths, drop->position());
+            routeLocalPaths(resolvedTarget, paths, position);
             drop->acceptProposedAction();
         }
         return true;
@@ -195,12 +228,22 @@ bool NativeDropRouter::nativeEventFilter(const QByteArray& eventType,
     QPointF logicalPosition(-1, -1);
     if (DragQueryPoint(drop, &clientPoint)) {
         qreal scale = 1;
+        QWindow* receiver = nullptr;
         for (auto* window : QGuiApplication::allWindows())
-            if (static_cast<quintptr>(window->winId()) == handle) { scale = window->devicePixelRatio(); break; }
+            if (static_cast<quintptr>(window->winId()) == handle) {
+                receiver = window;
+                scale = window->devicePixelRatio();
+                break;
+            }
         logicalPosition = QPointF(clientPoint.x / scale, clientPoint.y / scale);
-        const auto hitTarget = hitTargets_.constFind(handle);
+        const auto resolvedWindow = receiver != nullptr
+            ? windowAtDropPosition(receiver, logicalPosition) : nullptr;
+        const auto resolvedHandle = resolvedWindow != nullptr
+            ? static_cast<quintptr>(resolvedWindow->winId()) : handle;
+        resolvedTarget = targets_.value(resolvedHandle, *target);
+        const auto hitTarget = hitTargets_.constFind(resolvedHandle);
         if (hitTarget != hitTargets_.cend()
-            && hitTarget->hitTest(QPointF(clientPoint.x, clientPoint.y))) {
+            && hitTarget->hitTest(logicalPosition)) {
             resolvedTarget = hitTarget->target;
         }
     }

@@ -72,12 +72,34 @@ Item {
     signal importRequested(string playlistId)
     signal importPlaylistRequested()
     signal exportPlaylistRequested(string playlistId)
-    signal resourceUrlsDropped(var urls)
+    signal resourceUrlsDropped(var urls, bool directoriesAdded)
     signal resourceFolderRemoved(string folder)
 
     function submitResourceUrls(urls) {
         resourceDropAccepted = false
-        resourceUrlsDropped(urls)
+        if (!urls || !urls.length)
+            return false
+        var audioUrls = []
+        // All three shells use the same resource submission path. Register
+        // directories before importing; an ordinary library import alone
+        // cannot create a resource root or its watcher/count rows.
+        for (var i = 0; i < urls.length; ++i) {
+            var entry = ResourceFolderController.classifyDropUrl(urls[i])
+            if (entry.kind === ResourceFolderController.Directory) {
+                ResourceFolderController.addMonitoredFolder(entry.path)
+                resourceDropAccepted = true
+            } else if (entry.kind === ResourceFolderController.AudioFile) {
+                audioUrls.push(entry.url)
+            }
+        }
+        var directoriesAdded = resourceDropAccepted
+        if (directoriesAdded)
+            ResourceFolderController.rescanAll()
+        if (audioUrls.length && !ImportController.busy) {
+            ImportController.importUrls(audioUrls)
+            resourceDropAccepted = true
+        }
+        resourceUrlsDropped(urls, directoriesAdded)
         return resourceDropAccepted
     }
 
@@ -319,7 +341,29 @@ Item {
         SystemMenuItem {
             objectName: "resourceFolderMenuRescan"
             text: qsTr("重新扫描全部资源文件夹")
-            onTriggered: ResourceFolderController.rescanAll()
+            enabled: !ResourceFolderController.scanning
+            onTriggered: {
+                ResourceFolderController.rescanAll()
+                resourceScanDialog.open()
+            }
+        }
+    }
+
+    ThemedDialog {
+        id: resourceScanDialog
+        objectName: "resourceScanDialog"
+        parent: root.Window.window ? root.Window.window.contentItem : root
+        anchors.centerIn: parent
+        title: qsTr("扫描资源文件夹")
+        modal: false
+        standardButtons: Dialog.Close
+        contentItem: Label {
+            objectName: "resourceScanStatus"
+            text: ResourceFolderController.scanning
+                ? qsTr("正在扫描全部资源文件夹及子文件夹，请稍候…")
+                : ResourceFolderController.scanSummary
+            color: Theme.primaryText
+            wrapMode: Text.Wrap
         }
     }
 
@@ -580,9 +624,13 @@ Item {
                     font.pixelSize: Theme.fontSizeBody
                     elide: Text.ElideRight
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                 }
                 Text {
+                    objectName: "navigationNodeCount-" + nodeRow.nodeId
                     text: nodeRow.count
+                    Layout.minimumWidth: implicitWidth
+                    Layout.preferredWidth: implicitWidth
                     color: Theme.tagSecondaryText
                     font.family: Theme.fontPrimary
                     font.pixelSize: Theme.fontSizeCaption
@@ -699,14 +747,16 @@ Item {
     FileDropArea {
         id: resourceDropTarget
         objectName: "resourceFolderDropTarget"
-        anchors.left: navigationList.left
-        anchors.right: navigationList.right
+        // The sidebar padding below the resource heading belongs to this
+        // area too, not to the window-wide ordinary music import fallback.
+        anchors.left: parent.left
+        anchors.right: parent.right
         y: {
             navigationList.contentY
             navigationList.count
             return root.resourceSectionTop()
         }
-        height: Math.max(0, navigationList.y + navigationList.height - y)
+        height: Math.max(0, root.height - y)
         visible: height > 0
         z: -1
         urlsSubmitter: root.submitResourceUrls

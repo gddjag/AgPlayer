@@ -8,6 +8,7 @@
 #include <QSignalSpy>
 #include <QSemaphore>
 #include <QTest>
+#include <QThread>
 #include <filesystem>
 
 class ResourceFolderControllerTest final : public QObject {
@@ -19,6 +20,7 @@ private slots:
     void classifiesEverySupportedAudioExtension();
     void removesPersistedRootWithoutDeletingFiles();
     void persistsRootsAndImportsNewAudioRecursively();
+    void rescanQueuesNewFilesWhileImporterIsBusy();
     void removedLibraryTrackStaysExcludedUntilManualImport();
     void failedExclusionPersistenceKeepsTrackInLibrary();
     void discoveryDoesNotRunTrackMaintenance();
@@ -315,6 +317,45 @@ void ResourceFolderControllerTest::persistsRootsAndImportsNewAudioRecursively()
     ResourceFolderController restored;
     restored.setStoragePath(settingsPath);
     QCOMPARE(restored.monitoredFolders(), QStringList({musicRoot}));
+}
+
+void ResourceFolderControllerTest::rescanQueuesNewFilesWhileImporterIsBusy()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString root = directory.filePath(QStringLiteral("music"));
+    QVERIFY(QDir().mkpath(root));
+    const QString first = writeFile(directory.filePath(QStringLiteral("first.mp3")), "audio");
+    const QString second = writeFile(QDir(root).filePath(QStringLiteral("second.mp3")), "audio");
+    const auto release = std::make_shared<std::atomic_bool>(false);
+    struct ReleaseOnExit {
+        std::shared_ptr<std::atomic_bool> flag;
+        ~ReleaseOnExit() { flag->store(true); }
+    };
+    LibraryModel library;
+    ImportController importer(&library, [release, first](const QString& path) {
+        if (path == first) {
+            for (int i = 0; i < 5000 && !release->load(); ++i) QThread::msleep(1);
+        }
+        TrackRecord track;
+        track.path = path;
+        track.title = QFileInfo(path).completeBaseName();
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    });
+    ReleaseOnExit guard{release};
+    ResourceFolderController folders;
+    folders.setLibraryModel(&library);
+    folders.setImportController(&importer);
+    QVERIFY(folders.addMonitoredFolder(root));
+    importer.importPaths({first});
+    QVERIFY(importer.busy());
+    QSignalSpy scanned(&folders, &ResourceFolderController::scanFinished);
+    folders.rescan();
+    QTRY_COMPARE_WITH_TIMEOUT(scanned.count(), 1, 2000);
+    QVERIFY(importer.busy());
+    release->store(true);
+    QTRY_VERIFY_WITH_TIMEOUT(library.containsPath(second), 3000);
 }
 
 void ResourceFolderControllerTest::removedLibraryTrackStaysExcludedUntilManualImport()

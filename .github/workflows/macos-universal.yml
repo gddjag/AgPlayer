@@ -125,7 +125,7 @@ jobs:
       - name: Verify resource folder import regressions
         run: |
           build/macos-universal/tests/import_controller_test folderFiltersBadAudioWithoutDroppingGoodFiles deduplicatesCanonicalPathsAndContinuesAfterFailure queuesDropsReceivedWhileAnImportIsBusy importsSupportedAudioRecursivelyFromFolder
-          build/macos-universal/tests/resource_folder_controller_test rejectedAudioIsSkippedAcrossRescansAndRestartUntilChanged persistsRootsAndImportsNewAudioRecursively resourceReadErrorsRemainVisibleAndRetryable folderScanWaitsForBusyImporter manualRescanRetriesRejectedAudio
+          build/macos-universal/tests/resource_folder_controller_test rejectedAudioIsSkippedAcrossRescansAndRestartUntilChanged persistsRootsAndImportsNewAudioRecursively resourceReadErrorsRemainVisibleAndRetryable folderScanWaitsForBusyImporter manualRescanRetriesRejectedAudio rescanQueuesNewFilesWhileImporterIsBusy
       - name: Exercise Mac UI regressions with Cocoa
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         env:
@@ -136,6 +136,7 @@ jobs:
         run: |
           build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_mac14_regressions.qml
           build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_lossless_file_import.qml
+          build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_main_window.qml MainWindowControls::test_classic_resource_folder_drop_routes_and_counts MainWindowControls::test_embedded_resource_folder_accepts_native_directory_drop MainWindowControls::test_resource_folders_share_submission_and_counts_across_shells MainWindowControls::test_task1b_duplicate_resource_drop_refreshes_without_duplicate_roots
       - name: Deploy and audit a single Universal internal test package
         run: >-
           python scripts/package-macos.py
