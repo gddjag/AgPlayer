@@ -340,7 +340,9 @@ Rectangle {
         anchors.bottomMargin: Theme.spacingMd
         clip: true
         contentWidth: availableWidth
-        contentHeight: panelPages.implicitHeight
+        contentHeight: root.currentTab === 0 ? presetPage.implicitHeight
+                     : root.currentTab === 1 ? lyricsPage.implicitHeight
+                     : dynamicsPage.implicitHeight
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
         Binding {
@@ -350,7 +352,6 @@ Rectangle {
         }
 
         ColumnLayout {
-            id: panelPages
             width: scroll.availableWidth
             spacing: Theme.spacingSm
 
@@ -587,6 +588,7 @@ Rectangle {
             }
 
             ColumnLayout {
+                id: lyricsPage
                 visible: root.currentTab === 1
                 Layout.fillWidth: true
                 spacing: Theme.spacingSm
@@ -666,6 +668,7 @@ Rectangle {
             }
 
             ColumnLayout {
+                id: dynamicsPage
                 visible: root.currentTab === 2
                 Layout.fillWidth: true
                 spacing: Theme.spacingSm
