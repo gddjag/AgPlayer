@@ -10,8 +10,10 @@ Item {
     readonly property bool showingProgress: controller && controller.busy
     readonly property bool showingErrors: controller && !controller.busy
                                           && controller.errors.length > 0
+    readonly property bool showingSkipped: controller && !controller.busy
+                                           && !showingErrors && controller.filteredCount > 0
     readonly property bool active: controller
-                                   && (showingProgress || showingErrors)
+                                   && (showingProgress || showingErrors || showingSkipped)
 
     signal retryRequested()
 
@@ -24,9 +26,22 @@ Item {
 
     Timer {
         interval: 8000
-        running: root.showingErrors
+        running: root.showingErrors || root.showingSkipped
         repeat: false
         onTriggered: root.dismissErrors()
+    }
+
+    Text {
+        objectName: "importSkippedSummary"
+        anchors.centerIn: parent
+        visible: root.showingSkipped
+        text: root.showingSkipped
+            ? qsTr("已导入 %1 个文件，跳过 %2 个无法解析的音频")
+                .arg(root.controller.importedTrackIds.length).arg(root.controller.filteredCount)
+            : ""
+        color: Theme.secondaryText
+        font.family: Theme.fontPrimary
+        font.pixelSize: Theme.fontSizeBody
     }
 
     ColumnLayout {

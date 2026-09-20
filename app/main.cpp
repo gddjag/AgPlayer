@@ -1017,9 +1017,9 @@ int main(int argc, char* argv[])
         resourceFolders.setImportController(&importer);
 #ifdef Q_OS_MACOS
         // Preserve concrete failures after the transient import banner clears.
-        QObject::connect(&importer, &ImportController::finished, &app, [&importer] {
-            for (const QString& error : importer.errors())
-                qWarning().noquote() << "macOS import failed:" << error;
+        QObject::connect(&importer, &ImportController::fileRejected, &app,
+                         [](const QString& path, int result) {
+            qWarning().noquote() << "macOS import skipped or failed:" << path << "result:" << result;
         });
 #endif
         LibraryNavigationModel libraryNavigation(

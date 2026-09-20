@@ -70,6 +70,9 @@ private:
     QTimer debounce_;
     QStringList monitoredRoots_;
     QHash<QString, QString> excludedPaths_;
+    QHash<QString, QString> rejectedFileSignatures_;
+    QHash<QString, QString> pendingFileSignatures_;
+    bool rejectedStateDirty_ = false;
     QStringList resourceDirectories_;
     QString storagePath_;
     QString lastPersistenceError_;

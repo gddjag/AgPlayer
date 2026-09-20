@@ -35,6 +35,7 @@ private slots:
     void leavesBpmZeroWhenAutoReadDisabled();
     void probeObservesDynamicAnalyzeBpmFlag();
     void importsSupportedAudioRecursivelyFromFolder();
+    void folderFiltersBadAudioWithoutDroppingGoodFiles();
     void droppedFolderAndChinesePathAreExpanded();
     void folderDiscoveryRunsOffModelThreadAndReturnsImmediately();
     void importsEightyThreeTracksProgressivelyWithinBudget();
@@ -133,6 +134,28 @@ void ImportControllerTest::deduplicatesCanonicalPathsAndContinuesAfterFailure()
     QCOMPARE(importer.importedTrackIds().size(), 1);
     QCOMPARE(importer.importedTrackIds().front(),
              model.tracks().front().trackId);
+}
+
+void ImportControllerTest::folderFiltersBadAudioWithoutDroppingGoodFiles()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(QFile::copy(QString::fromUtf8(AGPLAYER_TEST_AUDIO), dir.filePath(QStringLiteral("正常.wav"))));
+    createFile(dir.filePath(QStringLiteral("broken.mp3")));
+    createFile(dir.filePath(QStringLiteral("notes.txt")));
+    LibraryModel model;
+    ImportController importer(&model);
+    QSignalSpy finished(&importer, &ImportController::finished);
+    importer.importFolder(QUrl::fromLocalFile(dir.path()));
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+    QCOMPARE(model.count(), 1);
+    QCOMPARE(importer.filteredCount(), 1);
+    QVERIFY(importer.errors().isEmpty());
+    // Explicitly opening a bad file still provides the concrete error.
+    importer.importPaths({dir.filePath(QStringLiteral("broken.mp3"))});
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 2, 5000);
+    QCOMPARE(importer.errors().size(), 1);
+    QCOMPARE(model.count(), 1);
 }
 
 void ImportControllerTest::importsSupportedAudioRecursivelyFromFolder()
