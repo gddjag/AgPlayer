@@ -85,13 +85,37 @@ bool ResourceFolderController::scanning() const noexcept { return scanning_; }
 
 void ResourceFolderController::rescanAll()
 {
-    // An explicit retry must not reuse a previous decoder rejection. Automatic
-    // watcher/startup scans still skip unchanged rejected files.
-    if (!rejectedFileSignatures_.isEmpty()) {
-        rejectedFileSignatures_.clear();
-        rejectedStateDirty_ = !saveMonitoredFolders();
-    }
+    // Explicit discovery restores on-disk songs; startup/watcher scans retain
+    // removal choices. Never clear records belonging to unmonitored folders.
+    if (!prepareManualScan(monitoredRoots_)) return;
     rescan();
+}
+
+bool ResourceFolderController::prepareManualScan(const QStringList& roots)
+{
+    const auto excludedBefore = excludedPaths_;
+    const auto rejectedBefore = rejectedFileSignatures_;
+    const auto belongsToRoots = [&roots](const QString& path) {
+        return std::any_of(roots.cbegin(), roots.cend(), [&path](const QString& root) {
+            return agplayer::qt::resourcePathIsWithin(path, root);
+        });
+    };
+    for (auto it = excludedPaths_.begin(); it != excludedPaths_.end();) {
+        if (belongsToRoots(it.value())) it = excludedPaths_.erase(it);
+        else ++it;
+    }
+    for (auto it = rejectedFileSignatures_.begin(); it != rejectedFileSignatures_.end();) {
+        if (belongsToRoots(it.key())) it = rejectedFileSignatures_.erase(it);
+        else ++it;
+    }
+    if (excludedBefore == excludedPaths_ && rejectedBefore == rejectedFileSignatures_)
+        return true;
+    if (saveMonitoredFolders()) return true;
+    excludedPaths_ = excludedBefore;
+    rejectedFileSignatures_ = rejectedBefore;
+    scanSummary_ = tr("无法恢复资源文件夹中的歌曲：%1").arg(lastPersistenceError_);
+    emit scanFinished();
+    return false;
 }
 
 void ResourceFolderController::rescan()
@@ -142,7 +166,7 @@ void ResourceFolderController::rescan()
         }
         controller->scanSummary_ = controller->monitoredRoots_.isEmpty()
             ? tr("尚未添加资源文件夹，请先添加文件夹。")
-            : tr("扫描完成：发现 %1 个音频文件，%2 个新文件已提交导入。已有歌曲和主动移除的歌曲不会重复加入。")
+            : tr("扫描完成：发现 %1 个音频文件，%2 个文件已提交导入，歌曲数量将在导入后更新。已有歌曲不会重复加入；手动重新扫描会恢复目录中曾移除的歌曲。")
                 .arg(files.size()).arg(controller->importer_ ? newFiles.size() : 0);
         if (!newFiles.isEmpty() && !controller->importer_)
             controller->scanSummary_ += tr("\n导入服务未就绪，请稍后重试。");
@@ -210,11 +234,15 @@ QString ResourceFolderController::audioFileNameFilter() const
 bool ResourceFolderController::addMonitoredFolder(const QString& folder)
 {
     const QString path = agplayer::qt::resourcePathIdentity(folder);
-    if (!QFileInfo(folder).isDir()
-        || std::any_of(monitoredRoots_.cbegin(), monitoredRoots_.cend(),
+    if (!QFileInfo(folder).isDir()) return false;
+    if (!prepareManualScan({path})) return false;
+    if (std::any_of(monitoredRoots_.cbegin(), monitoredRoots_.cend(),
                        [&path](const QString& candidate) {
             return agplayer::qt::resourcePathsEqual(candidate, path);
-        })) return false;
+        })) {
+        scheduleRescan();
+        return false; // Existing root: retry its songs without duplicating it.
+    }
     monitoredRoots_.append(path);
     resourceDirectories_ = normalizedResourcePaths(
         resourceDirectories_ + QStringList{path});

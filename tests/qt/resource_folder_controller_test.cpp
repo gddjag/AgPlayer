@@ -9,6 +9,9 @@
 #include <QSemaphore>
 #include <QTest>
 #include <QThread>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <filesystem>
 
 class ResourceFolderControllerTest final : public QObject {
@@ -28,7 +31,90 @@ private slots:
     void resourceReadErrorsRemainVisibleAndRetryable();
     void folderScanWaitsForBusyImporter();
     void manualRescanRetriesRejectedAudio();
+    void explicitFolderActionRestoresExcludedSongs_data();
+    void explicitFolderActionRestoresExcludedSongs();
 };
+
+void ResourceFolderControllerTest::explicitFolderActionRestoresExcludedSongs_data()
+{
+    QTest::addColumn<int>("action");
+    QTest::newRow("manual-rescan") << 0;
+    QTest::newRow("drop-existing-folder") << 1;
+    QTest::newRow("add-new-folder-with-historical-exclusions") << 2;
+}
+
+void ResourceFolderControllerTest::explicitFolderActionRestoresExcludedSongs()
+{
+    QFETCH(int, action);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString root = dir.filePath("music");
+    QVERIFY(QDir().mkpath(root + "/nested"));
+    const QString song = root + "/nested/song.wav";
+    QFile audio(song);
+    QVERIFY(audio.open(QIODevice::WriteOnly));
+    audio.write("audio");
+    audio.close();
+    const QString excludedElsewhere = dir.filePath("music-other/removed.wav");
+    const QString state = dir.filePath("roots.json");
+    QFile settings(state);
+    QVERIFY(settings.open(QIODevice::WriteOnly));
+    settings.write(QJsonDocument(QJsonObject{
+        {"version", 1},
+        {"folders", action == 2 ? QJsonArray{} : QJsonArray{root}},
+        {"excludedPaths", QJsonArray{song, excludedElsewhere}},
+        {"rejectedFiles", QJsonObject{}},
+    }).toJson());
+    settings.close();
+    const auto probe = [](const QString& path) {
+        TrackRecord track;
+        track.path = path;
+        track.title = "Recovered";
+        track.available = true;
+        return ProbeResult{AG_OK, track, {}};
+    };
+    {
+        LibraryModel library;
+        ImportController importer(&library, probe);
+        ResourceFolderController folders;
+        folders.setStoragePath(state);
+        folders.setLibraryModel(&library);
+        folders.setImportController(&importer);
+        LibraryNavigationModel navigation(&library, nullptr, nullptr, &folders);
+        QSignalSpy scans(&folders, &ResourceFolderController::scanFinished);
+        folders.rescan();
+        QTRY_COMPARE(scans.count(), 1);
+        QCOMPARE(library.count(), 0); // Automatic scanning still respects removal.
+        if (action == 0) folders.rescanAll();
+        else QCOMPARE(folders.addMonitoredFolderUrl(QUrl::fromLocalFile(root)), action == 2);
+        QTRY_COMPARE_WITH_TIMEOUT(library.count(), 1, 3000);
+        QTRY_VERIFY(!importer.busy());
+        int rootCount = -1;
+        for (int row = 0; row < navigation.rowCount(); ++row) {
+            const auto index = navigation.index(row, 0);
+            if (navigation.data(index, LibraryNavigationModel::ResourceFolderRole).toString()
+                    == canonicalLibraryPath(root))
+                rootCount = navigation.data(index, LibraryNavigationModel::CountRole).toInt();
+        }
+        QCOMPARE(rootCount, 1);
+        folders.rescanAll();
+        QTRY_VERIFY(!folders.scanning());
+        QCOMPARE(library.count(), 1); // No duplicate insertion.
+    }
+    QVERIFY(settings.open(QIODevice::ReadOnly));
+    const auto saved = QJsonDocument::fromJson(settings.readAll()).object();
+    settings.close();
+    QCOMPARE(saved.value("excludedPaths").toArray(), QJsonArray{excludedElsewhere});
+    LibraryModel restartedLibrary;
+    ImportController restartedImporter(&restartedLibrary, probe);
+    ResourceFolderController restarted;
+    restarted.setStoragePath(state);
+    restarted.setLibraryModel(&restartedLibrary);
+    restarted.setImportController(&restartedImporter);
+    restarted.rescan();
+    QTRY_COMPARE_WITH_TIMEOUT(restartedLibrary.count(), 1, 3000);
+    QTRY_VERIFY(!restartedImporter.busy());
+}
 
 void ResourceFolderControllerTest::folderScanWaitsForBusyImporter()
 {
