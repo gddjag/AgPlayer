@@ -480,7 +480,7 @@ TestCase {
         for (let i = 0; i < 6; ++i) {
             const header = visualChild(host.contentItem, "editorTrackHeader" + i)
             verify(header, "Missing track " + (i + 1))
-            compare(header.height, 82)
+            compare(header.height, Qt.platform.os === "osx" ? 89 : 82)
         }
         verify(findChild(host, "editorRecordingTransport"))
         verify(findChild(host, "editorInputDevice"))
