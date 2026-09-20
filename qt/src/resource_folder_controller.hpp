@@ -22,6 +22,7 @@ class ResourceFolderController final : public QObject {
     Q_PROPERTY(QStringList resourceDirectories READ resourceDirectories NOTIFY resourceTopologyChanged)
     Q_PROPERTY(QString audioFileNameFilter READ audioFileNameFilter CONSTANT)
     Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged)
+    Q_PROPERTY(QString scanSummary READ scanSummary NOTIFY scanFinished)
     Q_PROPERTY(ImportController* importController READ importController WRITE setImportController NOTIFY importControllerChanged)
     Q_PROPERTY(QString storagePath READ storagePath WRITE setStoragePath NOTIFY storagePathChanged)
     Q_PROPERTY(QString lastPersistenceError READ lastPersistenceError NOTIFY persistenceStateChanged)
@@ -44,6 +45,7 @@ public:
     Q_INVOKABLE void rescan();
     Q_INVOKABLE void rescanAll();
     bool scanning() const noexcept;
+    QString scanSummary() const { return scanSummary_; }
     ImportController* importController() const noexcept;
     void setImportController(ImportController* controller);
     QString storagePath() const;
@@ -78,7 +80,7 @@ private:
     QString storagePath_;
     QString lastPersistenceError_;
     bool scanning_ = false;
-    bool rescanAfterImport_ = false;
+    QString scanSummary_;
     QPointer<QFutureWatcher<QVariantMap>> scanWatcher_;
     std::shared_ptr<std::atomic_bool> scanCancel_;
     quint64 scanGeneration_ = 0;

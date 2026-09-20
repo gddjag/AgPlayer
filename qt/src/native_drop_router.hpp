@@ -41,6 +41,7 @@ signals:
     void pathsDropped(NativeDropRouter::Target target, const QStringList& paths, const QPointF& position);
 
 private:
+    QWindow* windowAtDropPosition(QWindow* receiver, QPointF& position) const;
     struct HitTarget {
         Target target = Target::List;
         std::function<bool(const QPointF&)> hitTest;
