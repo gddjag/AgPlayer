@@ -228,3 +228,84 @@ test('upload publishes latest JSON last with no-cache and never downgrades it', 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('prune removes only superseded release packages after verifying both current files', async () => {
+  assert.equal(typeof releaseSync.pruneOldReleases, 'function');
+  process.env.AWS_ACCESS_KEY_ID = 'test-only';
+  process.env.AWS_SECRET_ACCESS_KEY = 'test-only';
+  try {
+  const tag = 'v1.0.7';
+  const files = [
+    { name: 'AgPlayer-Setup-1.0.7-x64.exe', size: 42, sha256: 'a'.repeat(64) },
+    { name: 'AgPlayer-1.0.7-macOS-universal.dmg', size: 84, sha256: 'b'.repeat(64) }
+  ];
+  const latest = releaseSync.buildLatest({ tag, publishedAt: '2026-09-21T00:00:00Z',
+    releaseNotesUrl: 'https://github.com/gddjag/AgPlayer/releases/tag/v1.0.7', files });
+  const keys = [
+    'releases/v1.0.5/AgPlayer-Setup-1.0.5-x64.exe',
+    'releases/v1.0.6/AgPlayer-1.0.6-macOS-universal.dmg',
+    'releases/v1.0.6/SHA256SUMS',
+    'releases/v1.0.6/release-notes.txt',
+    'releases/v1.0.7/AgPlayer-Setup-1.0.7-x64.exe',
+    'releases/v1.0.8/AgPlayer-Setup-1.0.8-x64.exe'
+  ];
+  const deleted = [];
+  const verifiedRemoved = [];
+  const run = (_, args) => {
+    if (args[0] === 's3' && args[1] === 'cp') return JSON.stringify(latest);
+    if (args[1] === 'head-object') {
+      const key = args[args.indexOf('--key') + 1];
+      if (deleted.includes(key)) {
+        verifiedRemoved.push(key);
+        const error = new Error('Not Found');
+        error.stderr = '404 Not Found';
+        throw error;
+      }
+      const file = files.find(item => args.includes(`releases/${tag}/${item.name}`));
+      assert.ok(file);
+      return JSON.stringify({ ContentLength: file.size, Metadata: { sha256: file.sha256 } });
+    }
+    if (args[1] === 'list-objects-v2') return JSON.stringify({ IsTruncated: false, Contents: keys.map(Key => ({ Key })) });
+    if (args[1] === 'delete-object') { deleted.push(args[args.indexOf('--key') + 1]); return ''; }
+    assert.fail(`Unexpected AWS command: ${args.join(' ')}`);
+  };
+  await releaseSync.pruneOldReleases(tag, run);
+  assert.deepEqual(deleted, keys.slice(0, 3));
+  assert.deepEqual(verifiedRemoved, keys.slice(0, 3));
+  } finally {
+    delete process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_SECRET_ACCESS_KEY;
+  }
+});
+
+test('prune refuses stale metadata or an unverified current package before deleting', async () => {
+  assert.equal(typeof releaseSync.pruneOldReleases, 'function');
+  process.env.AWS_ACCESS_KEY_ID = 'test-only';
+  process.env.AWS_SECRET_ACCESS_KEY = 'test-only';
+  try {
+  const tag = 'v1.0.7';
+  const files = [
+    { name: 'AgPlayer-Setup-1.0.7-x64.exe', size: 42, sha256: 'a'.repeat(64) },
+    { name: 'AgPlayer-1.0.7-macOS-universal.dmg', size: 84, sha256: 'b'.repeat(64) }
+  ];
+  const latest = releaseSync.buildLatest({ tag, publishedAt: '2026-09-21T00:00:00Z',
+    releaseNotesUrl: 'https://github.com/gddjag/AgPlayer/releases/tag/v1.0.7', files });
+  let deletes = 0;
+  const run = (_, args) => {
+    if (args[1] === 'delete-object') deletes++;
+    if (args[0] === 's3' && args[1] === 'cp') return JSON.stringify(latest);
+    if (args[1] === 'head-object') return JSON.stringify({ ContentLength: 0, Metadata: {} });
+    if (args[1] === 'list-objects-v2') return JSON.stringify({ IsTruncated: false, Contents: [{ Key: 'releases/v1.0.6/SHA256SUMS' }] });
+    return '';
+  };
+  await assert.rejects(releaseSync.pruneOldReleases(tag, run), /verification/i);
+  assert.equal(deletes, 0);
+  const stale = (_, args) => args[0] === 's3' && args[1] === 'cp'
+    ? JSON.stringify({ ...latest, tag: 'v1.0.6' }) : run(_, args);
+  await assert.rejects(releaseSync.pruneOldReleases(tag, stale), /latest|tag/i);
+  assert.equal(deletes, 0);
+  } finally {
+    delete process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_SECRET_ACCESS_KEY;
+  }
+});

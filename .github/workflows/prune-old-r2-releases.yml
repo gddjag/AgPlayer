@@ -1,0 +1,39 @@
+name: Remove superseded R2 release packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Verified current release tag, for example v1.0.7'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r2-release-latest
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate R2 pruning guardrails
+        run: node --test scripts/sync-release-r2.test.mjs
+      - name: Remove only superseded versioned packages
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: 'true'
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: node scripts/sync-release-r2.mjs prune

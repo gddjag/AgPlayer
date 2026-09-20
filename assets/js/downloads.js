@@ -6,11 +6,11 @@
   const requestTimeoutMs = 10000;
   const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
   const publishedWindowsRelease = Object.freeze({
-    version: '1.0.6',
-    size: 36640653,
-    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.6/AgPlayer-Setup-1.0.6-x64.exe',
-    r2Url: 'https://download.agplayer.com/releases/v1.0.6/AgPlayer-Setup-1.0.6-x64.exe',
-    sha256: '18CE74D30D49134296258EA6E8B42B5B2E5EB817218129A8C916D53C5842642D'
+    version: '1.0.7',
+    size: 36647213,
+    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.7/AgPlayer-Setup-1.0.7-x64.exe',
+    r2Url: 'https://download.agplayer.com/releases/v1.0.7/AgPlayer-Setup-1.0.7-x64.exe',
+    sha256: '1B9851702DEC9446552B616C19EEB0D8C62756735257C1BA59278AE54896A5A4'
   });
 
   function selectWindowsRelease(manifest, platform = 'windows') {
@@ -52,8 +52,8 @@
       list.innerHTML = `<div><dt data-i18n="downloadPage.meta.system">${AG.t('downloadPage.meta.system')}</dt><dd data-i18n="${systemKey}">${systemText}</dd></div><div><dt data-i18n="downloadPage.meta.filename">${AG.t('downloadPage.meta.filename')}</dt><dd data-meta="filename">${filename}</dd></div><div><dt data-i18n="downloadPage.meta.size">${AG.t('downloadPage.meta.size')}</dt><dd data-meta="size">${size}</dd></div>`;
       return list;
     };
-    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.6-x64.exe', '34.9 MB'));
-    if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), 'AgPlayer-1.0.6-macOS-universal.dmg', '90.4 MB'));
+    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.7-x64.exe', '34.9 MB'));
+    if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), 'AgPlayer-1.0.7-macOS-universal.dmg', '90.4 MB'));
     const platforms = windows.closest('.platforms');
     let checksum = document.querySelector('#windows-checksum');
     if (!checksum) {

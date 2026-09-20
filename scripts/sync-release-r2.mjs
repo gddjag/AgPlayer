@@ -197,13 +197,69 @@ export async function upload(tag, directory, run = execFileSync) {
   console.log(`Synced ${manifest.files.length} installer asset(s) and latest metadata for ${tag}`);
 }
 
+export async function pruneOldReleases(tag, run = execFileSync) {
+  validateTag(tag);
+  if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) throw new Error('R2 access key secrets are required');
+  const aws = args => run('aws', [...args, '--endpoint-url', endpoint, '--region', 'auto'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const latest = JSON.parse(aws(['s3', 'cp', `s3://${bucket}/updates/latest.json`, '-', '--only-show-errors']));
+  if (latest.schemaVersion !== 1 || latest.tag !== tag || latest.version !== tag.slice(1)
+      || !Array.isArray(latest.files) || latest.files.length !== 2) {
+    throw new Error('R2 latest tag is not the complete requested release');
+  }
+  const expected = buildLatest(latest);
+  if (JSON.stringify(latest) !== JSON.stringify(expected)) throw new Error('R2 latest metadata verification failed');
+  selectAssets({ tag_name: tag, published_at: true },
+    latest.files.map((file, index) => ({ ...file, id: index + 1, state: 'uploaded' })), tag);
+  for (const file of latest.files) {
+    const key = `releases/${tag}/${file.name}`;
+    const head = JSON.parse(aws(['s3api', 'head-object', '--bucket', bucket, '--key', key]));
+    if (head.ContentLength !== file.size || head.Metadata?.sha256 !== file.sha256) {
+      throw new Error(`Current R2 package verification failed: ${file.name}`);
+    }
+  }
+  const obsolete = [];
+  let continuation;
+  do {
+    const args = ['s3api', 'list-objects-v2', '--bucket', bucket, '--prefix', 'releases/v', '--no-paginate'];
+    if (continuation) args.push('--continuation-token', continuation);
+    const page = JSON.parse(aws(args));
+    for (const { Key: key } of page.Contents ?? []) {
+      const match = /^releases\/v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\/(.+)$/.exec(key);
+      if (!match) continue;
+      const version = `${match[1]}.${match[2]}.${match[3]}`;
+      if (compareVersions(version, latest.version) >= 0) continue;
+      const name = match[4];
+      if (name === `AgPlayer-Setup-${version}-x64.exe`
+          || name === `AgPlayer-${version}-macOS-universal.dmg`
+          || name === 'SHA256SUMS') obsolete.push(key);
+    }
+    continuation = page.IsTruncated ? page.NextContinuationToken : undefined;
+    if (page.IsTruncated && !continuation) throw new Error('Incomplete R2 object listing; no packages deleted');
+  } while (continuation);
+  for (const key of obsolete) {
+    aws(['s3api', 'delete-object', '--bucket', bucket, '--key', key]);
+    let removed = false;
+    try {
+      aws(['s3api', 'head-object', '--bucket', bucket, '--key', key]);
+    } catch (error) {
+      if (!/NoSuchKey|Not Found|404/i.test(`${error.stderr ?? ''} ${error.message ?? ''}`)) throw error;
+      removed = true;
+    }
+    if (!removed) throw new Error(`R2 object still exists after deletion: ${key}`);
+    console.log(`Removed R2 object: ${key}`);
+  }
+  console.log(`Removed ${obsolete.length} superseded R2 release object(s); kept ${tag}`);
+  return obsolete;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const tag = validateTag(process.env.RELEASE_TAG);
     const directory = join(process.env.RUNNER_TEMP || process.cwd(), 'agplayer-release-sync', tag);
     if (process.argv[2] === 'download') await download(tag, directory);
     else if (process.argv[2] === 'upload') await upload(tag, directory);
-    else throw new Error('Expected download or upload command');
+    else if (process.argv[2] === 'prune') await pruneOldReleases(tag);
+    else throw new Error('Expected download, upload, or prune command');
   } catch (error) {
     // Avoid printing signed redirect URLs, subprocess environments, or credentials.
     console.error(error.code ? `Release sync failed (${error.code})` : error.message);
