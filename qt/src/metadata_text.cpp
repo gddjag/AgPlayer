@@ -7,6 +7,8 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#elif defined(Q_OS_MACOS)
+#include <iconv.h>
 #endif
 
 namespace agplayer::qt {
@@ -25,6 +27,22 @@ QString decodeCp936(const QByteArray& bytes)
         return {};
     }
     return QString::fromWCharArray(wide.data(), length);
+#elif defined(Q_OS_MACOS)
+    const iconv_t converter = iconv_open("UTF-8", "GB18030");
+    if (converter == reinterpret_cast<iconv_t>(-1)) return QString::fromLatin1(bytes);
+    QByteArray utf8(bytes.size() * 4 + 4, '\0');
+    char* input = const_cast<char*>(bytes.constData());
+    std::size_t inputRemaining = static_cast<std::size_t>(bytes.size());
+    char* output = utf8.data();
+    std::size_t outputRemaining = static_cast<std::size_t>(utf8.size());
+    const std::size_t converted = iconv(converter, &input, &inputRemaining,
+                                        &output, &outputRemaining);
+    iconv_close(converter);
+    if (converted == static_cast<std::size_t>(-1) || inputRemaining != 0)
+        return QString::fromLatin1(bytes);
+    utf8.truncate(static_cast<qsizetype>(
+        static_cast<std::size_t>(utf8.size()) - outputRemaining));
+    return QString::fromUtf8(utf8);
 #else
     // Qt builds with GB18030 support cover CP936 as a compatible subset. Some
     // minimal Qt packages omit it, in which case preserve the bytes visibly.

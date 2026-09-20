@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QSemaphore>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -174,8 +176,10 @@ void ImportControllerTest::importsSupportedAudioRecursivelyFromFolder()
     createFile(ignoredVideo);
 
     QStringList probedPaths;
+    QMutex probedPathsMutex;
     LibraryModel model;
-    ImportController importer(&model, [&probedPaths](const QString& path) {
+    ImportController importer(&model, [&probedPaths, &probedPathsMutex](const QString& path) {
+        QMutexLocker lock(&probedPathsMutex);
         probedPaths.append(path);
         TrackRecord track;
         track.path = path;
