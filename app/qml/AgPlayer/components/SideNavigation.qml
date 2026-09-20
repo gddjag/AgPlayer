@@ -163,7 +163,7 @@ Item {
                     modelIndex, LibraryNavigationModel.DepthRole)
         var hasChildren = navigationModel.data(
                     modelIndex, LibraryNavigationModel.HasChildrenRole)
-        var expandLeft = 6 + depth * 12
+        var expandLeft = 2 + depth * 10
         if (hasChildren && contentPoint.x >= expandLeft
                 && contentPoint.x < expandLeft + navigationActionExtent)
             return null
@@ -457,7 +457,7 @@ Item {
             required property string resourceFolder
             required property bool hasChildren
             readonly property int nodeIconVisualSize:
-                nodeType === "library" ? root.navigationIconVisualSize + 2
+                nodeType === "library" ? root.navigationIconVisualSize + 4
                                          : root.navigationIconVisualSize
 
             readonly property bool selected: root.nodeIsSelected(
@@ -497,7 +497,7 @@ Item {
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
                     height: 42
-                    anchors.leftMargin: 8
+                    anchors.leftMargin: 4
                     anchors.rightMargin: 4
                     spacing: 4
                     Image {
@@ -515,7 +515,7 @@ Item {
                               : qsTr("资源文件夹")
                         color: Theme.tagSecondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: Theme.fontSizeCaption
+                        font.pixelSize: Theme.fontSizeBody
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
@@ -559,9 +559,9 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 6 + nodeRow.depth * 12
-                anchors.rightMargin: 8
-                spacing: 4
+                anchors.leftMargin: 2 + nodeRow.depth * 10
+                anchors.rightMargin: 4
+                spacing: 2
                 visible: nodeRow.nodeType !== "resourceSection"
                 z: 4
 
