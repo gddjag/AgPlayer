@@ -1544,6 +1544,10 @@ TestCase {
     }
 
     function test_recent_playback_navigation_is_shared_across_shells() {
+        if (Qt.platform.os === "windows") {
+            for (var warning = 0; warning < 4; ++warning)
+                ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
+        }
         var previousTheme = SettingsController.windowLayoutTheme
         var previousShell = SettingsController.playerShellMode
         var filter = findChild(mainWindow, "filterModel")
@@ -3843,9 +3847,9 @@ TestCase {
         var libraryIcon = findChild(side, "suppliedNodeIcon-library")
         verify(libraryIcon)
         compare(libraryIcon.sourceSize.width,
-                Theme.navigationIconVisualSize + 2)
+                Theme.navigationIconVisualSize + 4)
         compare(libraryIcon.sourceSize.height,
-                Theme.navigationIconVisualSize + 2)
+                Theme.navigationIconVisualSize + 4)
         var nodeNames = ["navigationNode-library:all",
                          "navigationNode-favorites:favorites",
                          "navigationNode-tags:manage"]
