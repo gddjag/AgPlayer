@@ -288,6 +288,8 @@ TestCase {
 
     function initTestCase() {
         originalThemeId = PlayerExperienceController.themeId
+        verify(typeof VideoPlaybackController !== "undefined",
+               "Main.qml requires the registered video playback singleton")
         verify(typeof testMainWindow !== "undefined")
         verify(typeof testMiniWindow !== "undefined")
         mainWindow = testMainWindow
