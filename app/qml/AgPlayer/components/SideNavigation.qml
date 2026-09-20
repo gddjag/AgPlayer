@@ -33,6 +33,7 @@ Item {
         Theme.navigationIconVisualSize
     readonly property int navigationActionExtent:
         Theme.navigationActionExtent
+    readonly property int navigationChevronWidth: 20
 
     signal categorySelected(string category)
     signal navigationSelected(string nodeType, string nodeId,
@@ -422,7 +423,7 @@ Item {
             required property string resourceFolder
             required property bool hasChildren
             readonly property int nodeIconVisualSize:
-                nodeType === "library" ? root.navigationIconVisualSize + 2
+                nodeType === "library" ? root.navigationIconVisualSize + 4
                                          : root.navigationIconVisualSize
 
             readonly property bool selected: root.nodeIsSelected(
@@ -462,7 +463,7 @@ Item {
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
                     height: 42
-                    anchors.leftMargin: 8
+                    anchors.leftMargin: 4
                     anchors.rightMargin: 4
                     spacing: 4
                     Image {
@@ -474,10 +475,11 @@ Item {
                         Layout.preferredHeight: root.navigationIconVisualSize
                     }
                     Text {
+                        objectName: "resourceFolderSectionLabel"
                         text: qsTr("资源文件夹")
                         color: Theme.tagSecondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: Theme.fontSizeCaption
+                        font.pixelSize: Theme.fontSizeBody
                         Layout.fillWidth: true
                     }
                     ToolButton {
@@ -520,9 +522,9 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 6 + nodeRow.depth * 12
-                anchors.rightMargin: 8
-                spacing: 4
+                anchors.leftMargin: 2 + nodeRow.depth * 12
+                anchors.rightMargin: 6
+                spacing: 2
                 visible: nodeRow.nodeType !== "resourceSection"
                 z: 4
 
@@ -533,7 +535,7 @@ Item {
                                   || nodeRow.nodeType === "resourceFolder")
                                  && nodeRow.hasChildren)
                     Layout.preferredWidth: visible
-                                           ? root.navigationActionExtent : 0
+                                           ? root.navigationChevronWidth : 0
                     Layout.preferredHeight: root.navigationActionExtent
                     icon.source: Theme.icon(nodeRow.expanded
                                             ? "arrow-down-s-line"
@@ -551,7 +553,7 @@ Item {
                                 || nodeRow.nodeType === "resourceFolder")
                                && nodeRow.hasChildren))
                     Layout.preferredWidth: visible
-                                           ? root.navigationActionExtent : 0
+                                           ? root.navigationChevronWidth : 0
                     Layout.preferredHeight: 1
                 }
                 Image {

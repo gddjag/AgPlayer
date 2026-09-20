@@ -1496,7 +1496,17 @@ TestCase {
         verify(findChild(side, "navigationNode-library:all"))
         verify(findChild(side, "navigationNode-favorites:favorites"))
         verify(findChild(side, "navigationNode-tags:manage"))
-        verify(!findChild(side, "historyCategoryButton"))
+        var history = findChild(side, "historyCategoryButton")
+        verify(history)
+        var favorites = findChild(side, "navigationNode-favorites:favorites")
+        compare(history.index, favorites.index + 1)
+        verify(history.y >= favorites.y + favorites.height)
+        compare(history.displayName, "最近播放")
+        compare(side.iconForNode("history"), "time-line")
+        compare(findChild(side, "suppliedNodeIcon-library").sourceSize.width,
+                side.navigationIconVisualSize + 4)
+        compare(findChild(side, "resourceFolderSectionLabel").font.pixelSize,
+                Theme.fontSizeBody)
         verify(!findChild(side, "recentAddedCategoryButton"))
         verify(!findChild(side, "neverPlayedCategoryButton"))
         compare(side.iconForNode("library"), "music-2-line")
@@ -1504,6 +1514,49 @@ TestCase {
         compare(side.iconForNode("tags"), "price-tag-3-line")
         compare(side.iconForNode("resourceFolder"), "folder-open-line")
         side.destroy()
+    }
+
+    function test_recent_playback_navigation_is_shared_across_shells() {
+        var previousTheme = SettingsController.windowLayoutTheme
+        var previousShell = SettingsController.playerShellMode
+        var filter = findChild(mainWindow, "filterModel")
+        var host = createTemporaryObject(listWindowComponent, testCase,
+                                         { "filterModel": filter })
+        var modes = [{mode: 0, theme: "classic", name: "referenceSideNavigation"},
+                     {mode: 1, theme: "single-window", name: "integratedLibraryNavigation"},
+                     {mode: 2, theme: "rolling-player", name: "rollingLibraryNavigation"}]
+        try {
+            for (var i = 0; i < modes.length; ++i) {
+                SettingsController.windowLayoutTheme = modes[i].theme
+                SettingsController.playerShellMode = modes[i].mode
+                var navigation = null
+                tryVerify(function() {
+                    navigation = findChild(i === 0 ? host : mainWindow, modes[i].name)
+                    return navigation && navigation.visible
+                }, 2000)
+                compare(navigation.navigationModel, LibraryNavigationModel)
+                navigation.revealNode("history:history")
+                wait(0)
+                var history = findChild(navigation, "historyCategoryButton")
+                verify(history && history.visible)
+                filter.category = "favorites"
+                filter.tagKey = "previous-tag"
+                filter.resourceFolder = "/previous-folder"
+                mouseClick(history, history.width / 2, history.height / 2)
+                tryCompare(filter, "category", "history")
+                compare(filter.tagKey, "")
+                compare(filter.resourceFolder, "")
+                compare(history.selected, true)
+                compare(history.count, LibraryModel.historyCount)
+            }
+        } finally {
+            host.close()
+            filter.category = "all"
+            filter.tagKey = ""
+            filter.resourceFolder = ""
+            SettingsController.windowLayoutTheme = previousTheme
+            SettingsController.playerShellMode = previousShell
+        }
     }
 
     function test_sidebar_does_not_resolve_an_empty_supplied_icon() {
