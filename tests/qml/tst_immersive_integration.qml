@@ -1631,6 +1631,13 @@ TestCase {
         scroll.contentItem.contentY = Math.min(targetY,
                                               scroll.contentHeight - scroll.height)
         wait(0)
+        console.warn("EQ_SCROLL_GEOMETRY",
+                     "contentHeight=" + scroll.contentHeight,
+                     "height=" + scroll.height,
+                     "targetY=" + targetY,
+                     "contentY=" + scroll.contentItem.contentY,
+                     "sliderHeight=" + lastEq.height,
+                     "bounds=" + JSON.stringify(mappedBounds(lastEq, scroll)))
         tryVerify(function() {
             var bounds = mappedBounds(lastEq, scroll)
             return bounds.top >= -0.5 && bounds.bottom <= scroll.height + 0.5
