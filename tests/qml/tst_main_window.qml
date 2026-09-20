@@ -1499,6 +1499,8 @@ TestCase {
             verify(findChild(window, "librarySearchFilter").visible)
             verify(window.routeNavigationNode("favorites", "favorites:favorites", ""))
             compare(filter.category, "favorites")
+            verify(window.routeNavigationNode("history", "history:history", ""))
+            compare(filter.category, "history")
             verify(window.routeNavigationNode("playlist", "playlist:" + playlistId, ""))
             compare(filter.category, playlistId)
             tryVerify(function() { return list.visible && list.count === 1 }, 500)

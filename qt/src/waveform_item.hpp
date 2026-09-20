@@ -146,8 +146,13 @@ public:
     qsizetype peakCount() const noexcept;
 
     static constexpr int spectrumBarCount() noexcept { return 128; }
+#if defined(Q_OS_MACOS)
+    static constexpr qreal spectrumBarWidth() noexcept { return 6.0; }
+    static constexpr qreal spectrumBarGap() noexcept { return 2.0; }
+#else
     static constexpr qreal spectrumBarWidth() noexcept { return 7.0; }
     static constexpr qreal spectrumBarGap() noexcept { return 3.0; }
+#endif
     static constexpr qreal spectrumMaxHeight() noexcept { return 96.0; }
     static constexpr qreal spectrumAttackSeconds() noexcept { return 0.02; }
     static constexpr qreal spectrumDecaySeconds() noexcept { return 0.10; }

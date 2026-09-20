@@ -262,7 +262,8 @@ void LibraryNavigationModel::rebuildBaseRows()
                                   QStringLiteral("favorites")),
                  QStringLiteral("favorites"), 0, tr("我的收藏"), favoriteCount,
                  false, {}});
-    rows.append({navigationNodeId(QStringLiteral("history"), QStringLiteral("history")),
+    rows.append({navigationNodeId(QStringLiteral("history"),
+                                  QStringLiteral("history")),
                  QStringLiteral("history"), 0, tr("最近播放"),
                  library_ == nullptr ? 0 : library_->historyCount(), false, {}});
     rows.append({navigationNodeId(QStringLiteral("tags"), QStringLiteral("manage")),
@@ -414,6 +415,7 @@ void LibraryNavigationModel::handleRowsInserted(const int first, const int last)
 {
     if (library_ == nullptr) return;
     int favoriteDelta = 0;
+    int historyDelta = 0;
     for (int row = first; row <= last; ++row) {
         const QModelIndex sourceIndex = library_->index(row, 0);
         const QString trackId = library_->data(
@@ -426,6 +428,8 @@ void LibraryNavigationModel::handleRowsInserted(const int first, const int last)
         trackStates_.insert(trackId, {path, favorite});
         applyPathDelta(path, 1);
         favoriteDelta += favorite ? 1 : 0;
+        historyDelta += library_->data(
+            sourceIndex, LibraryModel::PlayCountRole).toInt() > 0 ? 1 : 0;
     }
     for (int row = 0; row < nodes_.size(); ++row) {
         if (nodes_.at(row).nodeType == QStringLiteral("library")) {
@@ -434,6 +438,10 @@ void LibraryNavigationModel::handleRowsInserted(const int first, const int last)
         } else if (nodes_.at(row).nodeType == QStringLiteral("favorites")
                    && favoriteDelta != 0) {
             updateNodeCount(row, nodes_.at(row).count + favoriteDelta,
+                            {CountRole});
+        } else if (nodes_.at(row).nodeType == QStringLiteral("history")
+                   && historyDelta != 0) {
+            updateNodeCount(row, nodes_.at(row).count + historyDelta,
                             {CountRole});
         }
     }

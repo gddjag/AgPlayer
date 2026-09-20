@@ -7,6 +7,12 @@ on:
     branches: [codex/macos-universal]
     paths-ignore: ['.github/workflows/macos-intel-check.yml', 'docs/**']
   workflow_dispatch:
+    inputs:
+      quick_ui:
+        description: 'Quick Cocoa UI checks and a directly extractable .app.zip (skip full native tests and OS matrix)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -18,6 +24,7 @@ concurrency:
 env:
   QT_VERSION: '6.8.3'
   MACOSX_DEPLOYMENT_TARGET: '13.0'
+  QUICK_UI: ${{ inputs.quick_ui && 'true' || 'false' }}
 
 jobs:
   build:
@@ -85,9 +92,14 @@ jobs:
       - name: Build both architectures
         id: native-build
         run: |
+          if [ "$QUICK_UI" = true ]; then
+            cmake --build build/macos-universal --parallel 3 --target AgPlayer qml_main_window_test -- -k 0
+            exit 0
+          fi
           cmake --build --preset macos-universal-release --parallel 3 -- -k 0
           cmake --build build/macos-universal --parallel 3 --target import_controller_test resource_folder_controller_test dependency_smoke_test c_api_lifecycle_test decoder_test audio_engine_test queue_gapless_test metadata_writer_test transcoder_test pitch_shifter_test waveform_cache_test audio_document_test peak_pyramid_test project_document_test rename_transaction_test lyrics_provider_chain_test equalizer_controller_test separation_output_transaction_test lossless_analysis_controller_test qml_main_window_test qml_audio_tools_test qml_mini_player_test audio_editor_controller_test editor_recording_service_test six_track_waveform_test six_track_recording_integration_test six_track_long_render_test immersive_theme_catalog_test window_controller_test native_drop_router_test application_file_open_test global_hotkey_manager_test settings_controller_test file_association_controller_test separation_runtime_test separation_native_backend_test separation_process_client_test vocal_separation_controller_test vocal_separation_install_test -- -k 0
       - name: Run focused native tests
+        if: ${{ !inputs.quick_ui }}
         run: |
           ctest --test-dir build/macos-universal --output-on-failure \
           --output-junit macos-native-tests.xml \
@@ -126,6 +138,7 @@ jobs:
           fi
           exit "$test_status"
       - name: Verify resource folder import regressions
+        if: ${{ !inputs.quick_ui }}
         run: |
           build/macos-universal/tests/import_controller_test folderFiltersBadAudioWithoutDroppingGoodFiles deduplicatesCanonicalPathsAndContinuesAfterFailure queuesDropsReceivedWhileAnImportIsBusy importsSupportedAudioRecursivelyFromFolder
           build/macos-universal/tests/resource_folder_controller_test rejectedAudioIsSkippedAcrossRescansAndRestartUntilChanged persistsRootsAndImportsNewAudioRecursively resourceReadErrorsRemainVisibleAndRetryable folderScanWaitsForBusyImporter manualRescanRetriesRejectedAudio rescanQueuesNewFilesWhileImporterIsBusy explicitFolderActionRestoresExcludedSongs
@@ -140,13 +153,23 @@ jobs:
           build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_mac14_regressions.qml
           build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_lossless_file_import.qml
           build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_main_window.qml MainWindowControls::test_zz_resource_folder_drop_routes_and_counts MainWindowControls::test_embedded_resource_folder_accepts_native_directory_drop MainWindowControls::test_zz_resource_folders_share_submission_and_counts_across_shells MainWindowControls::test_task1b_duplicate_resource_drop_refreshes_without_duplicate_roots
+          AGPLAYER_VISUAL_FIXTURE_OUTPUT="$GITHUB_WORKSPACE/build/macos-ui-resource-navigation.png" \
+            build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_resource_navigation.qml
+          AGPLAYER_VISUAL_FIXTURE_OUTPUT="$GITHUB_WORKSPACE/build/macos-ui-recent-navigation.png" \
+            build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_recent_playback_navigation.qml
+          env -u QT_QUICK_BACKEND AGPLAYER_VISUAL_FIXTURE_OUTPUT="$GITHUB_WORKSPACE/build/macos-ui-integrated-waveform.png" \
+            build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_integrated_waveform_preview.qml
       - name: Deploy and audit a single Universal internal test package
+        env:
+          ARCHIVE_FORMAT: ${{ inputs.quick_ui && 'zip' || 'dmg' }}
         run: >-
           python scripts/package-macos.py
           --app build/macos-universal/app/AgPlayer.app
           --qt-root "$AGPLAYER_QT_ROOT"
           --output-dir build/macos-package
+          --archive-format "$ARCHIVE_FORMAT"
       - name: Archive the deployed app with executable bits and framework symlinks
+        if: ${{ !inputs.quick_ui }}
         run: |
           app_path="build/macos-package/staging/AgPlayer.app"
           test -d "$app_path"
@@ -155,6 +178,35 @@ jobs:
             "$app_path/Contents/MacOS/AgPlayer" --qa-test-mode \
             --qa-log "$RUNNER_TEMP/agplayer-arm.log" --qa-exit-after-ms 3000
           ditto -c -k --sequesterRsrc --keepParent "$app_path" build/macos-package/AgPlayer-universal-test.zip
+      - name: Extract and launch the final quick UI ZIP with Cocoa
+        if: ${{ inputs.quick_ui }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          reports = list(Path('build/macos-package').glob('*.validation.json'))
+          assert len(reports) == 1, reports
+          report = json.loads(reports[0].read_text())
+          archive = Path(report['artifact'])
+          assert report['archive_format'] == 'zip', report['archive_format']
+          with archive.open('rb') as stream:
+              assert hashlib.file_digest(stream, 'sha256').hexdigest() == report['sha256']
+          print(f'ZIP checksum verified: {archive.name}')
+          PY
+          zip_path="$(find build/macos-package -maxdepth 1 -name '*.app.zip' -print -quit)"
+          test -n "$zip_path"
+          extract_path="$(mktemp -d "$RUNNER_TEMP/agplayer-quick-ui.XXXXXX")"
+          ditto -x -k "$zip_path" "$extract_path"
+          app_path="$extract_path/AgPlayer.app"
+          test -x "$app_path/Contents/MacOS/AgPlayer"
+          test -x "$app_path/Contents/MacOS/AgSeparationWorker"
+          codesign --verify --deep --strict --all-architectures "$app_path"
+          test "$(uname -m)" = arm64
+          QT_QPA_PLATFORM=cocoa QT_QUICK_BACKEND=software \
+            "$app_path/Contents/MacOS/AgPlayer" --qa-test-mode \
+            --qa-log "$RUNNER_TEMP/agplayer-quick-ui.log" --qa-exit-after-ms 3000
+          test -s "$RUNNER_TEMP/agplayer-quick-ui.log"
       - uses: actions/upload-artifact@v4
         with:
           name: macos-universal-internal-adhoc-test
@@ -174,13 +226,15 @@ jobs:
             build/macos-universal/Testing/Temporary/LastTest.log
             build/macos-universal/qml-*.txt
             build/macos-universal/tests/qml-immersive-integration.xml
-            build/macos-ui-titlebar-*.png
+            build/macos-ui-*.png
             build/macos-universal/CMakeFiles/CMakeConfigureLog.yaml
             ${{ runner.temp }}/agplayer-arm.log
+            ${{ runner.temp }}/agplayer-quick-ui.log
             ${{ runner.temp }}/queue-gapless-sample.txt
           retention-days: 7
 
   installed-package-launch:
+    if: ${{ !inputs.quick_ui }}
     needs: build
     strategy:
       fail-fast: false
