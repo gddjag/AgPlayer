@@ -340,6 +340,7 @@ Rectangle {
         anchors.bottomMargin: Theme.spacingMd
         clip: true
         contentWidth: availableWidth
+        contentHeight: panelPages.implicitHeight
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
         Binding {
@@ -349,6 +350,7 @@ Rectangle {
         }
 
         ColumnLayout {
+            id: panelPages
             width: scroll.availableWidth
             spacing: Theme.spacingSm
 
