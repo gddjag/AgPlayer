@@ -86,7 +86,7 @@ TestCase {
                 shell.width = windowWidth
                 wait(50)
                 tryCompare(navigation, "width", Theme.navigationWidth)
-                var resourceLabel = findChild(navigation, "resourceFolderRefreshLabel")
+                var resourceLabel = findChild(navigation, "resourceFolderSectionLabel")
                 verify(resourceLabel)
                 tryCompare(resourceLabel, "truncated", false)
             }
