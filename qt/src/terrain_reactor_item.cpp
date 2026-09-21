@@ -1963,6 +1963,10 @@ void TerrainReactorItem::scheduleIfRunnable()
         : quality_ == Quality::Balanced ? 22 : 16;
     if (renderTick_.interval() != interval) renderTick_.setInterval(interval);
     const bool frameDriven = renderStyle_.rippleColor.w() > .5F && quality_ == Quality::High;
+    // The last timer-driven render may have already finished. Seed the first
+    // frame before stopping its timer, or Balanced -> High can remain idle
+    // forever when neither the sample count nor the render target changes.
+    if (running && frameDriven && renderTick_.isActive()) update();
     if (running && !frameDriven && !renderTick_.isActive()) renderTick_.start();
     else if (!running || frameDriven) renderTick_.stop();
     if (running != lastScheduledRunning_) {

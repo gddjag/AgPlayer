@@ -155,6 +155,8 @@ jobs:
           build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_main_window.qml MainWindowControls::test_zz_resource_folder_drop_routes_and_counts MainWindowControls::test_embedded_resource_folder_accepts_native_directory_drop MainWindowControls::test_zz_resource_folders_share_submission_and_counts_across_shells MainWindowControls::test_task1b_duplicate_resource_drop_refreshes_without_duplicate_roots
           AGPLAYER_VISUAL_FIXTURE_OUTPUT="$GITHUB_WORKSPACE/build/macos-ui-resource-navigation.png" \
             build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_resource_navigation.qml
+          AGPLAYER_VISUAL_FIXTURE_OUTPUT="$GITHUB_WORKSPACE/build/macos-ui-recent-navigation.png" \
+            build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_recent_playback_navigation.qml
           env -u QT_QUICK_BACKEND AGPLAYER_VISUAL_FIXTURE_OUTPUT="$GITHUB_WORKSPACE/build/macos-ui-integrated-waveform.png" \
             build/macos-universal/tests/qml_main_window_test -input tests/qml/tst_integrated_waveform_preview.qml
       - name: Deploy and audit a single Universal internal test package
