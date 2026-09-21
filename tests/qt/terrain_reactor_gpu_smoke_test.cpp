@@ -11,13 +11,13 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QQuickWindow>
-#include <QQuickGraphicsConfiguration>
 #include <QScreen>
 #include <QSGRendererInterface>
 #include <QScopeGuard>
 #include <QTest>
 #include <QDataStream>
 #include <QTemporaryFile>
+#include <QThread>
 
 #include <algorithm>
 #include <array>
@@ -49,6 +49,7 @@ private slots:
     void violetHeartUsesElevationDrivenReferenceGlow_data();
     void referenceGlowHasNoPresetOrStageOverrides();
     void densityAndQualityChangesKeepDrawingCompleteFrames();
+    void referenceHighReducesRenderBudgetUnderSustainedLoad();
     void cameraPunchDoesNotMoveTheGroundProjection();
     void denseMaterialFrameBudgetProbe_data();
     void denseMaterialFrameBudgetProbe();
@@ -276,11 +277,47 @@ void TerrainReactorGpuSmokeTest::densityAndQualityChangesKeepDrawingCompleteFram
                          TerrainReactorItem::Quality::High}) {
         const auto before = item.frameCount();
         item.setQuality(quality);
-        // Quality changes must restart drawing without a resize or other input.
+        // Switching cadence must start its own frame; a resize can hide a
+        // missing timer-to-frame handoff by scheduling an unrelated update.
         QTRY_VERIFY2_WITH_TIMEOUT(item.frameCount() > before + 4,
             qPrintable(QStringLiteral("Rendering stalled after quality %1").arg(int(quality))), 5000);
         QCOMPARE(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready);
     }
+    item.setActive(false);
+}
+
+void TerrainReactorGpuSmokeTest::referenceHighReducesRenderBudgetUnderSustainedLoad()
+{
+    PlayerExperienceController style;
+    style.applyTheme(QStringLiteral("violet-heart"));
+    style.setTopographyDensity(80);
+    QQuickWindow window;
+    window.resize(640, 360);
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(640, 360));
+    item.setStyleSource(&style);
+    item.setQuality(TerrainReactorItem::Quality::High);
+    item.setUseSyntheticFeatures(true);
+    window.show();
+    QVERIFY(waitForGpuWindow(window));
+    item.setActive(true);
+    const int fullGrid = agplayer::terrain::referenceTerrainGridSize(80);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderedTerrainCount(), fullGrid * fullGrid, 5000);
+    const QSize fullBuffer = item.effectiveColorBufferSize();
+    QCOMPARE(item.sampleCount(), 4);
+    // Simulate a slow presentation path, independently of the test GPU speed.
+    const auto delay = connect(&window, &QQuickWindow::afterRendering, &window,
+        [] { QThread::msleep(40); }, Qt::DirectConnection);
+    const auto stopDelay = qScopeGuard([&] { disconnect(delay); });
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderedTerrainCount(), 96 * 96, 30000);
+    QTRY_COMPARE_WITH_TIMEOUT(item.sampleCount(), 1, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(item.effectiveColorBufferSize().width()
+                            <= qCeil(fullBuffer.width() * 0.71), 10000);
+    const auto frames = item.frameCount();
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > frames + 2, 5000);
+    qInfo() << "Adaptive High full/reduced columns and buffers:"
+            << fullGrid * fullGrid << item.renderedTerrainCount()
+            << fullBuffer << item.effectiveColorBufferSize();
     item.setActive(false);
 }
 
@@ -297,7 +334,7 @@ void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe_data()
 void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
 {
     if (!qEnvironmentVariableIsSet("AGPLAYER_MATERIAL_BENCHMARK"))
-        QSKIP("Opt-in comparative frame/GPU timing probe");
+        QSKIP("Opt-in comparative wall-frame probe, not a GPU timestamp benchmark");
     QFETCH(int, terrainDensity);
     QFETCH(QSize, viewport);
     PlayerExperienceController style;
@@ -307,11 +344,6 @@ void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
     style.setAutoRotateSpeed(0);
     QQuickWindow window;
     window.resize(viewport);
-    window.setScreen(QGuiApplication::primaryScreen());
-    window.setPosition(QGuiApplication::primaryScreen()->geometry().topLeft());
-    QQuickGraphicsConfiguration graphics;
-    graphics.setTimestamps(true);
-    window.setGraphicsConfiguration(graphics);
     TerrainReactorItem item(window.contentItem());
     item.setSize(QSizeF(viewport));
     item.setStyleSource(&style);
@@ -322,18 +354,11 @@ void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
     QVERIFY(waitForGpuWindow(window));
     item.setActive(true);
     QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready, 5000);
-    // qWait sleeps between event batches and distorts GUI-driven frame pacing.
-    // Measure with the same continuously running event loop as the application.
-    const auto runEventLoop = [](int milliseconds) {
-        QEventLoop loop;
-        QTimer::singleShot(milliseconds, &loop, &QEventLoop::quit);
-        loop.exec();
-    };
-    runEventLoop(1500);
+    QTest::qWait(1500);
     const auto first = item.frameCount();
     QElapsedTimer timer;
     timer.start();
-    runEventLoop(3000);
+    QTest::qWait(3000);
     const auto count = item.frameCount() - first;
     qInfo() << "Dense material elapsed/frames/instances/ms per frame:"
             << timer.elapsed() << count << item.renderedTerrainCount()
@@ -342,7 +367,6 @@ void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
             << item.effectiveColorBufferSize() << window.devicePixelRatio();
     QVERIFY2(count > 0, "Dense terrain did not produce new frames");
     item.setActive(false);
-    runEventLoop(100); // Drain queued reports before destroying the render target.
 }
 
 void TerrainReactorGpuSmokeTest::columnLayeringReferenceFixture_data()

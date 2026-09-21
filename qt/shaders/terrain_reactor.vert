@@ -232,13 +232,14 @@ void main()
         vec2 referenceRipple = vec2(0.0);
         bool referenceRippleMode = ubuf.rippleColor.a > 0.5;
         float waveEnergy = 0.65 + fastBass * 0.35;
-        int waveCount = int(clamp(ubuf.effects.w, 0.0, 8.0));
+        int waveCount = int(clamp(ubuf.effects.w, 0.0, 10.0));
         if (referenceRippleMode && ubuf.styleToggles.x > 0.5) {
-            // Reference contract: all ten slots hold center, elapsed age and
+            // Reference contract: up to ten slots hold center, elapsed age and
             // signed strength. Normal and white rings use separate physical
             // speed/width/fade/elevation constants and never touch the native
             // 42-unit overlap limiter or palette packing.
             for (int waveIndex = 0; waveIndex < 10; ++waveIndex) {
+                if (waveIndex >= waveCount) break;
                 vec4 source = ubuf.waveSources[waveIndex];
                 bool white = source.w < 0.0;
                 float strengthControl = max(0.0, ubuf.waveParameters.x);

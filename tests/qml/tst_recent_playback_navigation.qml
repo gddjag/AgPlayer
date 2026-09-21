@@ -82,6 +82,14 @@ TestCase {
         try {
             var navigation = findChild(shell, data.navigation)
             verify(navigation)
+            for (var windowWidth of [1100, 1386]) {
+                shell.width = windowWidth
+                wait(50)
+                tryCompare(navigation, "width", Theme.navigationWidth)
+                var resourceLabel = findChild(navigation, "resourceFolderRefreshLabel")
+                verify(resourceLabel)
+                tryCompare(resourceLabel, "truncated", false)
+            }
             verify(navigation.revealNode("history:history"))
             wait(50)
             var recent = null

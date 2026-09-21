@@ -2635,57 +2635,10 @@ Item {
         Item { Layout.fillHeight: true }
     }
 
-    ThemedDialog {
+    PrivacyPolicyDialog {
         id: privacyPolicyDialog
-        objectName: "privacyPolicyDialog"
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        title: qsTr("AgPlayer 隐私政策")
         width: Math.min(640, root.width - 2 * Theme.spacingLg)
         height: Math.min(620, root.height - 2 * Theme.spacingLg)
-        property var returnFocusItem: null
-        onClosed: { if (returnFocusItem) returnFocusItem.forceActiveFocus() }
-        standardButtons: Dialog.Close
-        closePolicy: Popup.CloseOnEscape
-        onOpened: {
-            privacyPolicyScroll.contentItem.contentY = 0
-            privacyPolicyBody.cursorPosition = 0
-            privacyPolicyBody.forceActiveFocus()
-        }
-        contentItem: ScrollView {
-            id: privacyPolicyScroll
-            objectName: "privacyPolicyScroll"
-            clip: true
-            contentWidth: availableWidth
-            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-            ScrollBar.vertical.policy: ScrollBar.AsNeeded
-            ScrollBar.vertical.active: true
-            TextArea {
-                id: privacyPolicyBody
-                objectName: "privacyPolicyBody"
-                width: privacyPolicyScroll.availableWidth
-                text: "<style>p { margin-top: 0; margin-bottom: 14px; line-height: 145%; }"
-                    + "h2 { font-size: 16px; margin-top: 18px; margin-bottom: 10px; }"
-                    + "a { color: " + Theme.accent + "; text-decoration: underline; }</style>"
-                    + SettingsController.privacyPolicyText
-                textFormat: TextEdit.RichText
-                readOnly: true
-                selectByMouse: true
-                wrapMode: TextEdit.Wrap
-                color: Theme.primaryText
-                selectedTextColor: Theme.accentText
-                selectionColor: Theme.accent
-                palette.link: Theme.accent
-                font.family: Theme.fontPrimary
-                font.pixelSize: Theme.fontSizeBody
-                leftPadding: 0
-                rightPadding: Theme.spacingMd
-                topPadding: 0
-                bottomPadding: Theme.spacingMd
-                background: Item {}
-                onLinkActivated: Qt.openUrlExternally(link)
-            }
-        }
     }
 
     function updateAssociation(ext, checked) {

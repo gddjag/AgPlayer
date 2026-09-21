@@ -99,9 +99,10 @@ public:
         view.lookAt(center + direction * 290.0F, center, QVector3D(0, 1, 0));
         const QMatrix4x4 matrix = rhi->clipSpaceCorrMatrix() * projection * view;
         std::memcpy(u.lightMvp, matrix.constData(), sizeof(u.lightMvp));
-        // Match terrain_reactor.frag's referenceMode: its self-lit material
-        // returns before externalVisibility(), so the depth draw is unused.
-        // Keep the texture initialized and retain shadows for manual materials.
+        // Match terrainMaterial()'s early return in terrain_reactor.frag.
+        // Reference themes never sample shadowDepth, so drawing the entire
+        // animated terrain again cannot affect their pixels. Keep the bound
+        // texture initialized in render(), and retain shadows for other materials.
         const bool referenceMaterial = u.timbre[3] < 1.5F && u.bodyColor[3] > 0.5F
             && (u.rippleColor[3] > 0.5F || u.sceneControls[2] <= 84.5F);
         u.shadowParameters[0] = enabled && available() && !referenceMaterial ? 1.0F : 0.0F;

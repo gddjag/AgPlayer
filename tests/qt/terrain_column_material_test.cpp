@@ -193,6 +193,7 @@ std::shared_ptr<const NativeReplay> loadNativeReplay(const QString& path)
     u.styleParameters[1] = -0.125F; u.styleParameters[2] = float(uniforms.value("uGlowIntensity").toDouble());
     u.styleToggles[3] = 1; // Reference idle field is part of the zero-audio frame.
     u.styleToggles[0] = 1; // Active reference ripple slots are authoritative input.
+    u.effects[3] = 10; // Reference replay uses the full ten-slot budget.
     // MapShaderMaterial has no uStream uniform or conditional around its
     // presence/brilliance/air passes. This explicit adapter value enables the
     // native gate without claiming a nonexistent source descriptor.
@@ -287,6 +288,8 @@ struct StudyParameters {
     float rippleAge = 0;
     float rippleStrength = 0;
     bool rippleEnabled = true;
+    int rippleBudget = 10;
+    int rippleSlot = 0;
     QVector2D rippleCenter;
     QVector3D rippleParameters{1, 1, 1};
     float exposure = 1;
@@ -549,10 +552,11 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
         u.rippleColor[2] = float(parameters_.rippleTint.blueF());
         u.rippleColor[3] = 1.0F;
         u.styleToggles[0] = parameters_.rippleEnabled ? 1.0F : 0.0F;
-        u.waveSources[0][2] = parameters_.rippleAge;
-        u.waveSources[0][3] = parameters_.rippleStrength;
-        u.waveSources[0][0] = parameters_.rippleCenter.x();
-        u.waveSources[0][1] = parameters_.rippleCenter.y();
+        u.effects[3] = float(parameters_.rippleBudget);
+        u.waveSources[parameters_.rippleSlot][2] = parameters_.rippleAge;
+        u.waveSources[parameters_.rippleSlot][3] = parameters_.rippleStrength;
+        u.waveSources[parameters_.rippleSlot][0] = parameters_.rippleCenter.x();
+        u.waveSources[parameters_.rippleSlot][1] = parameters_.rippleCenter.y();
         u.waveParameters[0] = parameters_.rippleParameters.x();
         u.waveParameters[1] = parameters_.rippleParameters.y();
         u.waveParameters[2] = parameters_.rippleParameters.z();
@@ -561,7 +565,7 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     u.sceneLighting[1] = parameters_.lighting.y();
     u.sceneLighting[2] = parameters_.lighting.z();
     shadow_.configure(rhi(), u, parameters_.shadows);
-    counters_->shadowEnabled = u.shadowParameters[0] > 0.5F;
+    counters_->shadowEnabled = u.shadowParameters[0] > 0;
     std::array<GpuInstance, 25> columns{};
     quint32 instanceCount = 1;
     if (parameters_.array) {
@@ -847,39 +851,61 @@ FrontFace locateFrontFace(const QImage& frame)
 class TerrainColumnMaterialTest : public QObject {
     Q_OBJECT
 private slots:
+    void referenceMaterialSkipsUnusedShadowPass_data()
+    {
+        QTest::addColumn<float>("runtimeMode");
+        QTest::addColumn<bool>("explicitRipple");
+        QTest::newRow("runtime-theme") << 1.0F << true;
+        QTest::newRow("reference-replay") << 0.0F << true;
+        QTest::newRow("reference-stage-without-ripple-color") << 1.0F << false;
+    }
     void referenceMaterialSkipsUnusedShadowPass()
     {
-        auto counters = std::make_shared<StudyCounters>();
+        QFETCH(float, runtimeMode);
+        QFETCH(bool, explicitRipple);
         QQuickWindow window;
         window.resize(640, 640);
+        window.setColor(Qt::black);
+        auto counters = std::make_shared<StudyCounters>();
         ColumnItem item(window.contentItem(), counters);
         item.parameters.array = true;
-        item.parameters.runtimeMode = 1;
-        item.parameters.stageHalfExtent = 84;
-        item.parameters.bodyTint = QColor(12, 24, 36);
-        item.parameters.time = 0.15F;
-        item.parameters.shadows = false;
+        item.parameters.runtimeMode = runtimeMode;
+        item.parameters.bodyTint = QColor("#102040");
+        item.parameters.rippleTint = explicitRipple ? QColor("#40a0ff") : QColor();
+        item.parameters.stageHalfExtent = explicitRipple ? 112.0F : 84.0F;
+        item.parameters.camera = {34, 30, 48};
         window.show();
         QVERIFY(waitForStudyWindow(window));
         QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
         QVERIFY(!counters->failed);
-        QVERIFY(counters->shadowAvailable);
+        QVERIFY2(counters->shadowAvailable, "Test requires a working depth-shadow pipeline");
         const QImage withoutShadow = studyFrame(window);
         QVERIFY(!withoutShadow.isNull());
         const int before = counters->frames;
         item.parameters.shadows = true;
         item.update();
-        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before, 3000);
-        const QImage withShadow = studyFrame(window);
-        QCOMPARE(withShadow, withoutShadow);
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before || counters->failed, 3000);
+        QVERIFY(!counters->failed);
+        const auto difference = compareFrames(withoutShadow, studyFrame(window));
+        QVERIFY(difference.commonVisible > 100);
+        QCOMPARE(difference.silhouetteMismatch, 0);
+        QCOMPARE(difference.totalRgbDifference, quint64(0));
         QVERIFY2(!counters->shadowEnabled,
-                 "Reference material never samples the shadow map; do not redraw its terrain");
-        // Switching back to a manual material must restore its real shadows.
-        const int beforeManual = counters->frames;
-        item.parameters.runtimeMode = 2;
+                 "Reference material never samples shadows; do not draw the terrain twice");
+        // A live switch back to a custom material must resume shadow updates
+        // without rebuilding resources; returning to the theme skips them again.
+        const int generations = counters->generations;
+        int frame = counters->frames;
+        item.parameters.bodyTint = QColor();
         item.update();
-        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > beforeManual, 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > frame, 3000);
         QVERIFY(counters->shadowEnabled);
+        frame = counters->frames;
+        item.parameters.bodyTint = QColor("#102040");
+        item.update();
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > frame, 3000);
+        QVERIFY(!counters->shadowEnabled);
+        QCOMPARE(counters->generations.load(), generations);
     }
     void nativeReadbackPngPreservesStraightColorAndAlpha()
     {
@@ -1254,6 +1280,9 @@ private slots:
             u.sceneLighting[0] = u.sceneLighting[2] = 1; u.sceneLighting[1] = .6F;
             u.materialParameters[0] = 1; u.materialParameters[1] = .45F;
             u.waveParameters[0] = u.waveParameters[1] = u.waveParameters[2] = 1;
+            // Production uniforms expose the active ripple budget in effects.w.
+            // This fixed ten-slot oracle intentionally includes slot 9.
+            u.effects[3] = 10.0F;
             const auto encode = [](float linear) {
                 return linear <= .0031308F ? linear * 12.92F
                     : 1.055F * std::pow(linear, 1.0F / 2.4F) - .055F;
@@ -1794,7 +1823,7 @@ private slots:
         QTest::newRow("steady-audio-with-motion-enabled") << 0.65F << 0.35F;
     }
     void sceneTimeChangesColumnsWithoutMovingBase();
-    void runtimeSteadyAudioDoesNotFreeRun();
+    void runtimeSteadyAudioRetainsReferenceMotion();
     void runtimeMotionControlDoesNotDoubleScaleShaderRelief();
     void consecutiveWavesUseDifferentPaletteAnchors();
     void explicitThemeTravellingWaveTintRequiresActiveWave();
@@ -1913,7 +1942,7 @@ void TerrainColumnMaterialTest::sceneTimeChangesColumnsWithoutMovingBase()
              "Replaying identical time/audio input must reproduce the same geometry");
 }
 
-void TerrainColumnMaterialTest::runtimeSteadyAudioDoesNotFreeRun()
+void TerrainColumnMaterialTest::runtimeSteadyAudioRetainsReferenceMotion()
 {
     auto counters = std::make_shared<StudyCounters>();
     QQuickWindow window;
@@ -1942,10 +1971,10 @@ void TerrainColumnMaterialTest::runtimeSteadyAudioDoesNotFreeRun()
     QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before || counters->failed, 3000);
     QVERIFY(!counters->failed);
     const auto change = compareFrames(baseline, studyFrame(window));
-    QVERIFY2(nearlySameBounds(change.firstBounds, change.secondBounds),
-             "Runtime terrain must keep its fixed ground and steady-audio silhouette");
-    QVERIFY2(change.silhouetteMismatch <= change.commonVisible / 1000,
-             "Steady audio must not animate columns from a free-running clock");
+    QVERIFY2(std::abs(change.firstBounds.bottom() - change.secondBounds.bottom()) <= 1,
+             "Runtime theme motion must not move the fixed ground anchor");
+    QVERIFY2(change.silhouetteMismatch > change.commonVisible / 1000,
+             "Canonical runtime themes retain the reference scene's subtle moving field");
 }
 
 void TerrainColumnMaterialTest::runtimeMotionControlDoesNotDoubleScaleShaderRelief()
@@ -2192,6 +2221,13 @@ void TerrainColumnMaterialTest::referenceRippleSeparatesNormalAndWhiteContracts(
     };
     QCOMPARE(hash(zero), hash(zeroAgain));
     QCOMPARE(hash(zero), hash(toggleOff));
+    item.parameters.rippleSlot = 9;
+    QCOMPARE(hash(normal), hash(capture(1.0F)));
+    item.parameters.rippleBudget = 2;
+    QCOMPARE(hash(zero), hash(capture(1.0F)));
+    item.parameters.rippleSlot = 0;
+    QCOMPARE(hash(normal), hash(capture(1.0F)));
+    item.parameters.rippleBudget = 10;
     const FrameComparison normalChange = compareFrames(zero, normal);
     const FrameComparison whiteChange = compareFrames(zero, white);
     qInfo() << "Reference ripple normal/white bounds:"

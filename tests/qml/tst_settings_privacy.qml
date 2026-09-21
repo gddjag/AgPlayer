@@ -53,12 +53,17 @@ TestCase {
         verify(body.text.indexOf("五、安全、未成年人及政策更新") >= 0)
         verify(body.text.indexOf("mailto:agplayer@foxmail.com") >= 0)
         verify(body.text.indexOf("https://github.com/gddjag/AgPlayer/releases") >= 0)
-        const plain = body.getText(0, body.length)
-        const linkPosition = plain.indexOf("UVR")
-        verify(linkPosition > 0)
-        const rect = body.positionToRectangle(linkPosition + 1)
-        compare(body.linkAt(rect.x + 1, rect.y + rect.height / 2),
-                "https://github.com/Anjok07/ultimatevocalremovergui")
+        var uvrLink = ""
+        for (var y = 0; y < body.height && uvrLink.length === 0; y += 3) {
+            for (var x = 0; x < body.width; x += 3) {
+                var candidate = body.linkAt(x, y)
+                if (candidate.indexOf("github.com/Anjok07/ultimatevocalremovergui") >= 0) {
+                    uvrLink = candidate
+                    break
+                }
+            }
+        }
+        compare(uvrLink, "https://github.com/Anjok07/ultimatevocalremovergui")
         verify(scroll.contentItem.contentHeight > scroll.availableHeight)
         if (data.tag === "reference" && visualFixtureOutput.length > 0)
             grabImage(host.contentItem).save(visualFixtureOutput + "-dialog.png")

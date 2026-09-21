@@ -282,6 +282,8 @@ private slots:
     void neverExceedsConfiguredConcurrency();
     void cancellationAndDestructionStopWorkersSafely();
     void cacheHitsAndFileIdentityChangesInvalidateEntries();
+    void startRepeatsRetainedSelectionAlongsideNewTasks();
+    void startRepeatsRetainedSelectionAlongsideNewTasks_data();
     void realWavPublishesSpectrumAndCacheKeepsIt();
     void requestsSpectrogramOnDemandAndFormatsListColumns();
     void spectrogramRequestsDoNotCacheStrippedMatrices();
@@ -661,6 +663,60 @@ void LosslessAnalysisControllerTest::cacheHitsAndFileIdentityChangesInvalidateEn
     controller.start();
     QTRY_COMPARE_WITH_TIMEOUT(calls.load(), 2, 3000);
     QTRY_VERIFY_WITH_TIMEOUT(!controller.running(), 3000);
+}
+
+void LosslessAnalysisControllerTest::startRepeatsRetainedSelectionAlongsideNewTasks_data()
+{
+    QTest::addColumn<int>("firstVerdict");
+    QTest::newRow("completed") << int(agplayer::lossless::Verdict::CredibleLossless);
+    QTest::newRow("failed") << int(agplayer::lossless::Verdict::AnalysisFailed);
+    QTest::newRow("cancelled") << int(agplayer::lossless::Verdict::Cancelled);
+}
+
+void LosslessAnalysisControllerTest::startRepeatsRetainedSelectionAlongsideNewTasks()
+{
+    QFETCH(int, firstVerdict);
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString first = writeFile(directory, QStringLiteral("first.wav"));
+    const QString second = writeFile(directory, QStringLiteral("second.wav"));
+    std::atomic_bool firstAttempt{true};
+    LosslessAnalysisController controller(
+        [&](const std::string& path, const agplayer::lossless::AnalysisOptions& options,
+           const std::atomic_bool&, agplayer::lossless::ProgressCallback) {
+            return completedResult(QString::fromUtf8(path),
+                firstAttempt.exchange(false)
+                    ? static_cast<agplayer::lossless::Verdict>(firstVerdict)
+                    : agplayer::lossless::Verdict::CredibleLossless,
+                options.includeSpectrogram);
+        }, nullptr);
+    QSignalSpy finished(&controller, &LosslessAnalysisController::taskFinished);
+    controller.loadFiles(urls({first}));
+    QTRY_COMPARE_WITH_TIMEOUT(controller.totalCount(), 1, 3000);
+    controller.start();
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 3000);
+    QTRY_VERIFY(!controller.running());
+    const QString firstId = taskIdAt(controller.tasks(), 0);
+    controller.loadFiles(urls({second}));
+    QTRY_COMPARE_WITH_TIMEOUT(controller.totalCount(), 2, 3000);
+    controller.start();
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 3, 3000);
+    QTRY_VERIFY(!controller.running());
+    QCOMPARE(taskIdAt(controller.tasks(), 0), firstId);
+    controller.setChecked(firstId, false);
+    controller.start();
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 4, 3000);
+    QTRY_VERIFY(!controller.running());
+    QCOMPARE(controller.totalCount(), 2);
+    QCOMPARE(controller.selectedCount(), 1);
+    QVERIFY(finished.last().first().toString() != firstId);
+    // A detail request must not be mistaken for another whole-list batch.
+    controller.selectTask(firstId);
+    controller.requestSpectrogram();
+    QTRY_VERIFY(!controller.running());
+    QCOMPARE(finished.count(), 5);
+    QCOMPARE(finished.last().first().toString(), firstId);
+    QVERIFY(!controller.selectedResult().value(QStringLiteral("spectrogram")).toList().isEmpty());
 }
 
 void LosslessAnalysisControllerTest::realWavPublishesSpectrumAndCacheKeepsIt()

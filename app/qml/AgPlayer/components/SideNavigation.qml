@@ -500,8 +500,8 @@ Item {
                     anchors.bottom: parent.bottom
                     height: 42
                     anchors.leftMargin: 4
-                    anchors.rightMargin: 4
-                    spacing: 4
+                    anchors.rightMargin: 0
+                    spacing: 2
                     Image {
                         source: Theme.icon("user-resource-folder")
                         sourceSize.width: root.navigationIconVisualSize

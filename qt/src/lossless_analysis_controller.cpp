@@ -1897,8 +1897,8 @@ void LosslessAnalysisController::addFolder(const QUrl& folder)
 
 void LosslessAnalysisController::start()
 {
-    if (d_->stopping) return;
-    if (!d_->running) resetSelectedTasks();
+    // Explicitly starting a new batch includes checked retained results.
+    if (!d_->running && !d_->stopping) resetSelectedTasks(true);
     startWaitingTasks();
 }
 
@@ -1980,16 +1980,18 @@ void LosslessAnalysisController::cancel()
 void LosslessAnalysisController::retrySelected()
 {
     if (d_->stopping) return;
-    if (resetSelectedTasks()) startWaitingTasks();
+    if (resetSelectedTasks(false)) startWaitingTasks();
 }
 
-bool LosslessAnalysisController::resetSelectedTasks()
+bool LosslessAnalysisController::resetSelectedTasks(bool terminalOnly)
 {
     bool any = false;
     for (const QString& id : d_->model.taskIds()) {
         const QVariantMap task = d_->model.task(id);
         if (!task.value(QStringLiteral("checked")).toBool()
-            || d_->activeJobs.contains(id)) {
+            || d_->activeJobs.contains(id)
+            || (terminalOnly && !terminalState(
+                task.value(QStringLiteral("state")).toString()))) {
             continue;
         }
         any = true;
@@ -2022,6 +2024,7 @@ bool LosslessAnalysisController::resetSelectedTasks()
             emit selectedResultChanged();
         }
     }
+    if (any) d_->updateAggregates();
     return any;
 }
 
