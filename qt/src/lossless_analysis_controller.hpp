@@ -106,6 +106,8 @@ signals:
     void reportExportFailed(const QString& message);
 
 private:
+    bool resetSelectedTasks(bool terminalOnly);
+    void startWaitingTasks();
     class Private;
     std::unique_ptr<Private> d_;
 };
