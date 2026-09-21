@@ -58,7 +58,7 @@ async function runDownloadScript(response, timers = {}) {
   const macGithub = fakeElement();
   const macChecksum = fakeElement();
   const macChecksumCopy = fakeElement();
-  macChecksum.textContent = '8654AE0C4761392426D5DCA2DE180F8D72C50A1F9D87E5DAA78E539110CF463F';
+  macChecksum.textContent = 'BDDA37B91E9A6603410ED4CC117414AB4E8A50F9EF58AB6091D1A0A42333E31B';
   checksum.setAttribute('hidden', '');
   const documentListeners = new Map();
   const calls = [];
@@ -137,22 +137,22 @@ test('one verified manifest updates both platforms and rejects a forged macOS ro
   bad.files[1].r2Url = 'https://example.com/forged.dmg';
   const rejected = await runDownloadScript(streamedResponse(JSON.stringify(bad)));
   assert.equal(rejected.macPrimary.href, undefined);
-  assert.equal(rejected.checksumValue.textContent, '1B9851702DEC9446552B616C19EEB0D8C62756735257C1BA59278AE54896A5A4');
+  assert.equal(rejected.checksumValue.textContent, '0565007B72D03168EDE3620EC64314142F089C0676BE6EEA2A6D3D9537A15B4B');
 });
 
 test('macOS HTML fallback links the accepted package and official opening guide', async () => {
   const html = await readFile(downloadPagePath, 'utf8');
   assert.match(html, /href="https:\/\/support\.apple\.com\/zh-cn\/102445"/);
   assert.match(html, /尚未经过 Apple 公证/);
-  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.0\.7\/AgPlayer-1\.0\.7-macOS-universal\.dmg"/);
-  assert.match(html, /8654AE0C4761392426D5DCA2DE180F8D72C50A1F9D87E5DAA78E539110CF463F/);
+  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.0\.8\/AgPlayer-1\.0\.8-macOS-universal\.dmg"/);
+  assert.match(html, /BDDA37B91E9A6603410ED4CC117414AB4E8A50F9EF58AB6091D1A0A42333E31B/);
   assert.match(html, /id="macos-sha256-copy"[^>]*data-i18n="downloadPage.checksum.copy"/);
 });
 
 test('macOS copy uses the displayed checksum for fallback and live metadata', async () => {
   const fallback = await runDownloadScript({ok:false});
   fallback.macChecksumCopy.click();
-  assert.deepEqual(fallback.clipboardWrites, ['8654AE0C4761392426D5DCA2DE180F8D72C50A1F9D87E5DAA78E539110CF463F']);
+  assert.deepEqual(fallback.clipboardWrites, ['BDDA37B91E9A6603410ED4CC117414AB4E8A50F9EF58AB6091D1A0A42333E31B']);
   const live = await runDownloadScript(streamedResponse(JSON.stringify(manifest())));
   live.macChecksumCopy.click();
   assert.deepEqual(live.clipboardWrites, ['B'.repeat(64)]);
@@ -195,7 +195,7 @@ test('published Windows release exposes the real uppercase SHA-256 and copies it
   assert.deepEqual(result.clipboardWrites, [expected]);
 });
 
-test('published 1.0.7 remains available when the live manifest cannot be read', async () => {
+test('published 1.0.8 remains available when the live manifest cannot be read', async () => {
   const cases = [
     { ok: false },
     streamedResponse('x'.repeat(65537)),
@@ -207,12 +207,12 @@ test('published 1.0.7 remains available when the live manifest cannot be read', 
     assert.equal(result.primary.disabled, false);
     assert.equal(result.github.disabled, false);
     assert.equal(result.checksum.hasAttribute('hidden'), false);
-    assert.equal(result.checksumValue.textContent, '1B9851702DEC9446552B616C19EEB0D8C62756735257C1BA59278AE54896A5A4');
+    assert.equal(result.checksumValue.textContent, '0565007B72D03168EDE3620EC64314142F089C0676BE6EEA2A6D3D9537A15B4B');
     result.primary.click();
     result.github.click();
     assert.deepEqual(result.navigations, [
-      'https://download.agplayer.com/releases/v1.0.7/AgPlayer-Setup-1.0.7-x64.exe',
-      'https://github.com/gddjag/AgPlayer/releases/download/v1.0.7/AgPlayer-Setup-1.0.7-x64.exe'
+      'https://download.agplayer.com/releases/v1.0.8/AgPlayer-Setup-1.0.8-x64.exe',
+      'https://github.com/gddjag/AgPlayer/releases/download/v1.0.8/AgPlayer-Setup-1.0.8-x64.exe'
     ]);
   }
 });
@@ -221,7 +221,7 @@ test('download page hides the removed pre-download FAQ section and divider', asy
   const html = await readFile(downloadPagePath, 'utf8');
   const css = await readFile(siteCssPath, 'utf8');
   assert.match(css, /\.download-faq\s*\{\s*display:\s*none\s*\}/);
-  assert.match(html, /downloads\.js\?v=20260921-release-107-dual/);
+  assert.match(html, /downloads\.js\?v=20260922-release-108-dual/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
