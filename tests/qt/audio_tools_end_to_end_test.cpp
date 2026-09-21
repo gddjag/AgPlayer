@@ -2500,6 +2500,25 @@ void AudioToolsEndToEndTest::formatConverterPendingPlanRunsOnlyCheckedEntries()
              QStringLiteral("Waiting"));
     QCOMPARE(rows.at(2).toMap().value(QStringLiteral("status")).toString(),
              QStringLiteral("Done"));
+
+    // A new preflight must accept completed rows without clearing the list.
+    const QString secondOutput = temp.filePath(QStringLiteral("second-pass"));
+    QVERIFY(QDir().mkpath(secondOutput));
+    const QVariantMap repeatedPlan = converter.buildPreflight({
+        {QStringLiteral("outputFormat"), QStringLiteral("wav")},
+        {QStringLiteral("outputDir"), secondOutput},
+        {QStringLiteral("keepMetadata"), false},
+        {QStringLiteral("keepCover"), false}});
+    QVERIFY(repeatedPlan.value(QStringLiteral("ready")).toBool());
+    QCOMPARE(repeatedPlan.value(QStringLiteral("taskCount")).toInt(), 2);
+    completed.clear();
+    converter.confirmPendingPlan();
+    QVERIFY(completed.wait(30000));
+    QCOMPARE(converter.files().size(), 3);
+    QCOMPARE(converter.doneCount(), 2);
+    QVERIFY(QFileInfo::exists(QDir(secondOutput).filePath(QStringLiteral("checked-0.wav"))));
+    QVERIFY(QFileInfo::exists(QDir(secondOutput).filePath(QStringLiteral("checked-2.wav"))));
+    QVERIFY(!QFileInfo::exists(QDir(secondOutput).filePath(QStringLiteral("checked-1.wav"))));
 }
 
 void AudioToolsEndToEndTest::
@@ -3030,6 +3049,20 @@ void AudioToolsEndToEndTest::metadataEditorKeepsUntouchedTitle()
     const auto title = QString::fromUtf8(ag_metadata_title(metadata));
     ag_metadata_destroy(metadata);
     QCOMPARE(title, originalTitle);
+    applied.clear();
+    editor.applyMetadata({{QStringLiteral("artist"), QVariantMap{
+        {QStringLiteral("mode"), QStringLiteral("set")},
+        {QStringLiteral("value"), QStringLiteral("Second artist")}}}}, {});
+    QVERIFY(applied.wait(30000));
+    QCOMPARE(applied.first().first().toInt(), 1);
+    QCOMPARE(editor.fileCount(), 1);
+    metadata = nullptr;
+    QCOMPARE(ag_metadata_open(input.toUtf8().constData(), &metadata), AG_OK);
+    const QString secondArtist = QString::fromUtf8(ag_metadata_artist(metadata));
+    const QString secondTitle = QString::fromUtf8(ag_metadata_title(metadata));
+    ag_metadata_destroy(metadata);
+    QCOMPARE(secondArtist, QStringLiteral("Second artist"));
+    QCOMPARE(secondTitle, originalTitle);
     QCOMPARE(library.trackForId(track.trackId).value(QStringLiteral("title")).toString(),
              originalTitle.isEmpty() ? QStringLiteral("Unchanged.name") : originalTitle);
 }
@@ -3766,6 +3799,20 @@ void AudioToolsEndToEndTest::filenameProcessorRenamesWithoutTouchingAudio()
     QCOMPARE(renamedFile.readAll(), originalBytes);
     QCOMPARE(processor.entryAt(0).value(QStringLiteral("sha256")).toString(),
              originalHash);
+    renamedFile.close();
+    const QVariantMap nextRules{{QStringLiteral("prefix"), QStringLiteral("Again-")}};
+    QCOMPARE(processor.preview(nextRules).first().toMap()
+                 .value(QStringLiteral("preview")).toString(),
+             QStringLiteral("Again-P-my_song-S_007.wav"));
+    renamed.clear();
+    processor.apply(nextRules);
+    QVERIFY(renamed.wait(30000));
+    QCOMPARE(renamed.first().at(0).toInt(), 1);
+    QCOMPARE(processor.fileCount(), 1);
+    QFile finalFile(temp.filePath(QStringLiteral("Again-P-my_song-S_007.wav")));
+    QVERIFY(finalFile.open(QIODevice::ReadOnly));
+    QCOMPARE(finalFile.readAll(), originalBytes);
+    QVERIFY(!QFileInfo::exists(renamedPath));
 }
 
 void AudioToolsEndToEndTest::filenameProcessorAppliesExactlyThePreviewedConflictPlan()

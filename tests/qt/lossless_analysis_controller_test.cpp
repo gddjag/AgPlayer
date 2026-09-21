@@ -648,7 +648,7 @@ void LosslessAnalysisControllerTest::cacheHitsAndFileIdentityChangesInvalidateEn
 
     QSignalSpy finished(&controller,
                         &LosslessAnalysisController::taskFinished);
-    controller.retrySelected();
+    controller.start();
     QTRY_VERIFY_WITH_TIMEOUT(finished.count() >= 1, 3000);
     QCOMPARE(calls.load(), 1);
     QCOMPARE(controller.selectedResult()
@@ -658,7 +658,7 @@ void LosslessAnalysisControllerTest::cacheHitsAndFileIdentityChangesInvalidateEn
     QVERIFY(file.open(QIODevice::Append));
     QCOMPARE(file.write("changed"), qint64(7));
     file.close();
-    controller.retrySelected();
+    controller.start();
     QTRY_COMPARE_WITH_TIMEOUT(calls.load(), 2, 3000);
     QTRY_VERIFY_WITH_TIMEOUT(!controller.running(), 3000);
 }

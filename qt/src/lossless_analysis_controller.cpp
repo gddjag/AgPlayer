@@ -1897,6 +1897,13 @@ void LosslessAnalysisController::addFolder(const QUrl& folder)
 
 void LosslessAnalysisController::start()
 {
+    if (d_->stopping) return;
+    if (!d_->running) resetSelectedTasks();
+    startWaitingTasks();
+}
+
+void LosslessAnalysisController::startWaitingTasks()
+{
     if (d_->running && !d_->stopping) {
         if (!d_->discoveryJobs.isEmpty()) d_->pendingStart = true;
         d_->dispatchAvailable();
@@ -1973,6 +1980,11 @@ void LosslessAnalysisController::cancel()
 void LosslessAnalysisController::retrySelected()
 {
     if (d_->stopping) return;
+    if (resetSelectedTasks()) startWaitingTasks();
+}
+
+bool LosslessAnalysisController::resetSelectedTasks()
+{
     bool any = false;
     for (const QString& id : d_->model.taskIds()) {
         const QVariantMap task = d_->model.task(id);
@@ -2010,7 +2022,7 @@ void LosslessAnalysisController::retrySelected()
             emit selectedResultChanged();
         }
     }
-    if (any) start();
+    return any;
 }
 
 void LosslessAnalysisController::removeSelected()
@@ -2206,7 +2218,7 @@ void LosslessAnalysisController::requestSpectrogram()
         {QStringLiteral("_includeSpectrogram"), true},
     });
     d_->updateAggregates();
-    start();
+    startWaitingTasks();
 }
 
 void LosslessAnalysisController::refreshTranslations()

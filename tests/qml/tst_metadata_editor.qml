@@ -82,6 +82,31 @@ TestCase {
             MetadataEditor.clear()
     }
 
+    function test_retainedListIsSelectedWhenPageReopens() {
+        const copy = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copy.toString().length > 0)
+        MetadataEditor.loadFiles([copy])
+        tryCompare(MetadataEditor, "busy", false, 30000)
+        compare(MetadataEditor.fileCount, 1)
+        const reopened = createTemporaryObject(responsivePageComponent, testCase,
+                                                {width: testCase.width, height: testCase.height, z: 10})
+        verify(reopened)
+        wait(0)
+        compare(reopened.targetCount(), 1)
+        const apply = findChild(reopened, "metadataApplyButton")
+        verify(apply)
+        for (let pass = 0; pass < 2; ++pass) {
+            reopened.refreshFields()
+            reopened.setFieldMode("title", "set")
+            reopened.setFieldValue("title", "Repeat " + pass)
+            verify(apply.enabled)
+            mouseClick(apply, apply.width / 2, apply.height / 2)
+            tryCompare(MetadataEditor, "busy", false, 30000)
+            compare(MetadataEditor.fileCount, 1)
+            compare(nativeDropHelper.probeMetadataTitle(copy), "Repeat " + pass)
+        }
+    }
+
     function test_referenceDesktopGeometry() {
         wait(0)
         const files = findChild(page, "metadataFilePanel")
