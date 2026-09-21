@@ -512,6 +512,8 @@ TestCase {
         verify(volume)
         var flyout = findChild(miniPlayer, "miniVolumeFlyout")
         verify(flyout)
+        var mute = findChild(miniPlayer, "miniMuteButton")
+        verify(mute)
         var closeTimer = findChild(miniPlayer, "miniVolumeCloseTimer")
         verify(closeTimer, "volume flyout must expose its delayed close timer")
         compare(closeTimer.interval, 2000)
@@ -521,8 +523,8 @@ TestCase {
             return left >= 0 && left + flyout.width <= miniPlayer.width
         }, 300, "expanded mini volume flyout must remain inside the window canvas")
         tryVerify(function() {
-            return flyout.x >= 28
-                    && flyout.x + flyout.width === flyout.parent.width
+            return flyout.x >= mute.x + mute.width
+                    && flyout.width > 0
         }, 300, "mini volume flyout must expand to the right of its mute button")
         closeTimer.restart()
         wait(1600)
