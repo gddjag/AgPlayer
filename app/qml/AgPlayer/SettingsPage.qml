@@ -2574,59 +2574,54 @@ Item {
 
                 Item { Layout.fillWidth: true }
 
-                RowLayout {
+                ColumnLayout {
+                    objectName: "aboutUpdatePanel"
+                    Layout.preferredWidth: 240
+                    Layout.maximumWidth: 240
+                    Layout.minimumWidth: 224
                     spacing: Theme.spacingSm
-
-                    ThemedButton {
-                        Layout.preferredWidth: 120
-                        prominent: true
-                        text: qsTr("访问官网")
-                        onClicked: SettingsController.openOfficialWebsite()
+                    Text {
+                        text: qsTr("软件更新")
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeBodyStrong
+                        font.bold: true
                     }
-
+                    Text {
+                        objectName: "aboutUpdateStatus"
+                        Layout.fillWidth: true
+                        text: aboutSection.updateService.statusText
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        color: aboutSection.updateService.updateAvailable ? Theme.accent : Theme.secondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeBody
+                    }
+                    RowLayout {
+                        spacing: Theme.spacingSm
+                        ThemedButton {
+                            objectName: "aboutCheckUpdates"
+                            text: aboutSection.updateService.busy ? qsTr("正在检查…") : qsTr("检查更新")
+                            enabled: !aboutSection.updateService.busy
+                            onClicked: aboutSection.updateService.check()
+                        }
+                        ThemedButton {
+                            objectName: "aboutDownloadUpdate"
+                            text: qsTr("前往官网下载")
+                            onClicked: SettingsController.openOfficialWebsite()
+                        }
+                    }
                 }
             }
         }
 
-        SettingCard {
-            title: qsTr("软件更新")
-            Layout.fillWidth: true
-            Text {
-                objectName: "aboutUpdateStatus"
-                Layout.fillWidth: true
-                text: aboutSection.updateService.statusText
-                textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
-                color: aboutSection.updateService.updateAvailable ? Theme.accent : Theme.secondaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: Theme.fontSizeBody
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacingSm
-                ThemedButton {
-                    objectName: "aboutCheckUpdates"
-                    text: aboutSection.updateService.busy ? qsTr("正在检查…") : qsTr("检查更新")
-                    enabled: !aboutSection.updateService.busy
-                    onClicked: aboutSection.updateService.check()
-                }
-                ThemedButton {
-                    objectName: "aboutDownloadUpdate"
-                    prominent: true
-                    text: qsTr("前往官网下载")
-                    onClicked: SettingsController.openOfficialWebsite()
-                }
-                Item { Layout.fillWidth: true }
-            }
-            Text {
-                objectName: "aboutUpdateDownloadHelp"
-                Layout.fillWidth: true
-                text: qsTr("下载由浏览器完成。若下载卡顿、超时或失败，请返回官网切换 GitHub / R2 线路。")
-                textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
-                color: Theme.secondaryText
-                font.pixelSize: Theme.fontSizeBody
-            }
+        ThemedButton {
+            objectName: "aboutPrivacyPolicyButton"
+            text: qsTr("AgPlayer 隐私政策")
+            onClicked: privacyPolicyDialog.open()
+        }
+        PrivacyPolicyDialog {
+            id: privacyPolicyDialog
         }
         Item { Layout.fillHeight: true }
     }

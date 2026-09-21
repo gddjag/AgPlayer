@@ -134,6 +134,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/EqualizerWindow.qml
         qml/AgPlayer/SettingsWindow.qml
         qml/AgPlayer/SettingsPage.qml
+        qml/AgPlayer/components/PrivacyPolicyDialog.qml
         qml/AgPlayer/theme/Theme.qml
         qml/AgPlayer/components/TitleBar.qml
         qml/AgPlayer/components/IntegratedPlayerShell.qml
