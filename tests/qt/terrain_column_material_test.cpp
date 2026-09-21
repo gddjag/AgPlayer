@@ -193,6 +193,7 @@ std::shared_ptr<const NativeReplay> loadNativeReplay(const QString& path)
     u.styleParameters[1] = -0.125F; u.styleParameters[2] = float(uniforms.value("uGlowIntensity").toDouble());
     u.styleToggles[3] = 1; // Reference idle field is part of the zero-audio frame.
     u.styleToggles[0] = 1; // Active reference ripple slots are authoritative input.
+    u.effects[3] = 10; // Reference replay uses the full ten-slot budget.
     // MapShaderMaterial has no uStream uniform or conditional around its
     // presence/brilliance/air passes. This explicit adapter value enables the
     // native gate without claiming a nonexistent source descriptor.
@@ -287,6 +288,8 @@ struct StudyParameters {
     float rippleAge = 0;
     float rippleStrength = 0;
     bool rippleEnabled = true;
+    int rippleBudget = 10;
+    int rippleSlot = 0;
     QVector2D rippleCenter;
     QVector3D rippleParameters{1, 1, 1};
     float exposure = 1;
@@ -549,10 +552,11 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
         u.rippleColor[2] = float(parameters_.rippleTint.blueF());
         u.rippleColor[3] = 1.0F;
         u.styleToggles[0] = parameters_.rippleEnabled ? 1.0F : 0.0F;
-        u.waveSources[0][2] = parameters_.rippleAge;
-        u.waveSources[0][3] = parameters_.rippleStrength;
-        u.waveSources[0][0] = parameters_.rippleCenter.x();
-        u.waveSources[0][1] = parameters_.rippleCenter.y();
+        u.effects[3] = float(parameters_.rippleBudget);
+        u.waveSources[parameters_.rippleSlot][2] = parameters_.rippleAge;
+        u.waveSources[parameters_.rippleSlot][3] = parameters_.rippleStrength;
+        u.waveSources[parameters_.rippleSlot][0] = parameters_.rippleCenter.x();
+        u.waveSources[parameters_.rippleSlot][1] = parameters_.rippleCenter.y();
         u.waveParameters[0] = parameters_.rippleParameters.x();
         u.waveParameters[1] = parameters_.rippleParameters.y();
         u.waveParameters[2] = parameters_.rippleParameters.z();
@@ -2214,6 +2218,13 @@ void TerrainColumnMaterialTest::referenceRippleSeparatesNormalAndWhiteContracts(
     };
     QCOMPARE(hash(zero), hash(zeroAgain));
     QCOMPARE(hash(zero), hash(toggleOff));
+    item.parameters.rippleSlot = 9;
+    QCOMPARE(hash(normal), hash(capture(1.0F)));
+    item.parameters.rippleBudget = 2;
+    QCOMPARE(hash(zero), hash(capture(1.0F)));
+    item.parameters.rippleSlot = 0;
+    QCOMPARE(hash(normal), hash(capture(1.0F)));
+    item.parameters.rippleBudget = 10;
     const FrameComparison normalChange = compareFrames(zero, normal);
     const FrameComparison whiteChange = compareFrames(zero, white);
     qInfo() << "Reference ripple normal/white bounds:"

@@ -418,11 +418,11 @@ protected:
         if (!snapshot_.style.ripplesEnabled) {
             travelingWaves_.fill(QVector4D());
         } else {
-            // Confirmed PCM kicks feed the reference ten-slot wave pool;
+            // Confirmed PCM kicks feed the active reference wave budget;
             // no additional presentation gate may suppress repeated drums.
             for (int wave = 0; wave < pulseWaveCount; ++wave) {
-                const int slot = nextWave_ % int(travelingWaves_.size());
-                nextWave_ = (slot + 1) % int(travelingWaves_.size());
+                const int slot = nextWave_ % std::max(1, currentRippleCount_);
+                nextWave_ = (slot + 1) % std::max(1, currentRippleCount_);
                 const QVector4D origin = waveSources_[std::size_t(slot)];
                 travelingWaves_[std::size_t(slot)] = QVector4D(
                     origin.x(), origin.y(), renderTimeSeconds,
@@ -480,7 +480,7 @@ protected:
                                         s * hit.x() + c * hit.z());
                     }
                     if (distance >= 0 && std::abs(hit.x()) <= 84 && std::abs(hit.z()) <= 84) {
-                        const auto slot = std::size_t(nextWave_++ % int(travelingWaves_.size()));
+                        const auto slot = std::size_t(nextWave_++ % std::max(1, currentRippleCount_));
                         travelingWaves_[slot] = QVector4D(hit.x(), hit.z(), renderTimeSeconds, 1.0F);
                     }
                 }
@@ -750,13 +750,14 @@ private:
             // Original scene has meteor debris, not the legacy star sphere.
             config.particleCount = 0;
             if (snapshot_.quality == TerrainReactorItem::Quality::High) {
-                config.gridSize = referenceTerrainGridSize(snapshot_.style.topographyDensity);
-                gridCeiling = 224;
-                config.floatingCount = 80;
-                config.meteorCount = 10;
-                config.rippleCount = 10;
-                config.internalScale = 1;
-                config.sampleCount = 4;
+                // Preserve the Windows reference scene at full quality, but
+                // do not overwrite the automatic controller's load reductions.
+                if (quality_.stage() < DegradationStage::ReducedGrid) {
+                    config.gridSize = referenceTerrainGridSize(snapshot_.style.topographyDensity);
+                    gridCeiling = 224;
+                }
+                if (quality_.stage() < DegradationStage::ReducedRipples)
+                    config.rippleCount = 10;
             }
         }
         if (!snapshot_.style.floatingCubesEnabled) config.floatingCount = 0;
