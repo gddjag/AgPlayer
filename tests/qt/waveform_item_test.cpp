@@ -643,8 +643,8 @@ void WaveformItemTest::spectrumUsesReadableResponsiveBars()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* geometry = static_cast<QSGGeometryNode*>(node)->geometry();
-    // Width 120 fits fifteen 6px columns with at least 2px clear spacing.
-    QCOMPARE(geometry->vertexCount(), 15 * 14);
+    // Width 120 fits 24 4px columns with at least 1px clear spacing.
+    QCOMPARE(geometry->vertexCount(), 24 * 10);
     delete node;
 }
 
@@ -657,8 +657,8 @@ void WaveformItemTest::spectrumSpacingIsIndependentOfScreenScale()
     item.setVisualMode(2);
     item.setPeaks(peaks({0.5, 0.8, 0.3, 0.6}));
     const qreal pixelWidth = 1.0 / window.devicePixelRatio();
-    const int copies = static_cast<int>(std::ceil(6.0 * window.devicePixelRatio()));
-    const std::array<std::pair<int, int>, 4> cases{{{13, 1}, {120, 15}, {600, 75}, {2400, 128}}};
+    const int copies = static_cast<int>(std::ceil(4.0 * window.devicePixelRatio()));
+    const std::array<std::pair<int, int>, 4> cases{{{8, 1}, {120, 24}, {600, 120}, {2400, 128}}};
     QSGNode* node = nullptr;
     for (const auto& [width, bars] : cases) {
         item.setWidth(width);
@@ -668,9 +668,9 @@ void WaveformItemTest::spectrumSpacingIsIndependentOfScreenScale()
                  bars * 2 * (copies + 1));
         const auto* data = vertices(node);
         const float rightOfFirst = data[(copies - 1) * bars * 2].x;
-        QVERIFY(std::abs(rightOfFirst - data[0].x + pixelWidth - 6.0) < pixelWidth + 0.01);
+        QVERIFY(std::abs(rightOfFirst - data[0].x + pixelWidth - 4.0) < pixelWidth + 0.01);
         if (bars > 1)
-            QVERIFY2(data[2].x - rightOfFirst - pixelWidth >= 1.99,
+            QVERIFY2(data[2].x - rightOfFirst - pixelWidth >= 0.99,
                      "Screen scaling must preserve the clear gap between columns");
         QVERIFY(data[0].x >= 0.0F);
         QVERIFY(data[(copies * bars - 1) * 2].x <= width);
@@ -709,8 +709,8 @@ void WaveformItemTest::spectrumContractUsesFixedBarsWithPeakCaps()
 {
     TestableWaveformItem item;
     QCOMPARE(item.spectrumBarCount(), 128);
-    QCOMPARE(item.spectrumBarWidth(), 6.0);
-    QCOMPARE(item.spectrumBarGap(), 2.0);
+    QCOMPARE(item.spectrumBarWidth(), 4.0);
+    QCOMPARE(item.spectrumBarGap(), 1.0);
     QCOMPARE(item.spectrumMaxHeight(), 96.0);
     QCOMPARE(item.spectrumAttackSeconds(), 0.02);
     QCOMPARE(item.spectrumDecaySeconds(), 0.10);
@@ -726,19 +726,19 @@ void WaveformItemTest::spectrumContractUsesFixedBarsWithPeakCaps()
     const auto* data = vertices(node);
     const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
     // The live spectrum must use the complete waveform canvas.  The fixed
-    // source is resampled into 75 responsive bars at this width.
+    // source is resampled into 120 responsive bars at this width.
     QVERIFY(data[0].x >= 0.0F && data[0].x <= 2.0F);
-    const int lastBarVertex = 75 * 2 * 5 + (75 - 1) * 2;
+    const int lastBarVertex = 120 * 2 * 3 + (120 - 1) * 2;
     QVERIFY(data[lastBarVertex].x >= 598.0F && data[lastBarVertex].x <= 600.0F);
     // The faster, taller spectrum should lift the center bar above the former
     // 72 px visual cap while remaining bottom-aligned.
-    const int centerBarVertex = 37 * 2;
+    const int centerBarVertex = 60 * 2;
     QVERIFY(data[centerBarVertex].y <= 23.0F);
     QCOMPARE(data[centerBarVertex + 1].y, 96.0F);
     // A one-pixel horizontal cap must remain visible above each bottom-aligned
     // bar so the live spectrum has the square peak markers from the reference.
-    const int capVertex = 75 * 2 * 6 + 37 * 2;
-    QCOMPARE(geometryNode->geometry()->vertexCount(), 75 * 14);
+    const int capVertex = 120 * 2 * 4 + 60 * 2;
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 120 * 10);
     QCOMPARE(data[capVertex].y, data[centerBarVertex].y);
     QCOMPARE(data[capVertex + 1].y, data[centerBarVertex].y);
     QVERIFY(data[capVertex].x < data[capVertex + 1].x);
@@ -756,8 +756,8 @@ void WaveformItemTest::spectrumPeakCapsNeverFallInsideTheirBars()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* data = vertices(node);
-    constexpr int barCount = 9;
-    constexpr int strokeCopies = 6;
+    constexpr int barCount = 14;
+    constexpr int strokeCopies = 4;
     constexpr int lowBar = 0;
     const int barTopVertex = lowBar * 2;
     const int capVertex = barCount * 2 * strokeCopies + lowBar * 2;
@@ -793,8 +793,8 @@ void WaveformItemTest::spectrumColorIsIndependentOfPlaybackProgress()
     // Spectrum colour represents frequency, not playback progress. Seeking must
     // leave both the bar and its peak-hold cap on the configured colour model.
     compareColor(data[0], 0x00, 0x2F, 0xA7, 0xFF);
-    const int barCount = 9;
-    const int capOffset = barCount * 2 * 6;
+    const int barCount = 14;
+    const int capOffset = barCount * 2 * 4;
     compareColor(data[capOffset], 0x00, 0x2F, 0xA7, 0xFF);
     delete node;
 }
