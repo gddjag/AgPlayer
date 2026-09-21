@@ -329,6 +329,7 @@ struct StudyCounters {
     std::atomic<int> live{0}, generations{0}, frames{0};
     std::atomic<bool> failed{false};
     std::atomic<bool> shadowAvailable{false};
+    std::atomic<bool> shadowEnabled{false};
     std::atomic<float> depthMinimum{1}, depthMaximum{0};
     std::atomic<int> shadowSamples{0};
 };
@@ -560,6 +561,7 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     u.sceneLighting[1] = parameters_.lighting.y();
     u.sceneLighting[2] = parameters_.lighting.z();
     shadow_.configure(rhi(), u, parameters_.shadows);
+    counters_->shadowEnabled = u.shadowParameters[0] > 0;
     std::array<GpuInstance, 25> columns{};
     quint32 instanceCount = 1;
     if (parameters_.array) {
@@ -845,6 +847,62 @@ FrontFace locateFrontFace(const QImage& frame)
 class TerrainColumnMaterialTest : public QObject {
     Q_OBJECT
 private slots:
+    void referenceMaterialSkipsUnusedShadowPass_data()
+    {
+        QTest::addColumn<float>("runtimeMode");
+        QTest::addColumn<bool>("explicitRipple");
+        QTest::newRow("runtime-theme") << 1.0F << true;
+        QTest::newRow("reference-replay") << 0.0F << true;
+        QTest::newRow("reference-stage-without-ripple-color") << 1.0F << false;
+    }
+    void referenceMaterialSkipsUnusedShadowPass()
+    {
+        QFETCH(float, runtimeMode);
+        QFETCH(bool, explicitRipple);
+        QQuickWindow window;
+        window.resize(640, 640);
+        window.setColor(Qt::black);
+        auto counters = std::make_shared<StudyCounters>();
+        ColumnItem item(window.contentItem(), counters);
+        item.parameters.array = true;
+        item.parameters.runtimeMode = runtimeMode;
+        item.parameters.bodyTint = QColor("#102040");
+        item.parameters.rippleTint = explicitRipple ? QColor("#40a0ff") : QColor();
+        item.parameters.stageHalfExtent = explicitRipple ? 112.0F : 84.0F;
+        item.parameters.camera = {34, 30, 48};
+        window.show();
+        QVERIFY(waitForStudyWindow(window));
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
+        QVERIFY(!counters->failed);
+        QVERIFY2(counters->shadowAvailable, "Test requires a working depth-shadow pipeline");
+        const QImage withoutShadow = studyFrame(window);
+        QVERIFY(!withoutShadow.isNull());
+        const int before = counters->frames;
+        item.parameters.shadows = true;
+        item.update();
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before || counters->failed, 3000);
+        QVERIFY(!counters->failed);
+        const auto difference = compareFrames(withoutShadow, studyFrame(window));
+        QVERIFY(difference.commonVisible > 100);
+        QCOMPARE(difference.silhouetteMismatch, 0);
+        QCOMPARE(difference.totalRgbDifference, quint64(0));
+        QVERIFY2(!counters->shadowEnabled,
+                 "Reference material never samples shadows; do not draw the terrain twice");
+        // A live switch back to a custom material must resume shadow updates
+        // without rebuilding resources; returning to the theme skips them again.
+        const int generations = counters->generations;
+        int frame = counters->frames;
+        item.parameters.bodyTint = QColor();
+        item.update();
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > frame, 3000);
+        QVERIFY(counters->shadowEnabled);
+        frame = counters->frames;
+        item.parameters.bodyTint = QColor("#102040");
+        item.update();
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > frame, 3000);
+        QVERIFY(!counters->shadowEnabled);
+        QCOMPARE(counters->generations.load(), generations);
+    }
     void nativeReadbackPngPreservesStraightColorAndAlpha()
     {
         // SrcAlpha/OneMinusSrcAlpha into transparent stores premultiplied RGB.

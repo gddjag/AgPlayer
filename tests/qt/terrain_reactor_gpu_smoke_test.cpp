@@ -275,8 +275,10 @@ void TerrainReactorGpuSmokeTest::densityAndQualityChangesKeepDrawingCompleteFram
                          TerrainReactorItem::Quality::High}) {
         const auto before = item.frameCount();
         item.setQuality(quality);
-        window.resize(window.width() + 2, window.height());
-        QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > before + 4, 5000);
+        // Switching cadence must start its own frame; a resize can hide a
+        // missing timer-to-frame handoff by scheduling an unrelated update.
+        QTRY_VERIFY2_WITH_TIMEOUT(item.frameCount() > before + 4,
+            qPrintable(QStringLiteral("Rendering stalled after quality %1").arg(int(quality))), 5000);
         QCOMPARE(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready);
     }
     item.setActive(false);
