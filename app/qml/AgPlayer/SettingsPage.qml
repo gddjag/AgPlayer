@@ -2520,115 +2520,172 @@ Item {
 
         SettingCard {
             title: ""
-            Layout.fillWidth: true
-
-            RowLayout {
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: Theme.spacingLg
+                columns: root.compact ? 1 : 2
+                Layout.bottomMargin: Theme.spacingLg
+                columnSpacing: Theme.spacingXl
+                rowSpacing: Theme.spacingLg
 
-                Image {
-                    source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
-                    sourceSize.width: 72
-                    sourceSize.height: 72
-                    Layout.preferredWidth: 72
-                    Layout.preferredHeight: 72
-                    fillMode: Image.PreserveAspectFit
+                RowLayout {
+                    objectName: "aboutProductInfo"
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: Theme.spacingLg
+                    Image {
+                        source: "qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png"
+                        sourceSize.width: 72
+                        sourceSize.height: 72
+                        Layout.preferredWidth: 72
+                        Layout.preferredHeight: 72
+                        fillMode: Image.PreserveAspectFit
+                    }
+
+                    ColumnLayout {
+                        spacing: Theme.spacingXs
+
+                        Text {
+                            objectName: "aboutProductLine"
+                            text: "AgPlayer"
+                            color: Theme.primaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizePageTitle
+                            font.weight: Font.Bold
+                        }
+
+                        Text {
+                            text: qsTr("让音乐·看得见")
+                            color: Theme.primaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizeBody
+                            font.weight: Font.Medium
+                        }
+
+                        Text {
+                            objectName: "aboutStandaloneVersion"
+                            text: qsTr("版本号：") + SettingsController.version
+                            color: Theme.secondaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizeBody
+                        }
+
+                        Text {
+                            objectName: "aboutProductPromise"
+                            text: qsTr("免费、轻便、纯净")
+                            color: Theme.secondaryText
+                            font.family: Theme.fontPrimary
+                            font.pixelSize: Theme.fontSizeBody
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
                 }
 
                 ColumnLayout {
-                    spacing: Theme.spacingXs
-
-                    Text {
-                        objectName: "aboutProductLine"
-                        text: "AgPlayer"
-                        color: Theme.primaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: Theme.fontSizePageTitle
-                        font.weight: Font.Bold
-                    }
-
-                    Text {
-                        text: qsTr("让音乐·看得见")
-                        color: Theme.primaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: Theme.fontSizeBody
-                        font.weight: Font.Medium
-                    }
-
-                    Text {
-                        objectName: "aboutStandaloneVersion"
-                        text: qsTr("版本号：") + SettingsController.version
-                        color: Theme.secondaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: Theme.fontSizeBody
-                    }
-
-                    Text {
-                        objectName: "aboutProductPromise"
-                        text: qsTr("免费、轻便、纯净")
-                        color: Theme.secondaryText
-                        font.family: Theme.fontPrimary
-                        font.pixelSize: Theme.fontSizeBody
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                RowLayout {
+                    objectName: "aboutUpdateInfo"
+                    Layout.fillWidth: root.compact
+                    Layout.alignment: Qt.AlignVCenter
                     spacing: Theme.spacingSm
-
-                    ThemedButton {
-                        Layout.preferredWidth: 120
-                        prominent: true
-                        text: qsTr("访问官网")
-                        onClicked: SettingsController.openOfficialWebsite()
+                    Text {
+                        text: qsTr("软件更新")
+                        color: Theme.primaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeBodyStrong
+                        font.bold: true
                     }
-
+                    Text {
+                        objectName: "aboutUpdateStatus"
+                        Layout.fillWidth: true
+                        text: aboutSection.updateService.statusText
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WordWrap
+                        color: aboutSection.updateService.updateAvailable ? Theme.accent : Theme.secondaryText
+                        font.family: Theme.fontPrimary
+                        font.pixelSize: Theme.fontSizeBody
+                    }
+                    RowLayout {
+                        spacing: Theme.spacingSm
+                        ThemedButton {
+                            objectName: "aboutCheckUpdates"
+                            text: aboutSection.updateService.busy ? qsTr("正在检查…") : qsTr("检查更新")
+                            enabled: !aboutSection.updateService.busy
+                            onClicked: aboutSection.updateService.check()
+                        }
+                        ThemedButton {
+                            objectName: "aboutDownloadUpdate"
+                            text: qsTr("前往官网下载")
+                            onClicked: SettingsController.openOfficialWebsite()
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("下载由浏览器完成。若下载卡顿、超时或失败，请返回官网切换 GitHub / R2 线路。")
+                        }
+                    }
                 }
             }
         }
 
-        SettingCard {
-            title: qsTr("软件更新")
-            Layout.fillWidth: true
-            Text {
-                objectName: "aboutUpdateStatus"
-                Layout.fillWidth: true
-                text: aboutSection.updateService.statusText
-                textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
-                color: aboutSection.updateService.updateAvailable ? Theme.accent : Theme.secondaryText
-                font.family: Theme.fontPrimary
-                font.pixelSize: Theme.fontSizeBody
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spacingSm
-                ThemedButton {
-                    objectName: "aboutCheckUpdates"
-                    text: aboutSection.updateService.busy ? qsTr("正在检查…") : qsTr("检查更新")
-                    enabled: !aboutSection.updateService.busy
-                    onClicked: aboutSection.updateService.check()
-                }
-                ThemedButton {
-                    objectName: "aboutDownloadUpdate"
-                    prominent: true
-                    text: qsTr("前往官网下载")
-                    onClicked: SettingsController.openOfficialWebsite()
-                }
-                Item { Layout.fillWidth: true }
-            }
-            Text {
-                objectName: "aboutUpdateDownloadHelp"
-                Layout.fillWidth: true
-                text: qsTr("下载由浏览器完成。若下载卡顿、超时或失败，请返回官网切换 GitHub / R2 线路。")
-                textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
-                color: Theme.secondaryText
-                font.pixelSize: Theme.fontSizeBody
+        ThemedButton {
+            id: privacyPolicyButton
+            objectName: "aboutPrivacyPolicyButton"
+            text: qsTr("AgPlayer 隐私政策")
+            font.pixelSize: Theme.fontSizeSection
+            onClicked: {
+                privacyPolicyDialog.returnFocusItem = privacyPolicyButton
+                privacyPolicyDialog.open()
             }
         }
         Item { Layout.fillHeight: true }
+    }
+
+    ThemedDialog {
+        id: privacyPolicyDialog
+        objectName: "privacyPolicyDialog"
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        title: qsTr("AgPlayer 隐私政策")
+        width: Math.min(640, root.width - 2 * Theme.spacingLg)
+        height: Math.min(620, root.height - 2 * Theme.spacingLg)
+        property var returnFocusItem: null
+        onClosed: { if (returnFocusItem) returnFocusItem.forceActiveFocus() }
+        standardButtons: Dialog.Close
+        closePolicy: Popup.CloseOnEscape
+        onOpened: {
+            privacyPolicyScroll.contentItem.contentY = 0
+            privacyPolicyBody.cursorPosition = 0
+            privacyPolicyBody.forceActiveFocus()
+        }
+        contentItem: ScrollView {
+            id: privacyPolicyScroll
+            objectName: "privacyPolicyScroll"
+            clip: true
+            contentWidth: availableWidth
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ScrollBar.vertical.policy: ScrollBar.AsNeeded
+            ScrollBar.vertical.active: true
+            TextArea {
+                id: privacyPolicyBody
+                objectName: "privacyPolicyBody"
+                width: privacyPolicyScroll.availableWidth
+                text: "<style>p { margin-top: 0; margin-bottom: 14px; line-height: 145%; }"
+                    + "h2 { font-size: 16px; margin-top: 18px; margin-bottom: 10px; }"
+                    + "a { color: " + Theme.accent + "; text-decoration: underline; }</style>"
+                    + SettingsController.privacyPolicyText
+                textFormat: TextEdit.RichText
+                readOnly: true
+                selectByMouse: true
+                wrapMode: TextEdit.Wrap
+                color: Theme.primaryText
+                selectedTextColor: Theme.accentText
+                selectionColor: Theme.accent
+                palette.link: Theme.accent
+                font.family: Theme.fontPrimary
+                font.pixelSize: Theme.fontSizeBody
+                leftPadding: 0
+                rightPadding: Theme.spacingMd
+                topPadding: 0
+                bottomPadding: Theme.spacingMd
+                background: Item {}
+                onLinkActivated: Qt.openUrlExternally(link)
+            }
+        }
     }
 
     function updateAssociation(ext, checked) {

@@ -1921,6 +1921,18 @@ set_tests_properties(qml_macos_separation_links_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
+add_test(NAME qml_settings_privacy_test
+    COMMAND qml_main_window_test
+        -o ${CMAKE_BINARY_DIR}/qml-settings-privacy.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_settings_privacy.qml)
+set_tests_properties(qml_settings_privacy_test PROPERTIES
+    TIMEOUT 30
+    RESOURCE_LOCK qml_main_window_runtime
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
 add_test(NAME qml_settings_cache_feedback_test
     COMMAND qml_main_window_test
         -o ${CMAKE_BINARY_DIR}/qml-settings-cache-feedback.txt,txt
@@ -1979,7 +1991,7 @@ endforeach()
 
 if(WIN32)
     set_property(TEST qml_popup_sizing_test qml_screen_fit_test
-        qml_settings_cache_feedback_test qml_macos_separation_links_test
+        qml_settings_cache_feedback_test qml_settings_privacy_test qml_macos_separation_links_test
         qml_format_responsive_test qml_audio_tools_responsive_test
         qml_auxiliary_responsive_test
         APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=$ENV{SystemRoot}/Fonts")
