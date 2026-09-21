@@ -11,6 +11,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QQuickWindow>
+#include <QQuickGraphicsConfiguration>
 #include <QScreen>
 #include <QSGRendererInterface>
 #include <QScopeGuard>
@@ -275,8 +276,9 @@ void TerrainReactorGpuSmokeTest::densityAndQualityChangesKeepDrawingCompleteFram
                          TerrainReactorItem::Quality::High}) {
         const auto before = item.frameCount();
         item.setQuality(quality);
-        window.resize(window.width() + 2, window.height());
-        QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > before + 4, 5000);
+        // Quality changes must restart drawing without a resize or other input.
+        QTRY_VERIFY2_WITH_TIMEOUT(item.frameCount() > before + 4,
+            qPrintable(QStringLiteral("Rendering stalled after quality %1").arg(int(quality))), 5000);
         QCOMPARE(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready);
     }
     item.setActive(false);
@@ -295,7 +297,7 @@ void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe_data()
 void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
 {
     if (!qEnvironmentVariableIsSet("AGPLAYER_MATERIAL_BENCHMARK"))
-        QSKIP("Opt-in comparative wall-frame probe, not a GPU timestamp benchmark");
+        QSKIP("Opt-in comparative frame/GPU timing probe");
     QFETCH(int, terrainDensity);
     QFETCH(QSize, viewport);
     PlayerExperienceController style;
@@ -305,6 +307,11 @@ void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
     style.setAutoRotateSpeed(0);
     QQuickWindow window;
     window.resize(viewport);
+    window.setScreen(QGuiApplication::primaryScreen());
+    window.setPosition(QGuiApplication::primaryScreen()->geometry().topLeft());
+    QQuickGraphicsConfiguration graphics;
+    graphics.setTimestamps(true);
+    window.setGraphicsConfiguration(graphics);
     TerrainReactorItem item(window.contentItem());
     item.setSize(QSizeF(viewport));
     item.setStyleSource(&style);
@@ -315,11 +322,18 @@ void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
     QVERIFY(waitForGpuWindow(window));
     item.setActive(true);
     QTRY_COMPARE_WITH_TIMEOUT(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready, 5000);
-    QTest::qWait(1500);
+    // qWait sleeps between event batches and distorts GUI-driven frame pacing.
+    // Measure with the same continuously running event loop as the application.
+    const auto runEventLoop = [](int milliseconds) {
+        QEventLoop loop;
+        QTimer::singleShot(milliseconds, &loop, &QEventLoop::quit);
+        loop.exec();
+    };
+    runEventLoop(1500);
     const auto first = item.frameCount();
     QElapsedTimer timer;
     timer.start();
-    QTest::qWait(3000);
+    runEventLoop(3000);
     const auto count = item.frameCount() - first;
     qInfo() << "Dense material elapsed/frames/instances/ms per frame:"
             << timer.elapsed() << count << item.renderedTerrainCount()
@@ -328,6 +342,7 @@ void TerrainReactorGpuSmokeTest::denseMaterialFrameBudgetProbe()
             << item.effectiveColorBufferSize() << window.devicePixelRatio();
     QVERIFY2(count > 0, "Dense terrain did not produce new frames");
     item.setActive(false);
+    runEventLoop(100); // Drain queued reports before destroying the render target.
 }
 
 void TerrainReactorGpuSmokeTest::columnLayeringReferenceFixture_data()
