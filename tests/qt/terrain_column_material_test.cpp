@@ -329,6 +329,7 @@ struct StudyCounters {
     std::atomic<int> live{0}, generations{0}, frames{0};
     std::atomic<bool> failed{false};
     std::atomic<bool> shadowAvailable{false};
+    std::atomic<bool> shadowEnabled{false};
     std::atomic<float> depthMinimum{1}, depthMaximum{0};
     std::atomic<int> shadowSamples{0};
 };
@@ -560,6 +561,7 @@ void ColumnRenderer::render(QRhiCommandBuffer* cb)
     u.sceneLighting[1] = parameters_.lighting.y();
     u.sceneLighting[2] = parameters_.lighting.z();
     shadow_.configure(rhi(), u, parameters_.shadows);
+    counters_->shadowEnabled = u.shadowParameters[0] > 0.5F;
     std::array<GpuInstance, 25> columns{};
     quint32 instanceCount = 1;
     if (parameters_.array) {
@@ -845,6 +847,40 @@ FrontFace locateFrontFace(const QImage& frame)
 class TerrainColumnMaterialTest : public QObject {
     Q_OBJECT
 private slots:
+    void referenceMaterialSkipsUnusedShadowPass()
+    {
+        auto counters = std::make_shared<StudyCounters>();
+        QQuickWindow window;
+        window.resize(640, 640);
+        ColumnItem item(window.contentItem(), counters);
+        item.parameters.array = true;
+        item.parameters.runtimeMode = 1;
+        item.parameters.stageHalfExtent = 84;
+        item.parameters.bodyTint = QColor(12, 24, 36);
+        item.parameters.time = 0.15F;
+        item.parameters.shadows = false;
+        window.show();
+        QVERIFY(waitForStudyWindow(window));
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > 0 || counters->failed, 5000);
+        QVERIFY(!counters->failed);
+        QVERIFY(counters->shadowAvailable);
+        const QImage withoutShadow = studyFrame(window);
+        QVERIFY(!withoutShadow.isNull());
+        const int before = counters->frames;
+        item.parameters.shadows = true;
+        item.update();
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > before, 3000);
+        const QImage withShadow = studyFrame(window);
+        QCOMPARE(withShadow, withoutShadow);
+        QVERIFY2(!counters->shadowEnabled,
+                 "Reference material never samples the shadow map; do not redraw its terrain");
+        // Switching back to a manual material must restore its real shadows.
+        const int beforeManual = counters->frames;
+        item.parameters.runtimeMode = 2;
+        item.update();
+        QTRY_VERIFY_WITH_TIMEOUT(counters->frames > beforeManual, 3000);
+        QVERIFY(counters->shadowEnabled);
+    }
     void nativeReadbackPngPreservesStraightColorAndAlpha()
     {
         // SrcAlpha/OneMinusSrcAlpha into transparent stores premultiplied RGB.

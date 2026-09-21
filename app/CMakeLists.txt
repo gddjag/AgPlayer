@@ -214,6 +214,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/audioeditor/EditorSixTrackWorkspace.qml
         qml/AgPlayer/components/audioeditor/EditorSlider.qml
     RESOURCES
+        assets/legal/privacy-policy.html
         ${BRAND_FILES}
         ${ICON_FILES}
 )

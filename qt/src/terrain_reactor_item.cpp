@@ -1465,6 +1465,9 @@ void TerrainReactorItem::setQuality(Quality quality)
     applyInternalScale(internalScale_, quality_ == Quality::Eco ? 1 : 4);
     emit qualityChanged();
     scheduleIfRunnable();
+    // Balanced -> High stops the timer without changing the MSAA target.
+    // Synchronize the new quality once so the frame-driven loop can take over.
+    if (renderingRequested()) update();
 }
 
 QVariantList TerrainReactorItem::featureBands() const

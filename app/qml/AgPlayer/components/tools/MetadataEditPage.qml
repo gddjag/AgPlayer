@@ -1525,15 +1525,17 @@ Rectangle {
         }
     }
 
+    function selectLoadedEntries() {
+        selectedIndices = Array.from({length: MetadataEditor.fileCount},
+                                     function(_, index) { return index })
+        selectionAnchor = selectedIndices.length > 0 ? selectedIndices[0] : -1
+        ++entryRevision
+        Qt.callLater(refreshFields)
+    }
+
     Connections {
         target: MetadataEditor
-        function onEntriesLoaded() {
-            page.selectedIndices = Array.from({length: MetadataEditor.fileCount},
-                                              function(_, index) { return index })
-            page.selectionAnchor = page.selectedIndices.length > 0 ? page.selectedIndices[0] : -1
-            ++page.entryRevision
-            Qt.callLater(page.refreshFields)
-        }
+        function onEntriesLoaded() { page.selectLoadedEntries() }
         function onEntriesChanged() {
             ++page.entryRevision
             Qt.callLater(page.refreshFields)
@@ -1545,5 +1547,5 @@ Rectangle {
         }
     }
 
-    Component.onCompleted: Qt.callLater(refreshFields)
+    Component.onCompleted: selectLoadedEntries()
 }

@@ -99,7 +99,12 @@ public:
         view.lookAt(center + direction * 290.0F, center, QVector3D(0, 1, 0));
         const QMatrix4x4 matrix = rhi->clipSpaceCorrMatrix() * projection * view;
         std::memcpy(u.lightMvp, matrix.constData(), sizeof(u.lightMvp));
-        u.shadowParameters[0] = enabled && available() ? 1.0F : 0.0F;
+        // Match terrain_reactor.frag's referenceMode: its self-lit material
+        // returns before externalVisibility(), so the depth draw is unused.
+        // Keep the texture initialized and retain shadows for manual materials.
+        const bool referenceMaterial = u.timbre[3] < 1.5F && u.bodyColor[3] > 0.5F
+            && (u.rippleColor[3] > 0.5F || u.sceneControls[2] <= 84.5F);
+        u.shadowParameters[0] = enabled && available() && !referenceMaterial ? 1.0F : 0.0F;
         u.shadowParameters[1] = 1.0F / resolution;
         u.shadowParameters[2] = rhi->isClipDepthZeroToOne() ? 1.0F : 0.0F;
         u.shadowParameters[3] = rhi->isYUpInNDC() != rhi->isYUpInFramebuffer() ? 1.0F : 0.0F;

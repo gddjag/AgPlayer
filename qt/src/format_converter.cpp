@@ -1781,9 +1781,7 @@ void FormatConverter::confirmPendingPlan()
             || current.path != job.inputPath
             || current.canonicalPath != job.canonicalPath
             || current.importRoot != job.importRoot
-            || (current.status != FileStatus::Waiting
-                && current.status != FileStatus::Ready
-                && current.status != FileStatus::PendingConfirmation)) {
+            || current.status == FileStatus::Converting) {
             emit errorOccurred(tr("预检计划已失效，请重新预检后再开始"));
             return;
         }

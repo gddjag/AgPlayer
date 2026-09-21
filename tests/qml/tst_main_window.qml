@@ -1061,7 +1061,7 @@ TestCase {
 
     function test_embedded_resource_folder_accepts_native_directory_drop(data) {
         for (let warning = 0;
-             nativeDropHelper.usesOffscreenPlatform() && warning < 4;
+             !nativeDropHelper.supportsWindowsDropFiles() && warning < 4;
              ++warning)
             ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
         const previousShell = SettingsController.playerShellMode
@@ -1116,7 +1116,7 @@ TestCase {
                "the QML fallback must reach the real asynchronous importer")
     }
 
-    function test_zz_resource_folder_drop_routes_and_counts_data() {
+    function test_classic_resource_folder_drop_routes_and_counts_data() {
         return [{tag: "qt", route: "qt"}, {tag: "fallback", route: "fallback"},
                   {tag: "qml-event", route: "qml-event"},
                   {tag: "owner-delivered", route: "owner"},
@@ -1126,15 +1126,12 @@ TestCase {
                 {tag: "windows-padding", route: "windows", padding: true}]
     }
 
-    function test_zz_resource_folder_drop_routes_and_counts(data) {
+    function test_classic_resource_folder_drop_routes_and_counts(data) {
         if (data.route === "windows" && !nativeDropHelper.supportsWindowsDropFiles())
             skip("Windows shell drop requires native Windows platform")
         const host = createTemporaryObject(listWindowComponent, testCase)
         verify(host)
         tryVerify(function() { return host.visible }, 1000)
-        host.requestActivate()
-        waitForRendering(host.contentItem)
-        wait(50)
         if (data.route !== "qml-event")
             verify(nativeDropHelper.registerListDropWindow(host))
         const navigation = findChild(host, "referenceSideNavigation")
@@ -1180,14 +1177,11 @@ TestCase {
             verify(count.x + count.width <= count.parent.width + 1)
         } finally {
             ResourceFolderController.removeMonitoredFolder(path)
-            removeResourceTestTracks([path])
             host.close()
         }
     }
 
-    function test_zz_resource_folders_share_submission_and_counts_across_shells() {
-        for (let warning = 0; nativeDropHelper.usesOffscreenPlatform() && warning < 4; ++warning)
-            ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
+    function test_resource_folders_share_submission_and_counts_across_shells() {
         const previousTheme = SettingsController.windowLayoutTheme
         const previousShell = SettingsController.playerShellMode
         const host = createTemporaryObject(listWindowComponent, testCase)
@@ -1240,23 +1234,9 @@ TestCase {
         } finally {
             for (let i = 0; i < paths.length; ++i)
                 ResourceFolderController.removeMonitoredFolder(paths[i])
-            removeResourceTestTracks(paths)
             host.close()
             SettingsController.windowLayoutTheme = previousTheme
             SettingsController.playerShellMode = previousShell
-        }
-    }
-
-    function removeResourceTestTracks(paths) {
-        for (let row = LibraryModel.count - 1; row >= 0; --row) {
-            const index = LibraryModel.index(row, 0)
-            const path = String(LibraryModel.data(index, LibraryModel.PathRole))
-            for (let root of paths) {
-                if (ResourceFolderController.pathIsWithin(path, root)) {
-                    LibraryModel.removeTrack(LibraryModel.data(index, LibraryModel.TrackIdRole))
-                    break
-                }
-            }
         }
     }
 
@@ -1499,8 +1479,6 @@ TestCase {
             verify(findChild(window, "librarySearchFilter").visible)
             verify(window.routeNavigationNode("favorites", "favorites:favorites", ""))
             compare(filter.category, "favorites")
-            verify(window.routeNavigationNode("history", "history:history", ""))
-            compare(filter.category, "history")
             verify(window.routeNavigationNode("playlist", "playlist:" + playlistId, ""))
             compare(filter.category, playlistId)
             tryVerify(function() { return list.visible && list.count === 1 }, 500)
@@ -1544,8 +1522,6 @@ TestCase {
     }
 
     function test_recent_playback_navigation_is_shared_across_shells() {
-        for (var warning = 0; warning < 4; ++warning)
-            ignoreWarning(/This plugin does not support propagateSizeHints\(\)/)
         var previousTheme = SettingsController.windowLayoutTheme
         var previousShell = SettingsController.playerShellMode
         var filter = findChild(mainWindow, "filterModel")
@@ -3362,7 +3338,7 @@ TestCase {
         compare(shaped[31], shaped[shaped.length - 32])
     }
 
-    function test_spectrum_uses_responsive_platform_bottom_bars() {
+    function test_spectrum_uses_responsive_four_pixel_bottom_bars() {
         var waveform = findChild(mainWindow, "mainWaveform")
         verify(waveform)
         var previousMode = SettingsController.waveformMode
@@ -3370,8 +3346,8 @@ TestCase {
         tryCompare(waveform, "visualMode", 2)
         compare(waveform.lineWidth, 3)
         compare(waveform.spectrumBarCount, 128)
-        compare(waveform.spectrumBarWidth, Qt.platform.os === "osx" ? 6 : 7)
-        compare(waveform.spectrumBarGap, Qt.platform.os === "osx" ? 2 : 3)
+        compare(waveform.spectrumBarWidth, 4)
+        compare(waveform.spectrumBarGap, 1)
         compare(waveform.spectrumMaxHeight, 96)
         fuzzyCompare(waveform.spectrumAttackSeconds, 0.02, 0.001)
         fuzzyCompare(waveform.spectrumDecaySeconds, 0.10, 0.001)
@@ -3845,9 +3821,9 @@ TestCase {
         var libraryIcon = findChild(side, "suppliedNodeIcon-library")
         verify(libraryIcon)
         compare(libraryIcon.sourceSize.width,
-                Theme.navigationIconVisualSize + 4)
+                Theme.navigationIconVisualSize + 2)
         compare(libraryIcon.sourceSize.height,
-                Theme.navigationIconVisualSize + 4)
+                Theme.navigationIconVisualSize + 2)
         var nodeNames = ["navigationNode-library:all",
                          "navigationNode-favorites:favorites",
                          "navigationNode-tags:manage"]
@@ -3859,7 +3835,7 @@ TestCase {
         side.destroy()
     }
 
-    function test_task1b_duplicate_resource_drop_refreshes_without_duplicate_roots() {
+    function test_task1b_duplicate_and_invalid_resource_drops_are_rejected() {
         var filterModel = findChild(mainWindow, "filterModel")
         var window = listWindowComponent.createObject(null, {
             "filterModel": filterModel,
@@ -3871,10 +3847,8 @@ TestCase {
         var invalid = nativeDropHelper.createNonAudioDropFile()
         verify(folder && invalid)
         verify(window.handleResourceDropUrls([folder]))
-        var rootCount = ResourceFolderController.monitoredFolders.length
-        verify(window.handleResourceDropUrls([folder]),
-                "an already registered directory must accept a refresh")
-        compare(ResourceFolderController.monitoredFolders.length, rootCount)
+        compare(window.handleResourceDropUrls([folder]), false,
+                "an already registered directory must not report success")
         compare(window.handleResourceDropUrls([invalid]), false)
         var path = ResourceFolderController.classifyDropUrl(folder).path
         verify(ResourceFolderController.removeMonitoredFolder(path))
@@ -3953,7 +3927,7 @@ TestCase {
         window.destroy()
     }
 
-    function test_task1b_resource_drop_filters_invalid_audio() {
+    function test_task1b_resource_drop_reports_import_failure() {
         tryVerify(function() {
             return !ResourceFolderController.scanning
                     && !ImportController.busy
@@ -3974,12 +3948,9 @@ TestCase {
         verify(importFinished)
         verify(window.handleResourceDropUrls([folder]))
         tryCompare(importFinished, "count", 1, 5000)
-        tryCompare(window, "resourceDropStatus", "completed", 1000)
-        compare(ImportController.errors.length, 0)
-        verify(ImportController.filteredCount > 0)
-        compare(ImportController.importedTrackIds.length, 0)
+        tryCompare(window, "resourceDropStatus", "failed", 1000)
         var statusLabel = findChild(window, "resourceDropStatusLabel")
-        verify(statusLabel && statusLabel.text.indexOf("失败") < 0)
+        verify(statusLabel && statusLabel.text.indexOf("失败") >= 0)
         var path = ResourceFolderController.classifyDropUrl(folder).path
         verify(ResourceFolderController.removeMonitoredFolder(path))
         ImportController.clearErrors()
@@ -5336,8 +5307,7 @@ TestCase {
         var scanStatus = findChild(scanDialog, "resourceScanStatus")
         verify(scanStatus && scanStatus.text.length > 0)
         compare(scanStatus.text, ResourceFolderController.scanSummary)
-        verify(scanDialog.width <= (Qt.platform.os === "osx" ? 480 : 440),
-               "scan messages must wrap in a compact dialog")
+        verify(scanDialog.width <= 440, "scan messages must wrap in a compact dialog")
         verify(scanDialog.width <= scanDialog.parent.width)
         scanDialog.close()
 

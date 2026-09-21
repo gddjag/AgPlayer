@@ -365,6 +365,17 @@ QString SettingsController::version() const
         + QString::fromLatin1(agplayer::version::kVersion);
 }
 QString SettingsController::releaseDate() const { return QStringLiteral("2026.10"); }
+
+QString SettingsController::privacyPolicyText() const
+{
+    QFile policy(QStringLiteral(":/qt/qml/AgPlayer/assets/legal/privacy-policy.html"));
+    if (!policy.open(QIODevice::ReadOnly)) {
+        qWarning() << "Unable to load bundled privacy policy:" << policy.errorString();
+        return tr("隐私政策暂时无法加载，请重新打开窗口或检查安装文件。");
+    }
+    return QString::fromUtf8(policy.readAll());
+}
+
 // General setters
 void SettingsController::setAutoStartWithWindows(bool value)
 {

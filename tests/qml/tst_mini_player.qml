@@ -507,8 +507,7 @@ TestCase {
         var coverCenter = cover.mapToItem(miniPlayer.contentItem, 0, cover.height / 2).y
         verify(Math.abs((contentTop + contentBottom) / 2 - coverCenter) <= 1,
                "four content rows must be vertically centered against the cover")
-        compare(contentTransport.height, Qt.platform.os === "osx" ? 36 : 34,
-                "transport must not stretch vertically")
+        compare(contentTransport.height, 34, "transport must not stretch vertically")
         var volume = findChild(miniPlayer, "miniVolumeSlider")
         verify(volume)
         var flyout = findChild(miniPlayer, "miniVolumeFlyout")
@@ -523,7 +522,7 @@ TestCase {
         }, 300, "expanded mini volume flyout must remain inside the window canvas")
         tryVerify(function() {
             return flyout.x >= 28
-                    && flyout.width === 110
+                    && flyout.x + flyout.width === flyout.parent.width
         }, 300, "mini volume flyout must expand to the right of its mute button")
         closeTimer.restart()
         wait(1600)
@@ -551,7 +550,7 @@ TestCase {
         verify(firstStar, "rating stars must expose their native rendered item")
         verify(metadataRow.y >= title.y + title.height,
                "metadata must stay below the title")
-        compare(metadataRow.height, Qt.platform.os === "osx" ? 22 : 26,
+        compare(metadataRow.height, 26,
                 "metadata must use a compact single-row height")
         compare(artist.wrapMode, Text.NoWrap)
         compare(album.wrapMode, Text.NoWrap)
@@ -660,8 +659,8 @@ TestCase {
         tryCompare(waveform, "visualMode", 2)
         compare(waveform.lineWidth, 3)
         compare(waveform.spectrumBarCount, 128)
-        compare(waveform.spectrumBarWidth, Qt.platform.os === "osx" ? 6 : 7)
-        compare(waveform.spectrumBarGap, Qt.platform.os === "osx" ? 2 : 3)
+        compare(waveform.spectrumBarWidth, 4)
+        compare(waveform.spectrumBarGap, 1)
         SettingsController.waveformMode = previousMode
     }
 

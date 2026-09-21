@@ -1305,16 +1305,19 @@ Control {
         }
     }
 
+    function selectLoadedEntries() {
+        selectedIndices = Array.from({length: FilenameProcessor.fileCount},
+                                     function(_, index) { return index })
+        selectionAnchor = -1
+        ++entryRevision
+        refreshPreview()
+    }
+
+    Component.onCompleted: selectLoadedEntries()
+
     Connections {
         target: FilenameProcessor
-        function onEntriesLoaded() {
-            page.selectedIndices = Array.from(
-                {length: FilenameProcessor.fileCount},
-                function(_, index) { return index })
-            page.selectionAnchor = -1
-            ++page.entryRevision
-            page.refreshPreview()
-        }
+        function onEntriesLoaded() { page.selectLoadedEntries() }
         function onEntriesChanged() {
             ++page.entryRevision
             page.refreshPreview()
