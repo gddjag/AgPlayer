@@ -96,4 +96,12 @@ std::array<MdctFrameEvidence, 4> ResampledMdctProbe::result() const noexcept
 {
     return impl_ ? impl_->probe.result() : std::array<MdctFrameEvidence, 4>{};
 }
+void ResampledMdctProbe::refineStereo(const std::atomic_bool& cancel)
+{
+    if (impl_ && impl_->finished) impl_->probe.refineStereo(cancel);
+}
+std::array<MdctFrameEvidence, 4> ResampledMdctProbe::channelResult(int channel) const noexcept
+{
+    return impl_ ? impl_->probe.channelResult(channel) : std::array<MdctFrameEvidence, 4>{};
+}
 }

@@ -1,5 +1,7 @@
 # AgPlayer 原生人声伴奏分离验收记录
 
+> 本文为历史 FT 四文件模型验收，不代表当前单模型结果。2026-09-23 的 `htdemucs_fp16weights.onnx` 下载、适配和验证见 [单模型更新记录](2026-09-23-htdemucs-single-model.md)。
+
 日期：2026-08-30
 
 分支：`codex/vocal-separation-native`

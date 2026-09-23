@@ -66,8 +66,9 @@ private slots:
     void visualModesUseConfiguredProgressAndBaseColors();
     void frequencyModeUpdatesProgressBrightnessWithoutRebuildingNode();
     void spectrumUsesBottomBaselineAndCenterEnvelope();
-    void spectrumUsesReadableResponsiveBars();
-    void spectrumSpacingIsIndependentOfScreenScale();
+    void spectrumDensityUsesLogicalWindowWidth_data();
+    void spectrumDensityUsesLogicalWindowWidth();
+    void spectrumUpsamplesSparseInputToDenseBars();
     void spectrumPreview();
     void spectrumContractUsesFixedBarsWithPeakCaps();
     void spectrumPeakCapsNeverFallInsideTheirBars();
@@ -629,7 +630,59 @@ void WaveformItemTest::spectrumUsesBottomBaselineAndCenterEnvelope()
     delete node;
 }
 
-void WaveformItemTest::spectrumUsesReadableResponsiveBars()
+void WaveformItemTest::spectrumDensityUsesLogicalWindowWidth_data()
+{
+    QTest::addColumn<int>("logicalWidth");
+    QTest::addColumn<int>("expectedBars");
+    QTest::newRow("narrow") << 70 << 14;
+    QTest::newRow("mini") << 120 << 24;
+    QTest::newRow("normal") << 600 << 120;
+    QTest::newRow("wide") << 1200 << 240;
+    QTest::newRow("uneven-width") << 603 << 120;
+}
+
+void WaveformItemTest::spectrumDensityUsesLogicalWindowWidth()
+{
+    QFETCH(int, logicalWidth);
+    QFETCH(int, expectedBars);
+    QQuickWindow window;
+    TestableWaveformItem item;
+    item.setParentItem(window.contentItem());
+    item.setWidth(logicalWidth);
+    item.setHeight(96);
+    item.setVisualMode(2);
+    item.setPeaks(peaks({1.0, 1.0, 1.0, 1.0}));
+    const qreal dpr = window.devicePixelRatio();
+    qInfo() << "spectrum logical width" << logicalWidth << "DPR" << dpr;
+    const int strokes = static_cast<int>(std::ceil(4.0 * dpr));
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node);
+    QCOMPARE(static_cast<QSGGeometryNode*>(node)->geometry()->vertexCount(),
+             expectedBars * (strokes + 1) * 2);
+    const auto* data = vertices(node);
+    // Adjacent physical strokes fill one logical bar even on Retina displays.
+    const float first = data[0].x;
+    const float last = data[(strokes - 1) * expectedBars * 2].x;
+    QVERIFY(std::abs(last - first + 1.0 / dpr - 4.0) <= 1.0 / dpr);
+    const float stride = data[2].x - first;
+    const double expectedGap = (logicalWidth - expectedBars * 4.0)
+        / (expectedBars + 1.0);
+    QVERIFY(std::abs(stride - 4.0 - expectedGap) < 0.02);
+    const int capOffset = expectedBars * strokes * 2;
+    const float firstCapLeft = data[capOffset].x;
+    const float firstCapRight = data[capOffset + 1].x;
+    const float secondCapLeft = data[capOffset + 2].x;
+    const float lastCapRight = data[capOffset + (expectedBars - 1) * 2 + 1].x;
+    QVERIFY(std::abs(firstCapRight - firstCapLeft - 4.0) < 0.02);
+    QVERIFY(std::abs(firstCapLeft - expectedGap) < 0.02);
+    QVERIFY(std::abs(secondCapLeft - firstCapRight - expectedGap) < 0.02);
+    QVERIFY(std::abs(logicalWidth - lastCapRight - expectedGap) < 0.02);
+    QVERIFY(data[0].x >= 0.0F);
+    QVERIFY(data[(strokes * expectedBars - 1) * 2].x < logicalWidth);
+    delete node;
+}
+
+void WaveformItemTest::spectrumUpsamplesSparseInputToDenseBars()
 {
     TestableWaveformItem item;
     item.setWidth(120);
@@ -643,38 +696,9 @@ void WaveformItemTest::spectrumUsesReadableResponsiveBars()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* geometry = static_cast<QSGGeometryNode*>(node)->geometry();
-    // Width 120 fits 24 4px columns with at least 1px clear spacing.
+    // Width 120 packs 24 bars at 4 logical px + 1 px gap. Each bar has
+    // four adjacent strokes plus a peak-hold cap at DPR 1.
     QCOMPARE(geometry->vertexCount(), 24 * 10);
-    delete node;
-}
-
-void WaveformItemTest::spectrumSpacingIsIndependentOfScreenScale()
-{
-    QQuickWindow window;
-    TestableWaveformItem item;
-    item.setParentItem(window.contentItem());
-    item.setHeight(96);
-    item.setVisualMode(2);
-    item.setPeaks(peaks({0.5, 0.8, 0.3, 0.6}));
-    const qreal pixelWidth = 1.0 / window.devicePixelRatio();
-    const int copies = static_cast<int>(std::ceil(4.0 * window.devicePixelRatio()));
-    const std::array<std::pair<int, int>, 4> cases{{{8, 1}, {120, 24}, {600, 120}, {2400, 128}}};
-    QSGNode* node = nullptr;
-    for (const auto& [width, bars] : cases) {
-        item.setWidth(width);
-        node = item.updatePaintNode(node, nullptr);
-        QVERIFY(node != nullptr);
-        QCOMPARE(static_cast<QSGGeometryNode*>(node)->geometry()->vertexCount(),
-                 bars * 2 * (copies + 1));
-        const auto* data = vertices(node);
-        const float rightOfFirst = data[(copies - 1) * bars * 2].x;
-        QVERIFY(std::abs(rightOfFirst - data[0].x + pixelWidth - 4.0) < pixelWidth + 0.01);
-        if (bars > 1)
-            QVERIFY2(data[2].x - rightOfFirst - pixelWidth >= 0.99,
-                     "Screen scaling must preserve the clear gap between columns");
-        QVERIFY(data[0].x >= 0.0F);
-        QVERIFY(data[(copies * bars - 1) * 2].x <= width);
-    }
     delete node;
 }
 
@@ -743,6 +767,8 @@ void WaveformItemTest::spectrumContractUsesFixedBarsWithPeakCaps()
     QCOMPARE(data[capVertex + 1].y, data[centerBarVertex].y);
     QVERIFY(data[capVertex].x < data[capVertex + 1].x);
     delete node;
+
+
 }
 
 void WaveformItemTest::spectrumPeakCapsNeverFallInsideTheirBars()

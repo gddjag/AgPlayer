@@ -45,6 +45,12 @@ const QVector<TrustedModelProfile>& profiles()
          {66'762'490}, 13,
          {{QStringLiteral("input"), TensorElementType::Float32, {-1, 4, 3072, 256}}},
          {{QStringLiteral("output"), TensorElementType::Float32, {-1, 4, 3072, 256}}}},
+        {QStringLiteral("htdemucs-fp16"), QStringLiteral("demucs"),
+         {QStringLiteral("d05c269d0178d2a72ad484b10b11dd370193fc923201c3b27a99f848745db70a")},
+         {165'612'636}, 17,
+         {{QStringLiteral("mix"), TensorElementType::Float32, {1, 2, 343980}}},
+         {{QStringLiteral("stems"), TensorElementType::Float32, {1, 4, 2, 343980}}}},
+        // Legacy sidecars remain usable; this ensemble is no longer offered for download.
         {QStringLiteral("htdemucs-ft-fp16"), QStringLiteral("demucs"),
          {QStringLiteral("b533037176b14b2df31c92a5d5b3d5660d0811b9b360d3db761964768b079961"),
           QStringLiteral("047764dff888cfb87da917013377d4ec7a134f7419cbe486d9c339aa17975ddd"),
@@ -111,8 +117,8 @@ CustomProfileResolution customProfileForDeclaration(
         return {false, QStringLiteral("model_profile_unknown"),
                 QStringLiteral("Custom model names an unknown execution profile"), {}};
     }
-    const bool demucs = profileIt->family == QStringLiteral("demucs");
-    const qsizetype expectedFiles = demucs ? 4 : 1;
+    const qsizetype expectedFiles = profileIt->sha256.size();
+    const bool ensemble = profileIt->family == QStringLiteral("demucs") && expectedFiles == 4;
     if (sha256.size() != expectedFiles
         || expectedSizeBytes.size() != expectedFiles) {
         return {false, QStringLiteral("model_declaration_invalid"),
@@ -133,8 +139,8 @@ CustomProfileResolution customProfileForDeclaration(
                     QStringLiteral("Custom model fingerprint or size is invalid"), {}};
         }
     }
-    if ((!demucs && !roles.isEmpty())
-        || (demucs && normalized(roles)
+    if ((!ensemble && !roles.isEmpty())
+        || (ensemble && normalized(roles)
             != normalized({QStringLiteral("drums"), QStringLiteral("bass"),
                            QStringLiteral("other"), QStringLiteral("vocals")}))) {
         return {false, QStringLiteral("model_declaration_invalid"),

@@ -242,14 +242,14 @@ void updateMixVertexColors(QSGGeometry::ColoredPoint2D* vertices,
 
 std::size_t renderedSpectrumBarCount(qreal width)
 {
-    // Size columns in logical pixels so Retina does not double their density.
-    // Preserve a readable gap, with no more columns than the source spectrum.
+    // Layout uses logical pixels: Retina changes raster precision, not bar
+    // density. Fit complete bars without squeezing their gap on narrow views.
     constexpr qreal desiredStride = WaveformItem::spectrumBarWidth()
         + WaveformItem::spectrumBarGap();
     const auto forWidth = static_cast<std::size_t>(std::floor(
-        (std::max<qreal>(0.0, width) + WaveformItem::spectrumBarGap()) / desiredStride));
-    return std::clamp(forWidth, std::size_t{1U},
-                      static_cast<std::size_t>(WaveformItem::spectrumBarCount()));
+        (std::max<qreal>(0.0, width) + WaveformItem::spectrumBarGap())
+        / desiredStride));
+    return std::clamp(forWidth, std::size_t{1U}, std::size_t{1024U});
 }
 
 void resampleValues(const std::vector<float>& values,
@@ -1279,13 +1279,9 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
         // Wide GPU lines are unsupported by several Qt RHI backends. Render
         // adjacent 1 px lines instead so thickness works without warnings.
         node->geometry_.setLineWidth(1.0F);
-        const qreal barWidth = std::min(width(), spectrumBarWidth());
         const std::size_t strokeCopies = visualMode_ == 2
-            ? static_cast<std::size_t>(std::max(1.0, std::ceil(barWidth * devicePixelRatio)))
+            ? static_cast<std::size_t>(std::ceil(spectrumBarWidth() * devicePixelRatio))
             : static_cast<std::size_t>(std::max(1.0, std::ceil(lineWidth_)));
-        const qreal spectrumStart = peakCount <= 1U ? width() * 0.5 : barWidth * 0.5;
-        const qreal spectrumStride = peakCount <= 1U
-            ? 0.0 : (width() - barWidth) / static_cast<qreal>(peakCount - 1U);
         // Stroke copies are centred around each logical sample. Keep the
         // existing one-pixel leading inset so the first peak cannot rasterize
         // as a solid border. Reserve the outer-copy offset plus half a physical
@@ -1406,6 +1402,15 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             shapeSpectrum(heldSpectrumValues);
         }
 
+        // Share the leftover width across every gap, including both edges.
+        // The number and width of bars stay fixed for this logical width.
+        const double spectrumGap = visualMode_ == 2
+            ? std::max(0.0, (width() - static_cast<double>(peakCount)
+                                  * spectrumBarWidth())
+                                 / static_cast<double>(peakCount + 1U))
+            : 0.0;
+        const double spectrumFirstCenter = spectrumGap + spectrumBarWidth() * 0.5;
+        const double spectrumStride = spectrumBarWidth() + spectrumGap;
         std::size_t vertexOffset = 0U;
         const auto writeLayer = [&](const std::vector<float>& values) {
             if (values.empty()) {
@@ -1414,7 +1419,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
             for (std::size_t copy = 0U; copy < strokeCopies; ++copy) {
                 const qreal offset = (static_cast<qreal>(copy)
                                      - static_cast<qreal>(strokeCopies - 1U) * 0.5)
-                    / (visualMode_ == 2 ? devicePixelRatio : 1.0);
+                                     / (visualMode_ == 2 ? devicePixelRatio : 1.0);
                 for (std::size_t index = 0U; index < peakCount; ++index) {
                     const double normalizedX = sourceAnchoredSampling_
                         && index < node->normalizedX_.size()
@@ -1424,7 +1429,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                           : static_cast<double>(index)
                                 / static_cast<double>(peakCount - 1U);
                     const double logicalX = visualMode_ == 2
-                        ? spectrumStart + static_cast<double>(index) * spectrumStride
+                        ? spectrumFirstCenter + static_cast<double>(index) * spectrumStride
                         : waveformLeftInset + normalizedX * waveformSpan;
                     const float x = static_cast<float>(std::clamp(
                         logicalX + offset, 0.0, width()));
@@ -1479,14 +1484,14 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
                 }
             }
             if (visualMode_ == 2) {
-                const float capHalfWidth = static_cast<float>(barWidth * 0.5);
+                const float capHalfWidth = static_cast<float>(spectrumBarWidth() * 0.5);
                 for (std::size_t index = 0U; index < peakCount; ++index) {
                     const double normalizedX = peakCount == 1U
                         ? 0.5
                         : static_cast<double>(index)
                             / static_cast<double>(peakCount - 1U);
                     const float x = static_cast<float>(std::clamp(
-                        spectrumStart + static_cast<double>(index) * spectrumStride,
+                        spectrumFirstCenter + static_cast<double>(index) * spectrumStride,
                         0.0, width()));
                     const double envelope = 0.60 + 0.40 * std::sin(
                         normalizedX * 3.141592653589793);
@@ -1580,8 +1585,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
 
     auto* vertices = node->geometry_.vertexDataAsColoredPoint2D();
     const std::size_t strokeCopies = node->visualMode_ == 2
-        ? static_cast<std::size_t>(std::max(1.0, std::ceil(
-              std::min(width(), spectrumBarWidth()) * devicePixelRatio)))
+        ? static_cast<std::size_t>(std::ceil(spectrumBarWidth() * devicePixelRatio))
         : static_cast<std::size_t>(std::max(1.0, std::ceil(node->lineWidth_)));
     std::size_t vertexOffset = 0U;
     if (hasMix) {

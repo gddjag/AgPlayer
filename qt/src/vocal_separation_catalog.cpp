@@ -93,33 +93,21 @@ QList<VocalModelCard> VocalSeparationCatalog::models()
          QStringLiteral("推荐"),
          QStringLiteral("TRvlvr / Ultimate Vocal Remover"),
          QStringLiteral("https://github.com/TRvlvr/model_repo/releases/tag/all_public_uvr_models")},
-        {QStringLiteral("htdemucs-ft-fp16"), VocalModelFamily::Demucs,
-         {modelFile(QStringLiteral("htdemucs_ft_bass_fp16weights.onnx"),
-                    QStringLiteral("https://huggingface.co/StemSplitio/htdemucs-ft-onnx/resolve/main/htdemucs_ft_bass_fp16weights.onnx"),
+        {QStringLiteral("htdemucs-fp16"), VocalModelFamily::Demucs,
+         {modelFile(QStringLiteral("htdemucs_fp16weights.onnx"),
+                    QStringLiteral("https://huggingface.co/StemSplitio/htdemucs-onnx/resolve/d54ed9eb60e258ea82131c6ee14578628816456a/htdemucs_fp16weights.onnx"),
                     165'612'636,
-                    QStringLiteral("b533037176b14b2df31c92a5d5b3d5660d0811b9b360d3db761964768b079961")),
-          modelFile(QStringLiteral("htdemucs_ft_drums_fp16weights.onnx"),
-                    QStringLiteral("https://huggingface.co/StemSplitio/htdemucs-ft-onnx/resolve/main/htdemucs_ft_drums_fp16weights.onnx"),
-                    165'612'636,
-                    QStringLiteral("047764dff888cfb87da917013377d4ec7a134f7419cbe486d9c339aa17975ddd")),
-          modelFile(QStringLiteral("htdemucs_ft_other_fp16weights.onnx"),
-                    QStringLiteral("https://huggingface.co/StemSplitio/htdemucs-ft-onnx/resolve/main/htdemucs_ft_other_fp16weights.onnx"),
-                    165'612'636,
-                    QStringLiteral("b739171a7057b3107bb0711c6222d4a619b41b13a8f04026431d30f32ad2bd71")),
-          modelFile(QStringLiteral("htdemucs_ft_vocals_fp16weights.onnx"),
-                    QStringLiteral("https://huggingface.co/StemSplitio/htdemucs-ft-onnx/resolve/main/htdemucs_ft_vocals_fp16weights.onnx"),
-                    165'612'636,
-                    QStringLiteral("0cbe651f535415c9d26a7bb614f7d322dd5a080fa0298f2e50f478030a994dce"))},
+                    QStringLiteral("d05c269d0178d2a72ad484b10b11dd370193fc923201c3b27a99f848745db70a"))},
          {QStringLiteral("vocals"), QStringLiteral("instrumental"),
           QStringLiteral("drums"), QStringLiteral("bass"), QStringLiteral("other")},
          QStringLiteral("Original model Meta Demucs; ONNX conversion StemSplit"),
-         QStringLiteral("Five-stem model; requires about 663 MB disk space and substantially more RAM."),
-         QStringLiteral("HTDemucs FT FP16"),
+         QStringLiteral("单模型约 166 MB；一次推理输出四轨，并合成第五轨伴奏。运行内存高于模型文件大小。"),
+         QStringLiteral("HTDemucs FP16"),
          QStringLiteral("鼓组、贝斯、其他、人声与派生伴奏五轨分离"),
          QStringLiteral("标准音质"),
          QStringLiteral("高品质"),
          QStringLiteral("Meta Demucs / StemSplit ONNX conversion"),
-         QStringLiteral("https://huggingface.co/StemSplitio/htdemucs-ft-onnx")},
+         QStringLiteral("https://huggingface.co/StemSplitio/htdemucs-onnx")},
     };
 }
 
@@ -207,7 +195,7 @@ CustomManifestValidationResult validateCustomModelManifest(const QJsonObject& ma
     }
     const QJsonArray files = manifest.value(QStringLiteral("files")).toArray();
     if (files.isEmpty() || (family == QStringLiteral("MDX") && files.size() != 1)
-        || (family == QStringLiteral("Demucs") && files.size() != 4)) {
+        || (family == QStringLiteral("Demucs") && files.size() != 1 && files.size() != 4)) {
         return reject(QStringLiteral("Manifest has an invalid ONNX file set"));
     }
     QSet<QString> names;
@@ -218,10 +206,15 @@ CustomManifestValidationResult validateCustomModelManifest(const QJsonObject& ma
         }
         const QString name = file.value(QStringLiteral("name")).toString();
         const qint64 bytes = file.value(QStringLiteral("bytes")).toInteger(-1);
+        const QJsonArray shape = file.value(QStringLiteral("shape")).toArray();
+        const bool validInputShape = family == QStringLiteral("Demucs")
+            ? shape == QJsonArray{1, 2, 343980}
+                || (files.size() == 4 && validShape(shape)) // Legacy sidecar declarations.
+            : validShape(shape);
         if (!isSafeFileName(name) || names.contains(name.toCaseFolded())
             || bytes <= 0 || bytes > kMaxCustomModelBytes
             || !isSha256(file.value(QStringLiteral("sha256")).toString())
-            || !validShape(file.value(QStringLiteral("shape")).toArray())) {
+            || !validInputShape) {
             return reject(QStringLiteral("Manifest contains an invalid ONNX file"));
         }
         names.insert(name.toCaseFolded());

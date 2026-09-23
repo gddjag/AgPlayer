@@ -31,6 +31,7 @@ extern "C" {
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace agplayer::separation {
 namespace {
@@ -241,11 +242,27 @@ BackendResult openSession(const NativeStartRequest& request,
     return {true, {}, {}, {}};
 }
 
+// Task-local only: reuse the exact artifact that passed the provider probe.
+// Never retain multiple Demucs sessions or carry a GPU session into fallback.
+struct ProvenSession {
+    std::unique_ptr<OrtModelSession> session;
+    QString sha256;
+
+    std::unique_ptr<OrtModelSession> take(const QString& expectedHash)
+    {
+        if (sha256 != expectedHash) session.reset();
+        sha256.clear();
+        return std::move(session);
+    }
+};
+
 BackendResult proveProvider(const NativeStartRequest& request,
                             const TrustedModelProfile& profile,
                             ExecutionProvider provider, int adapterId,
-                            const CancellationToken& cancelled)
+                            const CancellationToken& cancelled,
+                            ProvenSession* retained = nullptr)
 {
+    if (retained != nullptr) *retained = {};
 #ifdef Q_OS_MACOS
     const QStringList probePaths = request.modelFiles;
 #else
@@ -272,6 +289,12 @@ BackendResult proveProvider(const NativeStartRequest& request,
     const OrtOperationResult run = session->run(zeros, inputShape, outputShape,
                                                  cancelled);
     if (!run.ok) return fail(run.code, run.message);
+    // macOS checks every Demucs graph. Retaining one while opening the others
+    // would raise peak memory; reuse only a single-model probe there.
+    if (retained != nullptr && probePaths.size() == 1) {
+        retained->sha256 = artifact.sha256;
+        retained->session = std::move(session);
+    }
     }
     return request.modelFiles.isEmpty()
         ? fail(QStringLiteral("model_missing"), QStringLiteral("No model files to probe"))
@@ -280,6 +303,11 @@ BackendResult proveProvider(const NativeStartRequest& request,
 
 class OrtNativeProviderProbe final : public NativeProviderProbe {
 public:
+    explicit OrtNativeProviderProbe(bool retainSession = false)
+        : retainSession_(retainSession) {}
+
+    ProvenSession retained;
+
     QVector<DxgiAdapterInfo> hardwareAdapters() override
     {
         return enumerateDxgiHardwareAdapters();
@@ -290,8 +318,12 @@ public:
                         ExecutionProvider provider, int adapterId,
                         const CancellationToken& cancelled) override
     {
-        return proveProvider(request, profile, provider, adapterId, cancelled);
+        return proveProvider(request, profile, provider, adapterId, cancelled,
+                             retainSession_ ? &retained : nullptr);
     }
+
+private:
+    bool retainSession_;
 };
 
 } // namespace
@@ -336,9 +368,9 @@ NativeProviderSelection selectNativeProvider(
         return {cpu.ok, ExecutionProvider::Cpu, 0,
                 QStringLiteral("CUDA 模型验证失败，自动回退 CPU：%1").arg(gpu.message), cpu.code, cpu.message};
     }
-    // This pinned HTDemucs export expands dramatically during DirectML graph
-    // compilation (over 20 GiB on a 4070 Ti SUPER before the first chunk).
-    // A provider probe compiles that same graph, so do not attempt it first.
+    // Legacy HTDemucs FT exports exceeded 20 GiB during DirectML graph compilation
+    // on a 4070 Ti SUPER. Keep the Demucs CPU/CUDA policy for the single-model
+    // export until DirectML resource usage is independently validated.
     if (profile.family == QStringLiteral("demucs") && request.device != DeviceMode::Cpu) {
         const QString reason = QStringLiteral(
             "标准五轨模型暂不兼容 DirectML；GPU 分离请在模型卡片配置 NVIDIA CUDA 组件（不需要重装显卡驱动）。自动模式本次回退 CPU，完整歌曲可能耗时很长");
@@ -463,7 +495,8 @@ BackendResult runMdx(const NativeStartRequest& request,
                      const NativeProviderSelection& provider,
                      const CancellationToken& cancelled,
                      const ProgressCallback& progress,
-                     OutputTransaction& transaction)
+                     OutputTransaction& transaction,
+                     ProvenSession& retained)
 {
     const MdxProfile profile = MdxProfile::forModel(trusted.id);
     QString error;
@@ -477,11 +510,13 @@ BackendResult runMdx(const NativeStartRequest& request,
     BackendResult loaded = loadTrustedModelArtifact(
         request.modelFiles.front(), trusted, cancelled, &artifact);
     if (!loaded.ok) return loaded;
-    std::unique_ptr<OrtModelSession> session;
-    BackendResult opened = openSession(request, trusted, artifact.bytes,
-                                       provider.provider, provider.adapterId,
-                                       cancelled, &session);
-    if (!opened.ok) return opened;
+    auto session = retained.take(artifact.sha256);
+    if (!session) {
+        BackendResult opened = openSession(request, trusted, artifact.bytes,
+                                           provider.provider, provider.adapterId,
+                                           cancelled, &session);
+        if (!opened.ok) return opened;
+    }
     artifact.bytes.clear();
     artifact.bytes.squeeze();
 
@@ -696,7 +731,8 @@ BackendResult runDemucs(const NativeStartRequest& request,
                         const NativeProviderSelection& provider,
                         const CancellationToken& cancelled,
                         const ProgressCallback& progress,
-                        OutputTransaction& transaction)
+                        OutputTransaction& transaction,
+                        ProvenSession& retained)
 {
     QString error;
     const qint64 totalFrames = countDecodedFrames(request.inputPath, cancelled, &error);
@@ -720,35 +756,49 @@ BackendResult runDemucs(const NativeStartRequest& request,
         BackendResult loaded = loadTrustedModelArtifact(
             modelPath, trusted, cancelled, &artifact);
         if (!loaded.ok) return loaded;
-        const int row = request.modelRoles.isEmpty()
-            ? trustedDemucsRowForHash(artifact.sha256)
-            : DemucsProfile::trusted().rows.indexOf(request.modelRoles.at(modelIndex));
-        if (row < 0) return fail(QStringLiteral("model_semantics_invalid"),
-                                 QStringLiteral("Demucs hash does not identify its trusted row"));
-        const QString stem = profile.rows.at(row);
-        const QString stagingPath = QDir(transaction.temporaryDirectory())
-            .filePath(QStringLiteral(".%1.float.wav").arg(stem));
-        FfmpegWaveWriter writer;
-        if (!writer.open(stagingPath, 44100, 2)) {
-            return fail(QStringLiteral("output_write_failed"), writer.errorString());
+        QVector<int> rows;
+        if (trusted.sha256.size() == 1) {
+            rows = {0, 1, 2, 3}; // One HTDemucs inference supplies every source.
+        } else {
+            const int row = request.modelRoles.isEmpty()
+                ? trustedDemucsRowForHash(artifact.sha256)
+                : profile.rows.indexOf(request.modelRoles.at(modelIndex));
+            if (row < 0) return fail(QStringLiteral("model_semantics_invalid"),
+                                     QStringLiteral("Demucs hash does not identify its trusted row"));
+            rows = {row}; // Legacy specialist ensemble sidecars.
+        }
+        std::vector<std::unique_ptr<FfmpegWaveWriter>> writers;
+        std::vector<std::unique_ptr<StreamingOverlapAdd>> publishers;
+        QVector<float> publishedPeaks(rows.size(), 0.0F);
+        QVector<float> rawModelPeaks(rows.size(), 0.0F);
+        for (qsizetype index = 0; index < rows.size(); ++index) {
+            const QString stem = profile.rows.at(rows.at(index));
+            const QString stagingPath = QDir(transaction.temporaryDirectory())
+                .filePath(QStringLiteral(".%1.float.wav").arg(stem));
+            auto writer = std::make_unique<FfmpegWaveWriter>();
+            if (!writer->open(stagingPath, 44100, 2))
+                return fail(QStringLiteral("output_write_failed"), writer->errorString());
+            staging.insert(stem, stagingPath);
+            writers.push_back(std::move(writer));
+            publishers.push_back(std::make_unique<StreamingOverlapAdd>(
+                [&, index](const QVector<float>& published) {
+                    for (float sample : published) {
+                        if (!std::isfinite(sample)) return false;
+                        publishedPeaks[index] = std::max(publishedPeaks[index], std::abs(sample));
+                    }
+                    return writers[index]->write(published);
+                }));
         }
 
-        std::unique_ptr<OrtModelSession> session;
-        BackendResult opened = openSession(request, trusted, artifact.bytes,
-                                           provider.provider, provider.adapterId,
-                                           cancelled, &session);
-        if (!opened.ok) return opened;
+        auto session = retained.take(artifact.sha256);
+        if (!session) {
+            BackendResult opened = openSession(request, trusted, artifact.bytes,
+                                               provider.provider, provider.adapterId,
+                                               cancelled, &session);
+            if (!opened.ok) return opened;
+        }
         artifact.bytes.clear();
         artifact.bytes.squeeze();
-        float publishedPeak = 0.0F;
-        StreamingOverlapAdd publisher([&](const QVector<float>& published) {
-            for (float sample : published) {
-                if (!std::isfinite(sample)) return false;
-                publishedPeak = std::max(publishedPeak, std::abs(sample));
-            }
-            return writer.write(published);
-        });
-        float rawModelPeak = 0.0F;
         BackendResult streamed = streamPcmChunks(
             request.inputPath, starts, profile.chunkSamples, cancelled,
             [&](qint64 start, const QVector<float>& mix, qsizetype chunkIndex) {
@@ -759,14 +809,21 @@ BackendResult runDemucs(const NativeStartRequest& request,
                 const OrtOperationResult inference = session->run(
                     planar, profile.inputShape, profile.outputShape, cancelled);
                 if (!inference.ok) return fail(inference.code, inference.message);
-                const QVector<float> rowPlanar = selectDemucsRow(inference.output, row);
-                const QVector<float> rowInterleaved = planarToInterleaved(rowPlanar);
-                for (const float value : rowInterleaved) rawModelPeak = std::max(rawModelPeak, std::abs(value));
                 const QVector<float> weights = demucsPublisherWeights(
                     static_cast<int>(chunkIndex), static_cast<int>(starts.size()));
-                if (!publisher.add(start, rowInterleaved, weights)) {
-                    return fail(QStringLiteral("output_write_failed"),
-                                QStringLiteral("Could not stream Demucs overlap output"));
+                for (qsizetype index = 0; index < rows.size(); ++index) {
+                    const QVector<float> rowInterleaved = planarToInterleaved(
+                        selectDemucsRow(inference.output, rows.at(index)));
+                    for (const float value : rowInterleaved) {
+                        if (!std::isfinite(value))
+                            return fail(QStringLiteral("inference_failed"),
+                                        QStringLiteral("Demucs output contains a non-finite sample"));
+                        rawModelPeaks[index] = std::max(rawModelPeaks[index], std::abs(value));
+                    }
+                    if (!publishers[index]->add(start, rowInterleaved, weights)) {
+                        return fail(QStringLiteral("output_write_failed"),
+                                    QStringLiteral("Could not stream Demucs overlap output"));
+                    }
                 }
                 const qint64 completed = modelIndex * starts.size() + chunkIndex + 1;
                 progress(nativeInferenceProgress(
@@ -775,14 +832,17 @@ BackendResult runDemucs(const NativeStartRequest& request,
                 return BackendResult{true, {}, {}, {}};
             });
         if (!streamed.ok) return streamed;
-        if (!publisher.finish(totalFrames) || !writer.finish()) {
-            return fail(QStringLiteral("output_write_failed"), writer.errorString());
+        for (qsizetype index = 0; index < rows.size(); ++index) {
+            if (!publishers[index]->finish(totalFrames) || !writers[index]->finish()) {
+                return fail(QStringLiteral("output_write_failed"), writers[index]->errorString());
+            }
+            const QString stem = profile.rows.at(rows.at(index));
+            rawPeaks.insert(stem, publishedPeaks.at(index));
+            maximumPeak = std::max(maximumPeak, publishedPeaks.at(index));
+            qInfo().noquote() << "Demucs raw model peak" << stem << rawModelPeaks.at(index)
+                             << "overlap peak" << publishedPeaks.at(index);
         }
         session.reset(); // at most one Demucs session is resident
-        staging.insert(stem, stagingPath);
-        rawPeaks.insert(stem, publishedPeak);
-        maximumPeak = std::max(maximumPeak, publishedPeak);
-        qInfo().noquote() << "Demucs raw model peak" << stem << rawModelPeak << "overlap peak" << publishedPeak;
     }
 
     if (request.stems.contains(QStringLiteral("instrumental"))) {
@@ -1312,7 +1372,7 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
     const TransactionResult begun = transaction->begin();
     if (!begun.ok) return transactionFailure(begun);
     progress(0.0, QStringLiteral("provider_probe"));
-    OrtNativeProviderProbe providerProbe;
+    OrtNativeProviderProbe providerProbe(true);
     NativeProviderSelection provider = selectNativeProvider(
         request, *trusted, cancelled, providerProbe);
     if (!provider.ok) {
@@ -1320,8 +1380,10 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
             *transaction, fail(provider.code, provider.message));
     }
     BackendResult separated = trusted->family == QStringLiteral("mdx")
-        ? runMdx(request, *trusted, provider, cancelled, progress, *transaction)
-        : runDemucs(request, *trusted, provider, cancelled, progress, *transaction);
+        ? runMdx(request, *trusted, provider, cancelled, progress, *transaction,
+                 providerProbe.retained)
+        : runDemucs(request, *trusted, provider, cancelled, progress, *transaction,
+                    providerProbe.retained);
     if (!separated.ok && request.device == DeviceMode::Auto
         && provider.provider != ExecutionProvider::Cpu
         && !cancelled.isCancelled()) {
@@ -1346,9 +1408,9 @@ BackendResult NativeWorkerBackend::separate(const QJsonObject& payload,
         progress(0.0, QStringLiteral("cpu_fallback"));
         separated = trusted->family == QStringLiteral("mdx")
             ? runMdx(cpuRequest, *trusted, cpuProvider, cancelled, progress,
-                     *transaction)
+                     *transaction, providerProbe.retained)
             : runDemucs(cpuRequest, *trusted, cpuProvider, cancelled, progress,
-                        *transaction);
+                        *transaction, providerProbe.retained);
         provider = std::move(cpuProvider);
     }
     if (!separated.ok) return cleanupAfterFailure(*transaction, separated);

@@ -28,8 +28,13 @@ public:
     MdctFramingProbe& operator=(const MdctFramingProbe&) = delete;
     void consume(const double* interleaved, std::size_t frames,
                  const std::atomic_bool& cancel);
+    // Optional second pass over four retained stereo excerpts. Each result
+    // belongs to one fixed channel; never pool evidence across channels.
+    void refineStereo(const std::atomic_bool& cancel);
     [[nodiscard]] std::array<MdctFrameEvidence, 4> result() const noexcept;
+    [[nodiscard]] std::array<MdctFrameEvidence, 4> channelResult(int channel) const noexcept;
 private:
+    [[nodiscard]] std::array<MdctFrameEvidence, 4> resultForChannel(int channel) const noexcept;
     struct Impl;
     std::unique_ptr<Impl> impl_;
     std::unique_ptr<Impl> mp3_;

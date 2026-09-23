@@ -727,7 +727,8 @@ public:
     }
 
     // Opt-in acceptance replays already verified files through the real result
-    // publication and waveform queue. It does not run or simulate inference.
+    // publication and waveform queue. These are legacy FT outputs, not evidence
+    // for the current single-model inference. It does not run or simulate inference.
     Q_INVOKABLE bool replayRealFiveStemResult(const QUrl& input, const QString& directory,
                                                double outputGain)
     {
@@ -735,7 +736,7 @@ public:
             return false;
         if (!validateRetainedCudaManifest(input, directory)) return false;
         if (controller_->inputInfo_.value(QStringLiteral("path")).toString() != input.toLocalFile()
-            || !controller_->selectModel(QStringLiteral("htdemucs-ft-fp16"))) return false;
+            || !controller_->selectModel(QStringLiteral("htdemucs-fp16"))) return false;
         using Kind = VocalSeparationController::StemKind;
         const QList<Kind> kinds{Kind::Vocals, Kind::Accompaniment, Kind::Drums, Kind::Bass, Kind::Other};
         QJsonArray outputs;

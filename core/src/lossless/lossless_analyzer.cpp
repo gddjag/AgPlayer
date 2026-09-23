@@ -1772,7 +1772,8 @@ AnalysisResult analyzeFile(const std::string& utf8Path,
         };
         for (std::size_t i = 0; i < celt_probes.size(); ++i)
             if (celt_probes[i]) select_celt(celt_probes[i]->result(), i, 12);
-        const auto select_mdct = [&](const auto& candidates, int rate) {
+        int selected_mdct_channel = -1;
+        const auto select_mdct = [&](const auto& candidates, int rate, int channel = -1) {
             for (const auto& measured : candidates) {
                 if (measured.activeBlocks == 0U) continue;
                 // The hybrid 1152 approximation has not been validated through
@@ -1791,6 +1792,7 @@ AnalysisResult analyzeFile(const std::string& utf8Path,
                     result.measurements.mdctFrameAlignedBlocks = measured.alignedBlocks;
                     result.measurements.mdctFrameWindow = measured.window;
                     result.measurements.mdctAnalysisSampleRate = rate;
+                    selected_mdct_channel = channel;
                 }
             }
         };
@@ -1812,6 +1814,30 @@ AnalysisResult analyzeFile(const std::string& utf8Path,
                 hybrid_probe->refineAlternate(cancelled);
                 if (cancelled.load(std::memory_order_relaxed)) return cancelled_result(std::move(result));
                 select_mdct(std::array<MdctFrameEvidence, 1>{hybrid_probe->alternateResult()}, native.sample_rate);
+            }
+        }
+        // A louder clean channel must not hide a quieter compressed channel.
+        // Only when the existing probes abstain, rescan each fixed stereo
+        // channel. Keep complete per-channel evidence, not mixed maxima.
+        const auto has_codec_framing = [&] {
+            return supports_celt_framing(result.measurements)
+                || supports_mdct_framing(result.measurements.mdctFrameWindow,
+                    result.measurements.mdctFrameCoherentPeakDb, result.measurements.mdctFramePeakZ,
+                    result.measurements.mdctFrameBlocks, result.measurements.mdctFrameAlignedBlocks);
+        };
+        if (native.channels == 2 && !has_codec_framing()) {
+            if (mdct_probe) {
+                mdct_probe->refineStereo(cancelled);
+                if (cancelled.load(std::memory_order_relaxed)) return cancelled_result(std::move(result));
+                for (int channel = 0; channel < 2; ++channel)
+                    select_mdct(mdct_probe->channelResult(channel), native.sample_rate, channel);
+            }
+            for (std::size_t i = 0; i < inverse_probes.size() && !has_codec_framing(); ++i) {
+                if (!inverse_probes[i]) continue;
+                inverse_probes[i]->refineStereo(cancelled);
+                if (cancelled.load(std::memory_order_relaxed)) return cancelled_result(std::move(result));
+                for (int channel = 0; channel < 2; ++channel)
+                    select_mdct(inverse_probes[i]->channelResult(channel), inverse_rates[i], channel);
             }
         }
         // Dense transforms are deferred until both ordinary framing probes
@@ -1852,6 +1878,11 @@ AnalysisResult analyzeFile(const std::string& utf8Path,
         }
         {
             if (result.measurements.mdctFrameBlocks > 0U) {
+                if (selected_mdct_channel >= 0)
+                    add_evidence(result, "mdct_analysis_channel", EvidenceFamily::CodecStructure,
+                                 EvidenceDirection::Neutral, selected_mdct_channel + 1, "channel",
+                                 "同一声道的独立片段，不合并左右声道得分", 1,
+                                 "该帧结构测量来自指定声道；左右声道可能具有不同来源，不能据此确认所有声道的完整历史。");
                 add_evidence(result, "mdct_framing_peak", EvidenceFamily::CodecStructure,
                              EvidenceDirection::Neutral, result.measurements.mdctFrameCoherentPeakDb,
                              "dB", result.measurements.mdctFrameWindow, 1,

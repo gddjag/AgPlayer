@@ -2869,6 +2869,9 @@ void VocalSeparationController::discoverCustomModels(
              {VocalModelFamily::Mdx, 1}},
             {QStringLiteral("uvr-mdx-net-inst-hq3"),
              {VocalModelFamily::Mdx, 1}},
+            {QStringLiteral("htdemucs-fp16"),
+             {VocalModelFamily::Demucs, 1}},
+            // Compatibility for manually supplied legacy ensemble sidecars only.
             {QStringLiteral("htdemucs-ft-fp16"),
              {VocalModelFamily::Demucs, 4}},
         };
@@ -2895,7 +2898,7 @@ void VocalSeparationController::discoverCustomModels(
         sortedRoles.sort();
         QStringList sortedExpectedRoles = expectedRoles;
         sortedExpectedRoles.sort();
-        const bool validRoles = family == VocalModelFamily::Mdx
+        const bool validRoles = profileFileCount == 1
             ? sortedRoles.isEmpty() : sortedRoles == sortedExpectedRoles;
         if (!safeFiles || profileFileCount <= 0
             || modelFiles.size() != profileFileCount || !validRoles) {
@@ -2907,7 +2910,7 @@ void VocalSeparationController::discoverCustomModels(
         if (knownProfiles.contains(profileId)) {
             CustomModelBinding binding;
             binding.profileId = profileId;
-            binding.roles = family == VocalModelFamily::Demucs ? roles : QStringList{};
+            binding.roles = profileFileCount == 4 ? roles : QStringList{};
             for (const VocalDownloadFile& modelFile : modelFiles) {
                 binding.sha256.push_back(modelFile.sha256.toLower());
                 binding.bytes.push_back(modelFile.bytes);

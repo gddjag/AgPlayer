@@ -374,6 +374,8 @@ private slots:
     void customModelDirectoryListsNestedRawModelsWithBackendDiagnostics();
     void knownLocalMdxProfileIsDiscoveredButStillRequiresItsFingerprint();
     void customSidecarManifestUsesTrustedFingerprintAndReportsRejection();
+    void singleDemucsSidecarPassesOneFileAndNoSpecialistRole();
+    void singleDemucsLocalConfigurationReusesOneVerifiedFile();
     void cancellingVerificationImmediatelyRestoresCheapModelStates();
     void deletingDuringRefreshVerificationCannotResurrectTheModel();
     void verificationHashHonorsCancellationBeforeReadingFile();
@@ -2975,6 +2977,89 @@ exportNeverOverwritesAndPlaylistUsesTheRealImportPath()
     QVERIFY(!controller.addStemToPlaylist(
         VocalSeparationController::StemKind::Vocals,
         QStringLiteral("missing-playlist")));
+}
+
+void VocalSeparationControllerTest::singleDemucsLocalConfigurationReusesOneVerifiedFile()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray fixture("single-demucs-catalog-fixture");
+    auto options = optionsFor(temporary, QStringLiteral("stale"), fixture);
+    auto card = VocalSeparationCatalog::models().at(2);
+    QCOMPARE(card.files.size(), 1);
+    const QString suppliedModel = qEnvironmentVariable("AGPLAYER_TEST_SINGLE_DEMUCS_MODEL");
+    const QString root = temporary.filePath(QStringLiteral("models"));
+    const QString nested = QDir(root).filePath(QStringLiteral("分类/五轨/") + card.files.first().fileName);
+    QVERIFY(QDir().mkpath(QFileInfo(nested).absolutePath()));
+    if (suppliedModel.isEmpty()) {
+        card.files[0].bytes = fixture.size();
+        card.files[0].sha256 = sha256(fixture);
+        QVERIFY(writeBytes(nested, fixture));
+    } else {
+        QVERIFY(QFile::copy(suppliedModel, nested));
+    }
+    // Any attempted replacement download must fail; the verified nested file is sufficient.
+    card.files[0].url = QUrl::fromLocalFile(temporary.filePath(QStringLiteral("absent.onnx")));
+    options.catalog = {card};
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(&preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectModelDirectory(QUrl::fromLocalFile(root)));
+    QTRY_VERIFY_WITH_TIMEOUT(VocalSeparationControllerTestDriver::directoryAndVerificationIdle(controller), 5000);
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        QVERIFY(controller.configureRuntime(card.id));
+        QTRY_COMPARE_WITH_TIMEOUT(modelStateFor(controller.models(), card.id),
+                                 int(VocalSeparationController::ModelState::Installed), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.downloadingModelId().isEmpty(), 5000);
+    }
+    // Directory selection schedules an asynchronous scan; configuration can finish first.
+    QTRY_COMPARE_WITH_TIMEOUT(controller.models().first().toMap().value("paths").toStringList(),
+                             QStringList{nested}, 5000);
+    const auto model = controller.models().first().toMap();
+    QCOMPARE(model.value("paths").toStringList(), QStringList{nested});
+    QCOMPARE(model.value("stemCount").toInt(), 5);
+    QCOMPARE(model.value("configurationState").toString(), QStringLiteral("complete"));
+    QVERIFY(!QFileInfo::exists(QDir(root).filePath(card.id + "/" + card.files.first().fileName)));
+}
+
+void VocalSeparationControllerTest::singleDemucsSidecarPassesOneFileAndNoSpecialistRole()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QByteArray bytes("single-demucs-test-model");
+    const QString markerPath = temporary.filePath(QStringLiteral("request.json"));
+    const auto options = optionsFor(temporary,
+        QStringLiteral("capture-payload-delayed-shutdown"), bytes, markerPath);
+    const QString root = temporary.filePath(QStringLiteral("models/nested"));
+    QVERIFY(QDir().mkpath(root));
+    QVERIFY(writeBytes(QDir(root).filePath(QStringLiteral("single.onnx")), bytes));
+    const QJsonObject manifest{
+        {"id", "custom-single-demucs"}, {"family", "Demucs"}, {"profile", "htdemucs-fp16"},
+        {"stems", QJsonArray{"vocals", "instrumental", "drums", "bass", "other"}},
+        {"files", QJsonArray{QJsonObject{
+            {"name", "single.onnx"}, {"bytes", bytes.size()},
+            {"sha256", sha256(bytes)}, {"shape", QJsonArray{1, 2, 343980}}}}}};
+    QVERIFY(writeBytes(QDir(root).filePath(QStringLiteral("single.agmodel.json")),
+                       QJsonDocument(manifest).toJson()));
+    AudioPreviewController preview(AG_AUDIO_BACKEND_NULL);
+    WaveformProvider waveforms;
+    VocalSeparationController controller(&preview, &waveforms, nullptr, nullptr, nullptr, options);
+    QVERIFY(controller.selectModelDirectory(QUrl::fromLocalFile(temporary.filePath("models"))));
+    QTRY_COMPARE_WITH_TIMEOUT(modelStateFor(controller.models(), QStringLiteral("custom-single-demucs")),
+                             int(VocalSeparationController::ModelState::Installed), 5000);
+    QVERIFY(controller.selectModel(QStringLiteral("custom-single-demucs")));
+    QVERIFY(writeBytes(options.runtimeLibraryPath, QByteArrayLiteral("runtime")));
+    QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
+    QVERIFY(controller.start());
+    QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(), VocalSeparationController::JobState::Completed, 5000);
+    QFile marker(markerPath);
+    QVERIFY(marker.open(QIODevice::ReadOnly));
+    const auto request = QJsonDocument::fromJson(marker.readAll()).object();
+    QCOMPARE(request.value("modelProfile").toString(), QStringLiteral("htdemucs-fp16"));
+    QCOMPARE(request.value("modelFiles").toArray().size(), 1);
+    QCOMPARE(request.value("modelSha256").toArray(), QJsonArray{sha256(bytes)});
+    QVERIFY(request.value("modelRoles").toArray().isEmpty());
 }
 
 void VocalSeparationControllerTest::

@@ -1,5 +1,7 @@
 # AgPlayer 原生人声伴奏分离实施计划
 
+> 历史计划：2026-09-23 起内置五轨已改为约 166 MB 的 `htdemucs_fp16weights.onnx` 单文件；当前下载和适配说明见 [单模型更新记录](2026-09-23-htdemucs-single-model.md)。下文四文件 FT 条款保留作为当时方案记录。
+
 ## Global Constraints
 
 - 在现有音频工具窗口新增第二个可见标签；保留工具 ID 0–3，新增 `Separation = 4`，显示顺序为 `[0, 4, 1, 2, 3]`。

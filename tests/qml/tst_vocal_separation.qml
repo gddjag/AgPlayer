@@ -360,17 +360,19 @@ TestCase {
         verify(findChild(customCard, "separationCustomModelCopy").text
                .indexOf("自动识别支持的模型") >= 0)
         verify(backupText.text.indexOf("支持与环境") >= 0)
-        verify(backupText.text.indexOf("MDX / MDXC ONNX") >= 0)
+        verify(backupText.text.indexOf("MDX ONNX") >= 0)
+        verify(backupText.text.indexOf("htdemucs_fp16weights.onnx") >= 0)
+        verify(backupText.text.indexOf("166 MB") >= 0)
         verify(backupText.text.indexOf("Demucs .th") >= 0)
         verify(backupText.text.indexOf("https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888") >= 0)
         verify(backupText.text.indexOf("提取码: 8888") >= 0)
     }
 
     function test_modelCardsExposeDomesticMirrorAndGreenPercentageProgress() {
-        const card = findChild(page, "separationModelCard-htdemucs-ft-fp16")
+        const card = findChild(page, "separationModelCard-htdemucs-fp16")
         verify(card)
-        verify(findChild(card, "separationDomesticMirror-htdemucs-ft-fp16"))
-        const percentage = findChild(card, "separationDownloadPercentage-htdemucs-ft-fp16")
+        verify(findChild(card, "separationDomesticMirror-htdemucs-fp16"))
+        const percentage = findChild(card, "separationDownloadPercentage-htdemucs-fp16")
         verify(percentage)
         compare(percentage.color.toString(), Theme.success.toString())
     }
@@ -778,11 +780,11 @@ TestCase {
         compare(VocalSeparationController.models.length, 3)
         verify(page.modelSupports("uvr-mdxnet-kara", "vocals"))
         verify(!page.modelSupports("uvr-mdxnet-kara", "drums"))
-        verify(page.modelSupports("htdemucs-ft-fp16", "drums"))
-        verify(page.modelSupports("htdemucs-ft-fp16", "other"))
+        verify(page.modelSupports("htdemucs-fp16", "drums"))
+        verify(page.modelSupports("htdemucs-fp16", "other"))
         verify(findChild(page, "modelStemSummary-uvr-mdxnet-kara").text
                .indexOf("人声 / 伴奏") >= 0)
-        verify(findChild(page, "modelStemSummary-htdemucs-ft-fp16").text
+        verify(findChild(page, "modelStemSummary-htdemucs-fp16").text
                .indexOf("鼓组") >= 0)
     }
 
@@ -1021,7 +1023,7 @@ TestCase {
 
     function test_switchingModelKeepsPublishedWaveformsVisible() {
         separationTestDriver.reset()
-        separationTestDriver.selectModel("htdemucs-ft-fp16")
+        separationTestDriver.selectModel("htdemucs-fp16")
         separationTestDriver.setCompleted()
         const drums = page.stemInfo(VocalSeparationController.Drums)
         verify(drums.available && drums.waveform.length > 0)
@@ -1171,7 +1173,7 @@ TestCase {
         compare(VocalSeparationController.stems.filter(function(stem) {
             return stem.supported
         }).length, 2)
-        separationTestDriver.selectModel("htdemucs-ft-fp16")
+        separationTestDriver.selectModel("htdemucs-fp16")
         compare(VocalSeparationController.stems.filter(function(stem) {
             return stem.supported
         }).length, 5)
