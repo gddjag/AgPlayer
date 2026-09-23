@@ -10,6 +10,8 @@
 
 namespace agplayer {
 
+class ProprietaryAudioInput;
+
 struct MediaMetadata final {
     std::string title;
     std::string artist;
@@ -73,6 +75,7 @@ struct DecoderOpenOptions final {
     DecoderReadCallback custom_read = nullptr;
     DecoderSeekCallback custom_seek = nullptr;
     void* custom_io_context = nullptr;
+    ProprietaryAudioInput* proprietary_audio_input = nullptr;
     std::string input_format_hint;
     DecoderPacketCallback packet_callback = nullptr;
     void* packet_context = nullptr;

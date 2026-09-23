@@ -528,6 +528,7 @@ public:
         custom_read_ = options.custom_read;
         custom_seek_ = options.custom_seek;
         custom_io_context_ = options.custom_io_context;
+        active_proprietary_input_ = options.proprietary_audio_input;
         if (custom_read_ == nullptr
             && ProprietaryAudioInput::recognizes_path(utf8_path)) {
             std::string proprietary_error;
@@ -537,6 +538,7 @@ public:
             custom_read_ = &ProprietaryAudioInput::read_callback;
             custom_seek_ = &ProprietaryAudioInput::seek_callback;
             custom_io_context_ = proprietary_input_.get();
+            active_proprietary_input_ = proprietary_input_.get();
         }
         packet_callback_ = options.packet_callback;
         packet_context_ = options.packet_context;
@@ -606,8 +608,8 @@ public:
             reset();
             return interrupted ? AG_CANCELLED : AG_UNSUPPORTED_FORMAT;
         }
-        if (proprietary_input_) {
-            proprietary_input_->apply_format_tags(format_context_);
+        if (active_proprietary_input_) {
+            active_proprietary_input_->apply_format_tags(format_context_);
         }
 
         const AVCodec* codec = nullptr;
@@ -672,6 +674,8 @@ public:
         }
 
         populate_metadata(*stream);
+        if (active_proprietary_input_)
+            active_proprietary_input_->apply_container_metadata(metadata_);
         populate_native_format(*stream);
         return AG_OK;
     }
@@ -941,6 +945,7 @@ public:
         if (custom_io_ != nullptr) av_freep(&custom_io_->buffer);
         avio_context_free(&custom_io_);
         proprietary_input_.reset();
+        active_proprietary_input_ = nullptr;
         interrupt_handler_ = nullptr;
         interrupt_context_ = nullptr;
         custom_read_ = nullptr;
@@ -1646,6 +1651,7 @@ private:
     DecoderSeekCallback custom_seek_ = nullptr;
     void* custom_io_context_ = nullptr;
     std::unique_ptr<ProprietaryAudioInput> proprietary_input_;
+    ProprietaryAudioInput* active_proprietary_input_ = nullptr;
     DecoderPacketCallback packet_callback_ = nullptr;
     void* packet_context_ = nullptr;
     bool interrupt_triggered_ = false;

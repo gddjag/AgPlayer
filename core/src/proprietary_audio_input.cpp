@@ -313,11 +313,58 @@ std::unique_ptr<ProprietaryAudioInput> ProprietaryAudioInput::open(
     return input;
 }
 
+std::unique_ptr<ProprietaryAudioInput> ProprietaryAudioInput::open_callbacks(
+    const std::string& name_hint, DecoderReadCallback read,
+    DecoderSeekCallback seek, void* context, std::string& error)
+{
+    error.clear();
+    if (!recognizes_path(name_hint) || read == nullptr || seek == nullptr
+        || context == nullptr) {
+        error = "Unsupported proprietary audio source";
+        return nullptr;
+    }
+    auto input = std::unique_ptr<ProprietaryAudioInput>(
+        new ProprietaryAudioInput(read, seek, context));
+    if (!input->initialize(extension_of(name_hint), error)) return nullptr;
+    return input;
+}
+
+std::int64_t ProprietaryAudioInput::source_size() noexcept
+{
+    if (source_read_ != nullptr) return source_seek_(source_context_, 0, AVSEEK_SIZE);
+    file_.clear();
+    file_.seekg(0, std::ios::end);
+    return static_cast<std::int64_t>(file_.tellg());
+}
+
+int ProprietaryAudioInput::source_read_at(const std::uint64_t offset,
+                                         std::uint8_t* buffer,
+                                         const int count) noexcept
+{
+    if (count <= 0 || offset > static_cast<std::uint64_t>(
+            std::numeric_limits<std::int64_t>::max())) return AVERROR(EINVAL);
+    if (source_read_ == nullptr) {
+        file_.clear();
+        file_.seekg(static_cast<std::streamoff>(offset));
+        file_.read(reinterpret_cast<char*>(buffer), count);
+        return static_cast<int>(file_.gcount());
+    }
+    int total = 0;
+    while (total < count) {
+        const auto target = static_cast<std::int64_t>(offset + total);
+        if (source_seek_(source_context_, target, SEEK_SET) != target)
+            return total > 0 ? total : AVERROR(EIO);
+        const int actual = source_read_(source_context_, buffer + total, count - total);
+        if (actual <= 0) return total > 0 ? total : actual;
+        total += actual;
+    }
+    return total;
+}
+
 bool ProprietaryAudioInput::initialize(const std::string& extension,
                                        std::string& error)
 {
-    file_.seekg(0, std::ios::end);
-    const std::streamoff size = file_.tellg();
+    const std::int64_t size = source_size();
     if (size < 0) {
         error = "Cannot determine proprietary audio size";
         return false;
@@ -328,8 +375,11 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
             return false;
         }
         std::array<std::uint8_t, 14> header{};
-        file_.seekg(0);
-        file_.read(reinterpret_cast<char*>(header.data()), header.size());
+        if (source_read_at(0, header.data(), static_cast<int>(header.size()))
+            != static_cast<int>(header.size())) {
+            error = "Truncated NCM header";
+            return false;
+        }
         if (std::string_view(reinterpret_cast<char*>(header.data()), 8)
                 != "CTENFDAM") {
             error = "Unsupported NCM variant";
@@ -343,7 +393,11 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
             return false;
         }
         std::vector<std::uint8_t> key_blob(key_size);
-        file_.read(reinterpret_cast<char*>(key_blob.data()), key_blob.size());
+        if (source_read_at(14, key_blob.data(), static_cast<int>(key_blob.size()))
+            != static_cast<int>(key_blob.size())) {
+            error = "Truncated NCM key";
+            return false;
+        }
         for (auto& value : key_blob) value ^= 0x64;
         constexpr std::array<std::uint8_t, 16> core_key{
             'h','z','H','R','A','m','s','o','5','k','I','n','b','a','x','W'};
@@ -378,7 +432,12 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
             std::swap(ncm_box_[i], ncm_box_[j]);
         }
         std::array<std::uint8_t, 4> length{};
-        file_.read(reinterpret_cast<char*>(length.data()), length.size());
+        if (source_read_at(14ULL + key_size, length.data(),
+                           static_cast<int>(length.size()))
+            != static_cast<int>(length.size())) {
+            error = "Truncated NCM metadata length";
+            return false;
+        }
         const std::uint32_t metadata_size = little_u32(length.data());
         const std::uint64_t image_header = 14ULL + key_size + 4ULL
             + metadata_size + 5ULL;
@@ -389,16 +448,24 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
         }
         if (metadata_size > 0 && metadata_size <= 4U * 1024U * 1024U) {
             std::vector<std::uint8_t> blob(metadata_size);
-            file_.read(reinterpret_cast<char*>(blob.data()), blob.size());
+            if (source_read_at(18ULL + key_size, blob.data(),
+                               static_cast<int>(blob.size()))
+                != static_cast<int>(blob.size())) {
+                error = "Truncated NCM metadata";
+                return false;
+            }
             const std::string json = decrypt_ncm_json(std::move(blob));
             container_title_ = json_field(json, "musicName");
             container_artist_ = json_field(json, "artist");
             container_album_ = json_field(json, "album");
         }
-        file_.seekg(static_cast<std::streamoff>(image_header));
         std::array<std::uint8_t, 8> image_lengths{};
-        file_.read(reinterpret_cast<char*>(image_lengths.data()),
-                   image_lengths.size());
+        if (source_read_at(image_header, image_lengths.data(),
+                           static_cast<int>(image_lengths.size()))
+            != static_cast<int>(image_lengths.size())) {
+            error = "Truncated NCM cover length";
+            return false;
+        }
         const std::uint32_t image_space = little_u32(image_lengths.data());
         const std::uint32_t image_size = little_u32(image_lengths.data() + 4);
         payload_offset_ = image_header + 8ULL + image_space;
@@ -409,8 +476,12 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
         }
         if (image_size > 0 && image_size <= 32U * 1024U * 1024U) {
             container_cover_.resize(image_size);
-            file_.read(reinterpret_cast<char*>(container_cover_.data()),
-                       container_cover_.size());
+            if (source_read_at(image_header + 8, container_cover_.data(),
+                               static_cast<int>(container_cover_.size()))
+                != static_cast<int>(container_cover_.size())) {
+                error = "Truncated NCM cover";
+                return false;
+            }
             if (container_cover_.size() >= 8
                 && std::equal(container_cover_.begin(),
                               container_cover_.begin() + 8,
@@ -474,8 +545,11 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
             return false;
         }
         std::array<std::uint8_t, 44> header{};
-        file_.seekg(0);
-        file_.read(reinterpret_cast<char*>(header.data()), header.size());
+        if (source_read_at(0, header.data(), static_cast<int>(header.size()))
+            != static_cast<int>(header.size())) {
+            error = "Truncated KGM header";
+            return false;
+        }
         const bool vpr = extension == "vpr";
         const auto& magic = vpr ? kVprHeader : kKgmHeader;
         if (!std::equal(magic.begin(), magic.end(), header.begin())) {
@@ -502,16 +576,17 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
             return false;
         }
         std::array<std::uint8_t, 32> header{};
-        file_.seekg(0);
-        file_.read(reinterpret_cast<char*>(header.data()), header.size());
+        if (source_read_at(0, header.data(), static_cast<int>(header.size()))
+            != static_cast<int>(header.size())) {
+            error = "Truncated KWM header";
+            return false;
+        }
         const std::string_view magic(reinterpret_cast<const char*>(header.data()), 16);
         if (magic != "yeelion-kuwo-tme" && magic != std::string_view(
                 "yeelion-kuwo\0\0\0\0", 16)) {
             if (header[0] == 0xff && (header[1] & 0xf6U) == 0xf0U) {
                 cipher_ = Cipher::Passthrough;
                 payload_size_ = static_cast<std::uint64_t>(size);
-                file_.clear();
-                file_.seekg(0);
                 return true;
             }
             error = "Unsupported KWM variant";
@@ -535,8 +610,12 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
             return false;
         }
         std::array<std::uint8_t, 4> trailer{};
-        file_.seekg(size - static_cast<std::streamoff>(trailer.size()));
-        file_.read(reinterpret_cast<char*>(trailer.data()), trailer.size());
+        if (source_read_at(static_cast<std::uint64_t>(size) - trailer.size(),
+                           trailer.data(), static_cast<int>(trailer.size()))
+            != static_cast<int>(trailer.size())) {
+            error = "Truncated QMC trailer";
+            return false;
+        }
         if (trailer == std::array<std::uint8_t, 4>{'S', 'T', 'a', 'g'}) {
             error = "QMC file has no embedded key";
             return false;
@@ -546,8 +625,12 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
         std::uint64_t trailer_size = 4;
         if (qtag) {
             std::array<std::uint8_t, 4> length{};
-            file_.seekg(size - 8);
-            file_.read(reinterpret_cast<char*>(length.data()), length.size());
+            if (source_read_at(static_cast<std::uint64_t>(size) - 8,
+                               length.data(), static_cast<int>(length.size()))
+                != static_cast<int>(length.size())) {
+                error = "Truncated QMC key length";
+                return false;
+            }
             key_size = big_u32(length.data());
             trailer_size = 8;
         } else {
@@ -563,8 +646,13 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
             payload_size_ = static_cast<std::uint64_t>(size)
                 - key_size - trailer_size;
             std::string encoded(key_size, '\0');
-            file_.seekg(static_cast<std::streamoff>(payload_size_));
-            file_.read(encoded.data(), encoded.size());
+            if (source_read_at(payload_size_,
+                               reinterpret_cast<std::uint8_t*>(encoded.data()),
+                               static_cast<int>(encoded.size()))
+                != static_cast<int>(encoded.size())) {
+                error = "Truncated QMC embedded key";
+                return false;
+            }
             const std::size_t terminator = encoded.find(qtag ? ',' : '\0');
             if (terminator != std::string::npos) encoded.resize(terminator);
             if (!decode_qmc_embedded_key(encoded, qmc_key_)) {
@@ -606,8 +694,6 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
             payload_size_ = static_cast<std::uint64_t>(size);
         }
     }
-    file_.clear();
-    file_.seekg(static_cast<std::streamoff>(payload_offset_));
     return true;
 }
 
@@ -617,10 +703,8 @@ int ProprietaryAudioInput::read(std::uint8_t* buffer, const int capacity) noexce
     if (position_ >= payload_size_) return AVERROR_EOF;
     const auto count = static_cast<std::streamsize>(std::min<std::uint64_t>(
         static_cast<std::uint64_t>(capacity), payload_size_ - position_));
-    file_.clear();
-    file_.seekg(static_cast<std::streamoff>(payload_offset_ + position_));
-    file_.read(reinterpret_cast<char*>(buffer), count);
-    const auto actual = file_.gcount();
+    const int actual = source_read_at(payload_offset_ + position_, buffer,
+                                      static_cast<int>(count));
     if (actual <= 0) return AVERROR(EIO);
     for (std::streamsize index = 0; index < actual; ++index) {
         const std::uint64_t offset = position_ + static_cast<std::uint64_t>(index);

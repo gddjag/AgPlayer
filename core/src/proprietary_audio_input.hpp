@@ -1,4 +1,5 @@
 #pragma once
+#include "decoder.hpp"
 
 #include <array>
 #include <cstdint>
@@ -19,6 +20,9 @@ public:
     static bool recognizes_path(const std::string& utf8_path);
     static std::unique_ptr<ProprietaryAudioInput> open(
         const std::string& utf8_path, std::string& error);
+    static std::unique_ptr<ProprietaryAudioInput> open_callbacks(
+        const std::string& name_hint, DecoderReadCallback read,
+        DecoderSeekCallback seek, void* context, std::string& error);
 
     int read(std::uint8_t* buffer, int capacity) noexcept;
     std::int64_t seek(std::int64_t offset, int whence) noexcept;
@@ -33,9 +37,17 @@ private:
     enum class Cipher { Passthrough, QmcStatic, QmcMap, QmcRc4,
                         Kwm, Ncm, Kgm, Vpr };
     explicit ProprietaryAudioInput(std::ifstream file) : file_(std::move(file)) {}
+    ProprietaryAudioInput(DecoderReadCallback read, DecoderSeekCallback seek,
+                          void* context)
+        : source_read_(read), source_seek_(seek), source_context_(context) {}
     bool initialize(const std::string& extension, std::string& error);
+    std::int64_t source_size() noexcept;
+    int source_read_at(std::uint64_t offset, std::uint8_t* buffer, int count) noexcept;
     std::uint64_t qmc_segment_key(std::uint64_t id) const noexcept;
     std::ifstream file_;
+    DecoderReadCallback source_read_ = nullptr;
+    DecoderSeekCallback source_seek_ = nullptr;
+    void* source_context_ = nullptr;
     Cipher cipher_ = Cipher::QmcStatic;
     std::uint64_t payload_offset_ = 0;
     std::uint64_t payload_size_ = 0;

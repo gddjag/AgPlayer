@@ -125,6 +125,11 @@ int main(int argc, char** argv)
         }
         agplayer::Decoder decoder;
         assert(decoder.open(path.u8string()) == AG_OK);
+        if (extension == "ncm") {
+            assert(decoder.metadata().title == "合成测试");
+            assert(decoder.metadata().artist == "测试歌手");
+            assert(!decoder.metadata().cover.empty());
+        }
         agplayer::DecodedAudioBlock decoded;
         assert(decoder.read(decoded) == AG_OK && decoded.frames > 0);
         assert(decoder.seek(100) == AG_OK);
