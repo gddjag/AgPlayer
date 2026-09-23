@@ -387,7 +387,7 @@ Rectangle {
                     objectName: "inspectorTempoGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : page.compactHeight ? 124 : 156
+                    height: collapsed ? 38 : page.compactHeight ? 172 : 198
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -428,19 +428,43 @@ Rectangle {
                         RowLayout {
                             visible: !tempoGroup.collapsed
                             Layout.fillWidth: true
+                            Label { text: qsTr("作用范围"); color: Theme.textSecondary }
+                            ThemedComboBox {
+                                id: tempoScope
+                                objectName: "inspectorTempoScope"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Theme.controlHeight
+                                model: [qsTr("全部音轨"), qsTr("当前音轨")]
+                            }
+                        }
+                        RowLayout {
+                            visible: !tempoGroup.collapsed
+                            Layout.fillWidth: true
                             Label { text: qsTr("BPM"); color: Theme.textSecondary }
                             ThemedTextField {
                                 objectName: "inspectorBpmInput"
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: Theme.controlHeight
-                                text: AudioEditorController.targetBpm > 0
-                                    ? AudioEditorController.targetBpm.toFixed(0) : ""
+                                enabled: AudioEditorController.timePitchSupported
+                                    && AudioEditorController.hasDocument
+                                    && (tempoScope.currentIndex === 0 || AudioEditorController.tracks[AudioEditorController.selectedTrack].hasEvents)
+                                text: {
+                                    AudioEditorController.tracks
+                                    if (AudioEditorController.originalBpm <= 0) return ""
+                                    const percent = tempoScope.currentIndex === 1
+                                        ? AudioEditorController.timelineTrackSpeedPercent(AudioEditorController.selectedTrack)
+                                        : AudioEditorController.timelineAllSpeedPercent()
+                                    return (AudioEditorController.originalBpm * percent / 100).toFixed(0)
+                                }
                                 horizontalAlignment: TextInput.AlignHCenter
                                 validator: IntValidator { bottom: 20; top: 400 }
                                 onEditingFinished: {
                                     const bpm = Number(text)
-                                    if (bpm >= 20 && bpm <= 400)
-                                        AudioEditorController.setTargetBpm(bpm)
+                                    if (bpm >= 20 && bpm <= 400) {
+                                        if (tempoScope.currentIndex === 1)
+                                            AudioEditorController.setTimelineTrackTargetBpm(AudioEditorController.selectedTrack, bpm)
+                                        else AudioEditorController.setTimelineAllTargetBpm(bpm)
+                                    }
                                 }
                             }
                             ThemedButton {
@@ -490,17 +514,31 @@ Rectangle {
                                 }
                                 Layout.fillWidth: true; from: 0.5; to: 2.0
                                 stepSize: 0.01
-                                value: AudioEditorController.speedPercent / 100
+                                value: {
+                                    AudioEditorController.tracks
+                                    return (tempoScope.currentIndex === 1
+                                        ? AudioEditorController.timelineTrackSpeedPercent(AudioEditorController.selectedTrack)
+                                        : AudioEditorController.timelineAllSpeedPercent()) / 100
+                                }
                                 enabled: AudioEditorController.timePitchSupported
                                     && AudioEditorController.hasDocument
+                                    && (tempoScope.currentIndex === 0 || AudioEditorController.tracks[AudioEditorController.selectedTrack].hasEvents)
                                 onPressedChanged: {
-                                    if (!pressed)
-                                        AudioEditorController.setSpeedPercent(value * 100)
+                                    if (!pressed) {
+                                        if (tempoScope.currentIndex === 1)
+                                            AudioEditorController.setTimelineTrackSpeedPercent(AudioEditorController.selectedTrack, value * 100)
+                                        else AudioEditorController.setTimelineAllSpeedPercent(value * 100)
+                                    }
                                 }
                                 onValueChanged: {
                                     if (!pressed && Math.abs(value * 100
-                                            - AudioEditorController.speedPercent) > 0.001)
-                                        AudioEditorController.setSpeedPercent(value * 100)
+                                            - (tempoScope.currentIndex === 1
+                                               ? AudioEditorController.timelineTrackSpeedPercent(AudioEditorController.selectedTrack)
+                                               : AudioEditorController.timelineAllSpeedPercent())) > 0.001) {
+                                        if (tempoScope.currentIndex === 1)
+                                            AudioEditorController.setTimelineTrackSpeedPercent(AudioEditorController.selectedTrack, value * 100)
+                                        else AudioEditorController.setTimelineAllSpeedPercent(value * 100)
+                                    }
                                 }
                             }
                             Label {
@@ -523,7 +561,15 @@ Rectangle {
                                 text: qsTr("重置")
                                 available: AudioEditorController.timePitchSupported
                                     && AudioEditorController.hasDocument
-                                onClicked: AudioEditorController.resetTimePitch()
+                                onClicked: {
+                                    if (tempoScope.currentIndex === 1) {
+                                        AudioEditorController.setTimelineTrackSpeedPercent(AudioEditorController.selectedTrack, 100)
+                                        AudioEditorController.setTimelineTrackPitch(AudioEditorController.selectedTrack, 0)
+                                    } else {
+                                        AudioEditorController.setTimelineAllSpeedPercent(100)
+                                        AudioEditorController.setTimelineAllPitch(0)
+                                    }
+                                }
                             }
                         }
                     }
@@ -534,7 +580,7 @@ Rectangle {
                     objectName: "inspectorPitchGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : page.compactHeight ? 90 : 105
+                    height: collapsed ? 38 : page.compactHeight ? 138 : 150
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -575,6 +621,18 @@ Rectangle {
                         RowLayout {
                             visible: !pitchGroup.collapsed
                             Layout.fillWidth: true
+                            Label { text: qsTr("作用范围"); color: Theme.textSecondary }
+                            ThemedComboBox {
+                                id: pitchScope
+                                objectName: "inspectorPitchScope"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Theme.controlHeight
+                                model: [qsTr("全部音轨"), qsTr("当前音轨")]
+                            }
+                        }
+                        RowLayout {
+                            visible: !pitchGroup.collapsed
+                            Layout.fillWidth: true
                             Label { text: qsTr("半音"); color: Theme.textSecondary }
                             ThemedButton {
                                 objectName: "inspectorPitchMinus"
@@ -594,8 +652,9 @@ Rectangle {
                                     && pitchSlider.value > pitchSlider.from
                                 onClicked: {
                                     pitchSlider.value -= 1
-                                    AudioEditorController.setPitch(
-                                        Math.round(pitchSlider.value), 0)
+                                    if (pitchScope.currentIndex === 1)
+                                        AudioEditorController.setTimelineTrackPitch(AudioEditorController.selectedTrack, Math.round(pitchSlider.value))
+                                        else AudioEditorController.setTimelineAllPitch(Math.round(pitchSlider.value))
                                 }
                             }
                             Label { text: "−12"; color: Theme.textSecondary }
@@ -606,19 +665,31 @@ Rectangle {
                                     event.accepted = true
                                 }
                                 Layout.fillWidth: true; from: -12; to: 12; stepSize: 1
-                                value: Math.trunc(AudioEditorController.pitchCents / 100)
+                                value: {
+                                    AudioEditorController.tracks
+                                    return pitchScope.currentIndex === 1
+                                        ? AudioEditorController.timelineTrackPitchSemitones(AudioEditorController.selectedTrack)
+                                        : AudioEditorController.timelineAllPitchSemitones()
+                                }
                                 enabled: AudioEditorController.timePitchSupported
                                     && AudioEditorController.hasDocument
+                                    && (pitchScope.currentIndex === 0 || AudioEditorController.tracks[AudioEditorController.selectedTrack].hasEvents)
                                 onPressedChanged: {
-                                    if (!pressed)
-                                        AudioEditorController.setPitch(
-                                            Math.round(value), 0)
+                                    if (!pressed) {
+                                        if (pitchScope.currentIndex === 1)
+                                            AudioEditorController.setTimelineTrackPitch(AudioEditorController.selectedTrack, Math.round(value))
+                                        else AudioEditorController.setTimelineAllPitch(Math.round(value))
+                                    }
                                 }
                                 onValueChanged: {
                                     if (!pressed && Math.round(value) * 100
-                                        !== AudioEditorController.pitchCents)
-                                        AudioEditorController.setPitch(
-                                            Math.round(value), 0)
+                                        !== (pitchScope.currentIndex === 1
+                                             ? AudioEditorController.timelineTrackPitchSemitones(AudioEditorController.selectedTrack) * 100
+                                             : AudioEditorController.timelineAllPitchSemitones() * 100)) {
+                                        if (pitchScope.currentIndex === 1)
+                                            AudioEditorController.setTimelineTrackPitch(AudioEditorController.selectedTrack, Math.round(value))
+                                        else AudioEditorController.setTimelineAllPitch(Math.round(value))
+                                    }
                                 }
                             }
                             Label {
@@ -643,8 +714,9 @@ Rectangle {
                                     && pitchSlider.value < pitchSlider.to
                                 onClicked: {
                                     pitchSlider.value += 1
-                                    AudioEditorController.setPitch(
-                                        Math.round(pitchSlider.value), 0)
+                                    if (pitchScope.currentIndex === 1)
+                                        AudioEditorController.setTimelineTrackPitch(AudioEditorController.selectedTrack, Math.round(pitchSlider.value))
+                                    else AudioEditorController.setTimelineAllPitch(Math.round(pitchSlider.value))
                                 }
                             }
                             Label {

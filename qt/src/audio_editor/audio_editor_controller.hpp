@@ -156,6 +156,17 @@ public:
     [[nodiscard]] qint64 recordingStartFrame() const noexcept { return recording_start_frame_; }
     Q_INVOKABLE bool addFiles(const QList<QUrl>& sources, int targetTrack = -1, qint64 frame = -1);
     Q_INVOKABLE bool setTrackMute(int index, bool muted);
+    Q_INVOKABLE bool setTimelineTrackSolo(int index, bool solo);
+    Q_INVOKABLE double timelineTrackSpeedPercent(int index) const;
+    Q_INVOKABLE int timelineTrackPitchSemitones(int index) const;
+    Q_INVOKABLE bool setTimelineTrackSpeedPercent(int index, double percent);
+    Q_INVOKABLE bool setTimelineTrackTargetBpm(int index, double bpm);
+    Q_INVOKABLE bool setTimelineTrackPitch(int index, int semitones);
+    Q_INVOKABLE double timelineAllSpeedPercent() const;
+    Q_INVOKABLE int timelineAllPitchSemitones() const;
+    Q_INVOKABLE bool setTimelineAllSpeedPercent(double percent);
+    Q_INVOKABLE bool setTimelineAllTargetBpm(double bpm);
+    Q_INVOKABLE bool setTimelineAllPitch(int semitones);
     Q_INVOKABLE bool beginTrackGainGesture(int index);
     Q_INVOKABLE bool updateTrackGainGesture(double gain);
     Q_INVOKABLE bool endTrackGainGesture();
@@ -519,6 +530,7 @@ private:
                                                 qint64 positionMs) noexcept;
     [[nodiscard]] bool syncModifiedFromHistory() noexcept;
     void finishTimelineMutation();
+    [[nodiscard]] std::optional<ViewportWaveformJob> prepareViewportWaveformJob();
     void clearMissingEventSelection();
     void syncProjectSourcesAndIssues();
     void cleanupUnreferencedSessionMedia();

@@ -16,6 +16,7 @@ Rectangle {
         ? selectionCandidateTrack : AudioEditorController.selectionTrack
     property int peakRevision: 0
     readonly property var events: AudioEditorController.timelineEventViews
+    readonly property bool anySolo: AudioEditorController.tracks.some(function(track) { return track.solo })
     readonly property double displayedSelectionStart: selectionCandidateStart >= 0
         ? selectionCandidateStart : AudioEditorController.selectionStart
     readonly property double displayedSelectionEnd: selectionCandidateEnd >= 0
@@ -60,8 +61,8 @@ Rectangle {
         for (let i = 0; i < events.length; ++i) {
             const event = events[i]
             if (Number(event.trackIndex) === track
-                    && (Math.abs(x - pixelAtFrame(Number(event.timelineStart))) <= 5
-                        || Math.abs(x - pixelAtFrame(Number(event.timelineEnd))) <= 5)) return event
+                    && (Math.abs(x - pixelAtFrame(Number(event.timelineStart))) <= 8
+                        || Math.abs(x - pixelAtFrame(Number(event.timelineEnd))) <= 8)) return event
         }
         return null
     }
@@ -203,24 +204,27 @@ Rectangle {
             color: selected ? Qt.rgba(trackColor.r, trackColor.g, trackColor.b, 0.10) : "transparent"
             border.width: 0
             clip: true
-            opacity: modelData.mute || AudioEditorController.tracks[Number(modelData.trackIndex)].muted ? 0.4 : 1
+            opacity: modelData.mute || AudioEditorController.tracks[Number(modelData.trackIndex)].muted
+                || canvas.anySolo && !AudioEditorController.tracks[Number(modelData.trackIndex)].solo ? 0.4 : 1
             Rectangle {
                 objectName: "editorTrimLeft_" + clipItem.modelData.id
                 visible: clipItem.selected && clipItem.rawStart >= 0
-                width: 3; height: parent.height - 28; y: 24
-                color: Theme.focus; z: 2
+                width: 12; height: 30; y: (parent.height - height) / 2
+                radius: 3; color: Theme.surfaceElevated; border.color: Theme.focus; z: 2
+                Rectangle { anchors.centerIn: parent; width: 2; height: 16; color: Theme.focus }
             }
             Rectangle {
                 objectName: "editorTrimRight_" + clipItem.modelData.id
                 visible: clipItem.selected && clipItem.rawEnd <= canvas.width
-                x: parent.width - width; width: 3; height: parent.height - 28; y: 24
-                color: Theme.focus; z: 2
+                x: parent.width - width; width: 12; height: 30; y: (parent.height - height) / 2
+                radius: 3; color: Theme.surfaceElevated; border.color: Theme.focus; z: 2
+                Rectangle { anchors.centerIn: parent; width: 2; height: 16; color: Theme.focus }
             }
             AudioEditorWaveformItem {
                 objectName: "editorWaveformGeometry_" + clipItem.modelData.id
                 anchors.fill: parent; anchors.topMargin: 22; anchors.bottomMargin: 3
                 waveformColor: clipItem.trackColor
-                density: 1; lineWidth: 1
+                density: 2; lineWidth: 1
                 channelPeaks: {
                     canvas.peakRevision
                     AudioEditorController.viewport.visibleStartFrame
@@ -286,8 +290,18 @@ Rectangle {
         color: Theme.editorSelection
         border.color: Theme.focus
         z: 3
-        Rectangle { objectName: "editorSelectionStartHandle"; width: 2; height: parent.height; color: Theme.focus }
-        Rectangle { objectName: "editorSelectionEndHandle"; x: parent.width - 2; width: 2; height: parent.height; color: Theme.focus }
+        Rectangle {
+            objectName: "editorSelectionStartHandle"
+            x: 0; y: (parent.height - height) / 2; width: 12; height: 32
+            radius: 3; color: Theme.surfaceElevated; border.color: Theme.focus
+            Rectangle { anchors.centerIn: parent; width: 2; height: 18; color: Theme.focus }
+        }
+        Rectangle {
+            objectName: "editorSelectionEndHandle"
+            x: parent.width - width; y: (parent.height - height) / 2; width: 12; height: 32
+            radius: 3; color: Theme.surfaceElevated; border.color: Theme.focus
+            Rectangle { anchors.centerIn: parent; width: 2; height: 18; color: Theme.focus }
+        }
     }
     Rectangle {
         id: recordingPreview
@@ -399,8 +413,8 @@ Rectangle {
             const selected = canvas.eventById(AudioEditorController.selectedEventId)
             const selectedEdge = selected && Number(selected.trackIndex) === track
                 && mouse.y - track * canvas.rowHeight >= 24
-                && (Math.abs(mouse.x - canvas.pixelAtFrame(Number(selected.timelineStart))) <= 5
-                    || Math.abs(mouse.x - canvas.pixelAtFrame(Number(selected.timelineEnd))) <= 5)
+                && (Math.abs(mouse.x - canvas.pixelAtFrame(Number(selected.timelineStart))) <= 8
+                    || Math.abs(mouse.x - canvas.pixelAtFrame(Number(selected.timelineEnd))) <= 8)
             originalEvent = selectedEdge && mouse.button === Qt.LeftButton ? selected
                 : canvas.eventAt(pressFrame, track) || canvas.edgeEventAt(mouse.x, track)
             mode = ""
@@ -431,10 +445,10 @@ Rectangle {
             if (originalEvent) {
                 const left = canvas.pixelAtFrame(Number(originalEvent.timelineStart))
                 const right = canvas.pixelAtFrame(Number(originalEvent.timelineEnd))
-                if ((Math.abs(mouse.x - left) <= 5 || Math.abs(mouse.x - right) <= 5) && localY >= 24) {
+                if ((Math.abs(mouse.x - left) <= 8 || Math.abs(mouse.x - right) <= 8) && localY >= 24) {
                     if (AudioEditorController.beginEventGesture(String(originalEvent.id), "trim")) {
                         AudioEditorController.selectEvent(String(originalEvent.id))
-                        mode = Math.abs(mouse.x - left) <= 5 ? "trimLeft" : "trimRight"
+                        mode = Math.abs(mouse.x - left) <= 8 ? "trimLeft" : "trimRight"
                         return
                     }
                 }
@@ -451,10 +465,10 @@ Rectangle {
             if (canvas.displayedSelectionEnd > canvas.displayedSelectionStart
                     && (canvas.displayedSelectionTrack < 0 || canvas.displayedSelectionTrack === track)) {
                 canvas.selectionCandidateTrack = canvas.displayedSelectionTrack
-                if (Math.abs(mouse.x - canvas.pixelAtFrame(canvas.displayedSelectionStart)) <= 5) {
+                if (Math.abs(mouse.x - canvas.pixelAtFrame(canvas.displayedSelectionStart)) <= 8) {
                     mode = "selectionStart"; canvas.previewSelection(canvas.displayedSelectionStart, canvas.displayedSelectionEnd); return
                 }
-                if (Math.abs(mouse.x - canvas.pixelAtFrame(canvas.displayedSelectionEnd)) <= 5) {
+                if (Math.abs(mouse.x - canvas.pixelAtFrame(canvas.displayedSelectionEnd)) <= 8) {
                     mode = "selectionEnd"; canvas.previewSelection(canvas.displayedSelectionStart, canvas.displayedSelectionEnd); return
                 }
             }
@@ -485,7 +499,8 @@ Rectangle {
             } else if (mode === "trimLeft" || mode === "trimRight") {
                 const sourceRate = Number(originalEvent.sourceSampleRate || AudioEditorController.sampleRate)
                 const projectRate = Number(originalEvent.projectSampleRate || AudioEditorController.sampleRate)
-                const ratio = sourceRate / Math.max(1, projectRate)
+                const speed = Number(originalEvent.speedRatio || 1)
+                const ratio = sourceRate * speed / Math.max(1, projectRate)
                 let start = Number(originalEvent.sourceStart), end = Number(originalEvent.sourceEnd)
                 let timeline = Number(originalEvent.timelineStart)
                 if (mode === "trimLeft") {

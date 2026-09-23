@@ -3,6 +3,7 @@
 #include "audio_editor/audio_file_analyzer.hpp"
 #include "audio_editor/editor_playback_stream.hpp"
 #include "audio_editor/time_pitch_session.hpp"
+#include "audio_editor/timeline_mixer.hpp"
 #include "decoder.hpp"
 
 #include <QTemporaryDir>
@@ -17,11 +18,20 @@
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <numeric>
 #include <vector>
 
 using namespace agplayer::editor;
 
 namespace {
+
+int engineCreations = 0;
+
+std::unique_ptr<agplayer::ITimePitchEngine> countingTimePitchEngine()
+{
+    ++engineCreations;
+    return agplayer::create_time_pitch_engine();
+}
 
 void writeU16(std::ostream& stream, const std::uint16_t value)
 {
@@ -117,6 +127,81 @@ class DocumentRendererTest final : public QObject {
     Q_OBJECT
 
 private slots:
+    void perTrackProcessorStaysOpenAcrossReadBlocks()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto input = std::filesystem::path(directory.filePath("long.wav").toStdWString());
+        QVERIFY(writeFloatWav(input, std::vector<float>(16'000, 0.2F)));
+        AudioEvent event{1, sourceFor(input, 16'000), 0, 16'000, 0};
+        event.speedRatio = 0.5;
+        TimelineSnapshot snapshot{{event}, 32'000, 1};
+        std::string error;
+        QVERIFY2(TimelineMixer::prepare(snapshot, error), error.c_str());
+        engineCreations = 0;
+        TimelineMixer mixer{std::move(snapshot), nullptr, &countingTimePitchEngine};
+        std::vector<float> block;
+        while (mixer.cursor() < 32'000) {
+            QCOMPARE(mixer.read(block, 32'000), AG_OK);
+            QVERIFY(!block.empty());
+        }
+        QCOMPARE(engineCreations, 1);
+    }
+
+    void soloAndPerTrackTimePitchReachPreviewAndExport()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto input = std::filesystem::path(directory.filePath("scoped.wav").toStdWString());
+        std::vector<float> sine(8'000);
+        for (std::size_t frame = 0; frame < sine.size(); ++frame)
+            sine[frame] = 0.2F * std::sin(2.0 * 3.141592653589793 * 220.0 * frame / 8'000.0);
+        QVERIFY(writeFloatWav(input, sine));
+        auto source = sourceFor(input, 8'000);
+        AudioEvent solo{1, source, 0, 8'000, 0};
+        solo.speedRatio = 2.0;
+        solo.pitchSemitone = 3;
+        AudioEvent other{2, source, 0, 8'000, 0};
+        other.trackIndex = 1;
+        TimelineSnapshot snapshot{{solo, other}, 8'000, 1};
+        snapshot.sampleRate = 8'000;
+        snapshot.channels = 1;
+        snapshot.tracks[0].solo = true;
+        const auto preview = readRealtime(snapshot, {});
+        QCOMPARE(preview.size(), std::size_t{8'000});
+        const float tailEnergy = std::accumulate(preview.begin() + 6'000,
+            preview.end(), 0.0F, [](float sum, float sample) { return sum + std::abs(sample); });
+        QVERIFY(tailEnergy < 0.001F);
+        const float leadEnergy = std::accumulate(preview.begin() + 1'000,
+            preview.begin() + 3'000, 0.0F,
+            [](float sum, float sample) { return sum + std::abs(sample); });
+        QVERIFY(leadEnergy > 10.0F);
+        snapshot.events[0].pitchSemitone = 0;
+        const auto unpitched = readRealtime(snapshot, {});
+        QCOMPARE(unpitched.size(), preview.size());
+        const auto crossings = [](const std::vector<float>& samples) {
+            int count = 0;
+            for (std::size_t i = 1'001; i < 3'500; ++i)
+                if (samples[i - 1] <= 0 && samples[i] > 0) ++count;
+            return count;
+        };
+        QVERIFY(crossings(preview) > crossings(unpitched) * 1.1);
+        snapshot.events[0].pitchSemitone = 3;
+        const auto output = std::filesystem::path(directory.filePath("scoped-out.wav").toStdWString());
+        const auto result = DocumentRenderer{}.renderFloatWav(snapshot, {}, output);
+        QVERIFY2(result.success, result.message.c_str());
+        QCOMPARE(readFloatWav(output), preview);
+
+        snapshot.events[0].speedRatio = 0.5;
+        snapshot.totalFrames = 16'000;
+        const auto slowed = readRealtime(snapshot, {});
+        QCOMPARE(slowed.size(), std::size_t{16'000});
+        const float slowTailEnergy = std::accumulate(slowed.begin() + 13'000,
+            slowed.begin() + 15'000, 0.0F,
+            [](float sum, float sample) { return sum + std::abs(sample); });
+        QVERIFY(slowTailEnergy > 10.0F);
+    }
+
     void sixTracksMixRealPcmBeforeSessionEffects()
     {
         QTemporaryDir directory;

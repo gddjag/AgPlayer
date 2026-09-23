@@ -44,7 +44,10 @@ public:
     [[nodiscard]] static AudioDocument fromSnapshot(TimelineSnapshot snapshot);
     bool setProjectFormat(std::uint32_t sampleRate, std::uint32_t channels = 2);
     bool setTrackMuted(int trackIndex, bool muted);
+    bool setTrackSolo(int trackIndex, bool solo);
     bool setTrackGain(int trackIndex, float gain);
+    bool setTrackSpeedRatio(int trackIndex, double ratio);
+    bool setTrackPitchSemitone(int trackIndex, int semitones);
 
     bool setSelection(Selection selection) noexcept;
     bool clearSelection() noexcept;

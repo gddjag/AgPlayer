@@ -259,8 +259,27 @@ Item {
                     background: Rectangle { radius: 5; color: muteButton.checked ? Theme.accent : Theme.surfacePressed; border.color: muteButton.activeFocus ? Theme.focus : "transparent" }
                     contentItem: Label { text: "M"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 18; color: muteButton.checked ? "white" : Theme.textPrimary }
                 }
+                Button {
+                    id: soloButton
+                    objectName: "editorTrackSolo" + trackHeader.index
+                    x: 100; y: muteButton.y; width: 30; height: muteButton.height
+                    text: "S"; checkable: true
+                    checked: trackHeader.track ? trackHeader.track.solo : false
+                    enabled: !AudioEditorController.busy && !workspace.recordingActive
+                    Accessible.name: qsTr("音轨 %1 独奏").arg(trackHeader.index + 1)
+                    onClicked: AudioEditorController.setTimelineTrackSolo(trackHeader.index, checked)
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("独奏 / 取消独奏所选音轨 (S)")
+                    Shortcut {
+                        sequence: "S"; context: Qt.WindowShortcut
+                        enabled: workspace.shortcutsEnabled && soloButton.enabled && AudioEditorController.selectedTrack === trackHeader.index
+                        onActivated: AudioEditorController.setTimelineTrackSolo(trackHeader.index, !soloButton.checked)
+                    }
+                    background: Rectangle { radius: 5; color: soloButton.checked ? Theme.accent : Theme.surfacePressed; border.color: soloButton.activeFocus ? Theme.focus : "transparent" }
+                    contentItem: Label { text: "S"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 18; color: soloButton.checked ? "white" : Theme.textPrimary }
+                }
                 Label {
-                    x: 108; y: parent.height < 82 ? 28 : 36; width: parent.width - 142
+                    x: 134; y: parent.height < 82 ? 28 : 36; width: parent.width - 140
                     text: Math.round((trackHeader.track ? trackHeader.track.gain : 1) * 100) + "%"
                     color: trackHeader.track ? trackHeader.track.color : Theme.textPrimary
                     horizontalAlignment: Text.AlignRight; font.pixelSize: 15

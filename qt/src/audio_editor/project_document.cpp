@@ -582,10 +582,6 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
     QJsonArray events;
     for (const AudioEvent& event : timeline.events) {
         if (!isValid(event)) return {false, QStringLiteral("invalid audio event")};
-        if (event.speedRatio != 1.0 || event.pitchSemitone != 0) {
-            return {false, QStringLiteral(
-                "per-event speed and pitch are not supported")};
-        }
         QJsonArray envelope;
         for (const EnvelopePoint& point : event.envelope) {
             envelope.append(QJsonObject{{QStringLiteral("offset"), integerJson(point.offset)},
@@ -623,7 +619,8 @@ ProjectSaveResult ProjectDocument::save(const QString& path, const ProjectSaveRe
     for (std::size_t index = 0; index < timeline.tracks.size(); ++index) {
         const auto& track = timeline.tracks[index];
         tracks.append(QJsonObject{{QStringLiteral("index"), static_cast<int>(index)},
-            {QStringLiteral("muted"), track.muted}, {QStringLiteral("gain"), track.gain}});
+            {QStringLiteral("muted"), track.muted}, {QStringLiteral("solo"), track.solo},
+            {QStringLiteral("gain"), track.gain}});
     }
     const QJsonObject root{{QStringLiteral("schemaVersion"), schemaVersion()},
                            {QStringLiteral("tracks"), tracks},
@@ -804,7 +801,9 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
             const auto item = array.at(static_cast<qsizetype>(index)).toObject(); qint64 storedIndex{};
             auto& track = state.tracks[index];
             if (!integer(item.value(QStringLiteral("index")), storedIndex) || storedIndex != static_cast<qint64>(index)
-                || !boolValue(item, "muted", track.muted) || !finiteFloat(item.value(QStringLiteral("gain")), track.gain)
+                || !boolValue(item, "muted", track.muted)
+                || (item.contains(QStringLiteral("solo")) && !boolValue(item, "solo", track.solo))
+                || !finiteFloat(item.value(QStringLiteral("gain")), track.gain)
                 || track.gain < 0 || track.gain > 2) { result.message = QStringLiteral("invalid project track"); return result; }
         }
     }
@@ -852,11 +851,6 @@ ProjectLoadResult ProjectDocument::load(const QString& path,
             event.envelope.push_back(envelope);
         }
         if (!isValid(event)) { result.message = QStringLiteral("invalid event range"); return result; }
-        if (event.speedRatio != 1.0 || event.pitchSemitone != 0) {
-            result.message = QStringLiteral(
-                "per-event speed and pitch are not supported");
-            return result;
-        }
         events.push_back(std::move(event));
     }
     if (version < 3 && !events.empty()) {

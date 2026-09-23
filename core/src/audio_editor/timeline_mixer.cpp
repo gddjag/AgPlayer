@@ -45,7 +45,6 @@ bool TimelineMixer::prepare(TimelineSnapshot& snapshot, std::string& error)
         if (!isValid(event) || !event.source->sample_rate
             || event.source->sample_rate > 768'000
             || !event.source->channels || event.source->channels > 64
-            || event.speedRatio != 1.0 || event.pitchSemitone != 0
             || audibleFrames(event) <= 0
             || event.timelineStart > snapshot.totalFrames
             || audibleFrames(event) > snapshot.totalFrames - event.timelineStart
@@ -69,9 +68,12 @@ bool TimelineMixer::prepare(TimelineSnapshot& snapshot, std::string& error)
     return true;
 }
 
-TimelineMixer::TimelineMixer(TimelineSnapshot snapshot, const std::atomic_bool* cancelled)
-    : snapshot_(std::move(snapshot)), cancelled_(cancelled)
+TimelineMixer::TimelineMixer(TimelineSnapshot snapshot, const std::atomic_bool* cancelled,
+                             agplayer::TimePitchEngineFactory engineFactory)
+    : snapshot_(std::move(snapshot)), cancelled_(cancelled), engine_factory_(engineFactory)
 {
+    any_solo_ = std::any_of(snapshot_.tracks.begin(), snapshot_.tracks.end(),
+        [](const TrackState& track) { return track.solo; });
     for (std::size_t i = 0; i < snapshot_.events.size(); ++i) {
         readers_[static_cast<std::size_t>(snapshot_.events[i].trackIndex)].events.push_back(i);
     }
@@ -85,8 +87,10 @@ void TimelineMixer::seek(const SampleFrame frame)
     cursor_ = std::clamp<SampleFrame>(frame, 0, snapshot_.totalFrames);
     for (auto& reader : readers_) {
         reader.decoder.reset();
+        reader.processor.reset();
         reader.block.frames = 0;
         reader.offset = 0;
+        reader.flushed = false;
         reader.index = static_cast<std::size_t>(std::lower_bound(
             reader.events.begin(), reader.events.end(), cursor_,
             [this](std::size_t index, SampleFrame value) {
@@ -113,12 +117,65 @@ bool TimelineMixer::open(TrackReader& reader, const AudioEvent& event,
     // absolute source boundaries also keeps split clips on the same PCM grid.
     const SampleFrame sourceStartInProject = sourceToProjectFrames(
         event.sourceStart, event.source->sample_rate, snapshot_.sampleRate);
-    if (localOffset > std::numeric_limits<SampleFrame>::max() - sourceStartInProject
-        || decoder->seekFrame(sourceStartInProject + localOffset) != AG_OK) return false;
+    const SampleFrame scaledOffset = static_cast<SampleFrame>(std::llround(
+        static_cast<long double>(localOffset) * event.speedRatio));
+    if (scaledOffset > std::numeric_limits<SampleFrame>::max() - sourceStartInProject
+        || decoder->seekFrame(sourceStartInProject + scaledOffset) != AG_OK) return false;
+    const SampleFrame sourceEndInProject = sourceToProjectFrames(
+        event.sourceEnd, event.source->sample_rate, snapshot_.sampleRate);
+    reader.source_frames_left = std::max<SampleFrame>(0,
+        sourceEndInProject - sourceStartInProject - scaledOffset);
+    if (event.speedRatio != 1.0 || event.pitchSemitone != 0) {
+        auto processor = engine_factory_ ? engine_factory_() : nullptr;
+        if (!processor || !processor->configure(static_cast<int>(snapshot_.sampleRate),
+                static_cast<int>(snapshot_.channels))
+            || !processor->setTempoRatio(event.speedRatio)
+            || !processor->setPitchCents(event.pitchSemitone * 100)
+            || !processor->setFormantPreservation(false)) return false;
+        reader.processor = std::move(processor);
+    }
     reader.block.frames = 0;
     reader.offset = 0;
+    reader.flushed = false;
     reader.decoder = std::move(decoder);
     return true;
+}
+
+ag_result TimelineMixer::nextProcessedBlock(TrackReader& reader)
+{
+    const auto channels = static_cast<std::size_t>(snapshot_.channels);
+    reader.processed.resize(kBlockFrames * channels);
+    reader.block.frames = 0;
+    for (;;) {
+        if (cancelled()) return AG_CANCELLED;
+        const auto count = reader.processor->receive(reader.processed.data(), kBlockFrames);
+        if (reader.processor->failed()) return AG_INTERNAL_ERROR;
+        if (count) {
+            reader.block.samples.assign(reader.processed.begin(),
+                reader.processed.begin() + static_cast<std::ptrdiff_t>(count * channels));
+            reader.block.frames = count;
+            reader.offset = 0;
+            return AG_OK;
+        }
+        if (reader.flushed) return AG_OK;
+        if (reader.source_frames_left <= 0) {
+            reader.processor->flush();
+            if (reader.processor->failed()) return AG_INTERNAL_ERROR;
+            reader.flushed = true;
+            continue;
+        }
+        agplayer::DecodedAudioBlock decoded;
+        if (reader.decoder->read(decoded) != AG_OK) return AG_DECODE_ERROR;
+        if (decoded.frames == 0) {
+            if (decoded.end_of_stream) return AG_DECODE_ERROR;
+            continue;
+        }
+        const auto supplied = static_cast<std::size_t>(std::min<SampleFrame>(
+            reader.source_frames_left, static_cast<SampleFrame>(decoded.frames)));
+        reader.processor->put(decoded.samples.data(), supplied);
+        if (reader.processor->failed()) return AG_INTERNAL_ERROR;
+        reader.source_frames_left -= static_cast<SampleFrame>(supplied);
+    }
 }
 
 ag_result TimelineMixer::mix(TrackReader& reader, std::vector<float>& samples,
@@ -133,24 +190,28 @@ ag_result TimelineMixer::mix(TrackReader& reader, std::vector<float>& samples,
         if (eventEnd <= cursor_) {
             ++reader.index;
             reader.decoder.reset();
+            reader.processor.reset();
             continue;
         }
         if (event.timelineStart >= blockEnd) break;
         SampleFrame position = std::max(cursor_, event.timelineStart);
         const SampleFrame end = std::min(blockEnd, eventEnd);
-        if (!event.mute && !track.muted && track.gain != 0
+        if (!event.mute && !track.muted && (!any_solo_ || track.solo) && track.gain != 0
             && snapshot_.legacyMasterGain != 0) {
-            if (!open(reader, event, position - event.timelineStart)) {
+            if (!reader.decoder && !open(reader, event, position - event.timelineStart)) {
                 return cancelled() ? AG_CANCELLED : AG_DECODE_ERROR;
             }
             while (position < end) {
                 if (cancelled()) return AG_CANCELLED;
                 if (reader.offset >= reader.block.frames) {
-                    if (reader.decoder->read(reader.block) != AG_OK) {
-                        return cancelled() ? AG_CANCELLED : AG_DECODE_ERROR;
+                    const auto status = reader.processor
+                        ? nextProcessedBlock(reader) : reader.decoder->read(reader.block);
+                    if (status != AG_OK) {
+                        return cancelled() ? AG_CANCELLED : status;
                     }
                     reader.offset = 0;
                     if (!reader.block.frames) {
+                        if (reader.processor && reader.flushed) break;
                         if (reader.block.end_of_stream) return AG_DECODE_ERROR;
                         continue;
                     }
@@ -175,6 +236,7 @@ ag_result TimelineMixer::mix(TrackReader& reader, std::vector<float>& samples,
         if (eventEnd > blockEnd) break;
         ++reader.index;
         reader.decoder.reset();
+        reader.processor.reset();
     }
     return AG_OK;
 }

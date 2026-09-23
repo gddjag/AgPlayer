@@ -16,6 +16,61 @@ class AudioDocumentTest final : public QObject {
     }
 
 private slots:
+    void soloAndTrackSpeedPitchAreUndoableAndKeepOtherTracksInPlace()
+    {
+        auto value = document(1'000);
+        QVERIFY(value.insertSource({"later.wav", 48'000, 2, 1'000}, 1'500, 0));
+        QVERIFY(value.insertSource({"other.wav", 48'000, 2, 1'000}, 500, 1));
+        QVERIFY(value.setTrackSolo(0, true));
+        QVERIFY(value.timelineSnapshot().tracks[0].solo);
+        QVERIFY(value.setTrackSpeedRatio(0, 2.0));
+        auto events = value.timelineSnapshot().events;
+        const auto find = [&events](EventId id) -> const AudioEvent& {
+            return *std::find_if(events.begin(), events.end(),
+                [id](const AudioEvent& event) { return event.id == id; });
+        };
+        QCOMPARE(audibleFrames(find(1)), SampleFrame{500});
+        QCOMPARE(find(2).timelineStart, SampleFrame{1'000});
+        QCOMPARE(audibleFrames(find(2)), SampleFrame{500});
+        QCOMPARE(find(3).timelineStart, SampleFrame{500});
+        QCOMPARE(find(3).speedRatio, 1.0);
+        QVERIFY(value.setTrackPitchSemitone(0, 3));
+        events = value.timelineSnapshot().events;
+        QCOMPARE(find(1).pitchSemitone, 3);
+        QCOMPARE(find(2).pitchSemitone, 3);
+        QCOMPARE(find(3).pitchSemitone, 0);
+        QVERIFY(value.undo());
+        events = value.timelineSnapshot().events;
+        QCOMPARE(find(1).pitchSemitone, 0);
+        QVERIFY(value.undo());
+        events = value.timelineSnapshot().events;
+        QCOMPARE(find(1).speedRatio, 1.0);
+        QCOMPARE(find(2).timelineStart, SampleFrame{1'500});
+        QVERIFY(value.undo());
+        QVERIFY(!value.timelineSnapshot().tracks[0].solo);
+    }
+
+    void allTrackSpeedAndPitchUnifyEarlierTrackEdits()
+    {
+        auto value = document(1'000);
+        QVERIFY(value.insertSource({"other.wav", 48'000, 2, 1'000}, 0, 1));
+        QVERIFY(value.setTrackSpeedRatio(0, 1.25));
+        QVERIFY(value.setTrackPitchSemitone(0, 3));
+        QVERIFY(value.setTrackSpeedRatio(-1, 1.5));
+        QVERIFY(value.setTrackPitchSemitone(-1, -2));
+        const auto events = value.timelineSnapshot().events;
+        QCOMPARE(events.size(), std::size_t{2});
+        for (const auto& event : events) {
+            QCOMPARE(event.speedRatio, 1.5);
+            QCOMPARE(event.pitchSemitone, -2);
+            QCOMPARE(audibleFrames(event), SampleFrame{667});
+        }
+        QVERIFY(value.undo());
+        const auto beforePitch = value.timelineSnapshot().events;
+        for (const auto& event : beforePitch)
+            QCOMPARE(event.pitchSemitone, event.trackIndex == 0 ? 3 : 0);
+    }
+
     void croppingTrackGapCanClearRangeWithoutDereferencingIt()
     {
         auto value = document(100);

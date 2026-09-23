@@ -62,6 +62,46 @@ TestCase {
         verify(AudioEditorController.addFiles(sources))
         tryVerify(function() { return !AudioEditorController.busy && AudioEditorController.timelineEventViews.length === count }, 15000)
     }
+    function test_soloAndScopedTempoPitchControls() {
+        importPcm(2)
+        const host = createEditorHost()
+        const root = host.contentItem
+        const solo = visualChild(root, "editorTrackSolo0")
+        const mute = visualChild(root, "editorTrackMute0")
+        const tempoScope = visualChild(root, "inspectorTempoScope")
+        const pitchScope = visualChild(root, "inspectorPitchScope")
+        const speed = visualChild(root, "inspectorSpeedSlider")
+        const pitchPlus = visualChild(root, "inspectorPitchPlus")
+        verify(solo && mute && tempoScope && pitchScope && speed && pitchPlus,
+               "missing " + [!!solo, !!mute, !!tempoScope, !!pitchScope, !!speed, !!pitchPlus].join(","))
+        verify(solo.x > mute.x && solo.x + solo.width <= mute.parent.width)
+        mouseClick(solo)
+        compare(AudioEditorController.tracks[0].solo, true)
+        compare(AudioEditorController.tracks[1].solo, false)
+        tempoScope.currentIndex = 1
+        pitchScope.currentIndex = 1
+        AudioEditorController.selectedTrack = 0
+        verify(AudioEditorController.setTimelineTrackSpeedPercent(0, 125))
+        tryCompare(speed, "value", 1.25)
+        mouseClick(pitchPlus)
+        compare(AudioEditorController.timelineTrackPitchSemitones(0), 1)
+        compare(AudioEditorController.timelineTrackPitchSemitones(1), 0)
+        compare(AudioEditorController.timelineTrackSpeedPercent(0), 125)
+        for (const event of AudioEditorController.timelineEventViews)
+            compare(event.speedRatio, event.trackIndex === 0 ? 1.25 : 1)
+        tempoScope.currentIndex = 0
+        pitchScope.currentIndex = 0
+        verify(AudioEditorController.setTimelineAllSpeedPercent(150))
+        verify(AudioEditorController.setTimelineAllPitch(2))
+        for (const event of AudioEditorController.timelineEventViews) {
+            compare(event.speedRatio, 1.5)
+            compare(event.pitchSemitone, 2)
+        }
+        AudioEditorController.selectEvent(String(AudioEditorController.timelineEventViews[0].id))
+        waitForRendering(root)
+        if (typeof visualFixtureOutput !== "undefined" && visualFixtureOutput.length)
+            grabImage(root).save(visualFixtureOutput + "-scoped-selected.png")
+    }
     function test_realPcmLayout_data() {
         return [{tag: "reference", w: 1672, h: 941, mode: 0}, {tag: "small", w: 1000, h: 700, mode: 0},
             {tag: "minimum", w: 760, h: 420, mode: 0}, {tag: "light", w: 1672, h: 941, mode: 1}]

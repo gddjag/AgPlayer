@@ -22,7 +22,7 @@ public:
     Impl(TimelineSnapshot snapshot, EditorPlaybackParameters settings,
          agplayer::TimePitchEngineFactory factory, const std::optional<Selection>& range,
          const std::atomic_bool* cancelled)
-        : mixer(std::move(snapshot), cancelled), parameters(settings),
+        : mixer(std::move(snapshot), cancelled, factory), parameters(settings),
           range_start(range ? range->start : 0),
           range_end(range ? range->end : mixer.snapshot().totalFrames),
           engine_factory(factory), cancelled_(cancelled)
