@@ -279,16 +279,23 @@ BackendResult proveProvider(const NativeStartRequest& request,
     if (!opened.ok) return opened;
     artifact.bytes.clear();
     artifact.bytes.squeeze();
-    QVector<qint64> inputShape = profile.inputs.front().shape;
-    if (!inputShape.isEmpty() && inputShape.front() < 0) inputShape.front() = 1;
-    QVector<qint64> outputShape = profile.outputs.front().shape;
-    if (!outputShape.isEmpty() && outputShape.front() < 0) outputShape.front() = 1;
-    qsizetype count = 1;
-    for (qint64 dimension : inputShape) count *= dimension;
-    QVector<float> zeros(count);
-    const OrtOperationResult run = session->run(zeros, inputShape, outputShape,
-                                                 cancelled);
-    if (!run.ok) return fail(run.code, run.message);
+    // A separation task keeps this CPU session and validates execution with
+    // its first real chunk. Avoid running the large model once on silence first.
+    // Device checks and GPU selection still perform the full dry run.
+    const bool validateWithRealChunk = provider == ExecutionProvider::Cpu
+        && retained != nullptr && probePaths.size() == 1;
+    if (!validateWithRealChunk) {
+        QVector<qint64> inputShape = profile.inputs.front().shape;
+        if (!inputShape.isEmpty() && inputShape.front() < 0) inputShape.front() = 1;
+        QVector<qint64> outputShape = profile.outputs.front().shape;
+        if (!outputShape.isEmpty() && outputShape.front() < 0) outputShape.front() = 1;
+        qsizetype count = 1;
+        for (qint64 dimension : inputShape) count *= dimension;
+        QVector<float> zeros(count);
+        const OrtOperationResult run = session->run(zeros, inputShape, outputShape,
+                                                     cancelled);
+        if (!run.ok) return fail(run.code, run.message);
+    }
     // macOS checks every Demucs graph. Retaining one while opening the others
     // would raise peak memory; reuse only a single-model probe there.
     if (retained != nullptr && probePaths.size() == 1) {

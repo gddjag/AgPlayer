@@ -3,6 +3,7 @@
 #include "ort_session.hpp"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QHash>
 #include <QJsonArray>
@@ -309,6 +310,9 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
             requestedStems.push_back(stem);
             stemLabels.push_back(stem);
         }
+        QElapsedTimer separationTimer;
+        separationTimer.start();
+        QString lastPhase;
         const BackendResult result = backend.separate(
             {{QStringLiteral("runtimePath"), runtime},
              {QStringLiteral("inputPath"), input},
@@ -322,7 +326,14 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
              {QStringLiteral("stems"), requestedStems},
              {QStringLiteral("stemLabels"), stemLabels},
              {QStringLiteral("device"), requestedDevice}},
-            cancelled, [](double, const QString&) {});
+            cancelled, [&](double, const QString& phase) {
+                if (phase == lastPhase) return;
+                lastPhase = phase;
+                qInfo().noquote() << entry.first << phase
+                                  << separationTimer.elapsed() << "ms";
+            });
+        qInfo().noquote() << entry.first << "total"
+                          << separationTimer.elapsed() << "ms";
         QVERIFY2(result.ok,
                  qPrintable(entry.first + QStringLiteral(": ") + result.code
                             + QStringLiteral(": ") + result.message));
