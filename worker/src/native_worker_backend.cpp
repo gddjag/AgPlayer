@@ -111,9 +111,11 @@ QVector<qint64> integerArray(const QJsonValue& value, bool* valid)
 QString utf8Error(ag_result result)
 {
     const char* detail = ag_last_error();
-    return detail != nullptr && *detail != '\0'
-        ? QString::fromUtf8(detail)
-        : QStringLiteral("AgPlayer core error %1").arg(static_cast<int>(result));
+    if (detail != nullptr && *detail != '\0') return QString::fromUtf8(detail);
+    if (result == AG_DECODE_ERROR) {
+        return QStringLiteral("输入音频解码失败，请检查文件是否损坏");
+    }
+    return QStringLiteral("AgPlayer core error %1").arg(static_cast<int>(result));
 }
 
 qint64 countDecodedFrames(const QString& inputPath,

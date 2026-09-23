@@ -39,6 +39,12 @@ add_library(agplayer_core STATIC
     src/formant_preserver.cpp
     src/formant_preserver.hpp
     src/decoder.cpp
+    src/proprietary_audio_input.cpp
+    src/proprietary_audio_input.hpp
+    src/proprietary_format_io.cpp
+    src/proprietary_format_io.hpp
+    src/qmc_key_codec.cpp
+    src/qmc_key_codec.hpp
     src/video_decoder.cpp
     src/video_decoder.hpp
     src/graphic_equalizer.cpp

@@ -4,6 +4,7 @@
 #include "bpm_analyzer.hpp"
 #include "metadata_probe.hpp"
 #include "metadata_text.hpp"
+#include "proprietary_audio_input.hpp"
 
 #include <QByteArray>
 #include <QCryptographicHash>
@@ -161,6 +162,14 @@ ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm)
     ag_metadata* metadata = nullptr;
     const ag_result result = ag_metadata_open(utf8Path.constData(), &metadata);
     if (result != AG_OK || metadata == nullptr) {
+        if (agplayer::ProprietaryAudioInput::recognizes_path(
+                utf8Path.toStdString())) {
+            std::string detail;
+            agplayer::ProprietaryAudioInput::open(utf8Path.toStdString(), detail);
+            if (!detail.empty()) {
+                return {result, {}, QString::fromStdString(detail)};
+            }
+        }
         return {result, {}, errorFor(result)};
     }
 

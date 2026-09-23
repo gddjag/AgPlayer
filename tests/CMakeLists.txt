@@ -622,6 +622,17 @@ add_custom_target(gapless_fixtures
 add_executable(decoder_test
     core/decoder_test.cpp
 )
+add_executable(proprietary_audio_input_test core/proprietary_audio_input_test.cpp)
+target_include_directories(proprietary_audio_input_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src")
+target_link_libraries(proprietary_audio_input_test PRIVATE agplayer_core)
+agplayer_enable_warnings(proprietary_audio_input_test)
+add_test(NAME proprietary_audio_input_test COMMAND proprietary_audio_input_test
+    "${CMAKE_SOURCE_DIR}/tests/fixtures/proprietary")
+set_tests_properties(proprietary_audio_input_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
 add_dependencies(decoder_test decoder_fixture video_fixtures)
 target_include_directories(decoder_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"

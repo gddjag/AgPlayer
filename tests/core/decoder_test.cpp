@@ -139,11 +139,52 @@ void check_id3_prefixed_wave(const std::filesystem::path& source)
     std::filesystem::remove(directory);
 }
 
+// Read-only regression check for a user-supplied file with recoverable MP3 damage.
+int check_external_audio(const std::filesystem::path& file)
+{
+    const std::string path = file.u8string();
+    agplayer::Decoder decoder;
+    if (decoder.open(path, 44'100, 2) != AG_OK) return 1;
+    agplayer::DecodedAudioBlock block;
+    std::uint64_t frames = 0;
+    ag_result result = AG_OK;
+    do {
+        result = decoder.read(block);
+        if (result != AG_OK) break;
+        frames += block.frames;
+    } while (!block.end_of_stream);
+    if (result != AG_OK || frames == 0) return 1;
+
+    decoder.close();
+    if (decoder.open(path, 44'100, 2) != AG_OK) return 1;
+    agplayer::DecodedAnalysisBlock analysis;
+    std::uint64_t analysis_frames = 0;
+    do {
+        result = decoder.readAnalysis(analysis);
+        if (result != AG_OK) break;
+        analysis_frames += analysis.frames;
+    } while (!analysis.end_of_stream);
+    if (result != AG_OK || analysis_frames != frames) return 1;
+
+    ag_waveform* waveform = nullptr;
+    result = ag_waveform_analyze(path.c_str(), 512, nullptr, nullptr,
+                                 nullptr, &waveform);
+    const bool waveform_ok = result == AG_OK && ag_waveform_count(waveform) > 0;
+    ag_waveform_destroy(waveform);
+    std::cout << "decoded_frames=" << frames
+              << " analysis_frames=" << analysis_frames
+              << " waveform=" << waveform_ok << std::endl;
+    return waveform_ok ? 0 : 1;
+}
+
 int main(const int argc, char** argv)
 {
     if (argc == 3 && std::strcmp(argv[1], "--id3-wave") == 0) {
         check_id3_prefixed_wave(std::filesystem::path(argv[2]));
         return 0;
+    }
+    if (argc == 3 && std::strcmp(argv[1], "--external-audio") == 0) {
+        return check_external_audio(std::filesystem::path(argv[2]));
     }
     if (argc == 3 && std::strcmp(argv[1], "--external-flac") == 0) {
         return check_external_flac(std::filesystem::path(argv[2]));

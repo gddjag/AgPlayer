@@ -1,4 +1,5 @@
 #include "transcode_probe.hpp"
+#include "proprietary_format_io.hpp"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -68,16 +69,21 @@ ag_result probe_transcode_input(const std::string_view utf8_path,
 
     const std::string path(utf8_path);
     AVFormatContext* format = nullptr;
-    int result = avformat_open_input(&format, path.c_str(), nullptr, nullptr);
+    ProprietaryFormatIo proprietary_io;
+    int result = open_audio_format_input(path, &format, proprietary_io, error);
     if (result < 0 || format == nullptr) {
-        error = "Failed to open input for probing";
+        close_audio_format_input(&format, proprietary_io);
+        if (error.empty()) error = "Failed to open input for probing";
         return AG_IO_ERROR;
     }
     result = avformat_find_stream_info(format, nullptr);
     if (result < 0) {
-        avformat_close_input(&format);
+        close_audio_format_input(&format, proprietary_io);
         error = "Failed to read input stream information";
         return AG_DECODE_ERROR;
+    }
+    if (proprietary_io.input) {
+        proprietary_io.input->apply_format_tags(format);
     }
 
     if (format->iformat != nullptr && format->iformat->name != nullptr) {
@@ -133,7 +139,7 @@ ag_result probe_transcode_input(const std::string_view utf8_path,
         }
         probe.audio_streams.push_back(std::move(audio));
     }
-    avformat_close_input(&format);
+    close_audio_format_input(&format, proprietary_io);
 
     if (probe.audio_streams.empty()) {
         error = "Input contains no audio stream";

@@ -1,5 +1,7 @@
 #include "decoder.hpp"
 #include "flac_stream_boundary.hpp"
+#include "proprietary_audio_input.hpp"
+#include "proprietary_format_io.hpp"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -339,23 +341,38 @@ ag_result probe_media_metadata(const std::string& utf8_path,
 {
     metadata = {};
     AVFormatContext* context = nullptr;
+    ProprietaryFormatIo proprietary_io;
     try {
         if (test_hooks != nullptr && test_hooks->throw_allocation_failure) {
             throw std::bad_alloc{};
         }
         if (utf8_path.empty()) return AG_INVALID_ARGUMENT;
-        AVDictionary* input_options = nullptr;
-        set_wave_prefix_option(utf8_path, &input_options);
-        const int open_result = avformat_open_input(&context, utf8_path.c_str(),
-                                                    nullptr, &input_options);
-        av_dict_free(&input_options);
-        if (open_result < 0) return map_open_error(open_result);
-        const auto finish = [&context](const ag_result result) noexcept {
-            avformat_close_input(&context);
+        std::string proprietary_error;
+        int open_result = 0;
+        if (ProprietaryAudioInput::recognizes_path(utf8_path)) {
+            open_result = open_audio_format_input(
+                utf8_path, &context, proprietary_io, proprietary_error);
+        } else {
+            AVDictionary* input_options = nullptr;
+            set_wave_prefix_option(utf8_path, &input_options);
+            open_result = avformat_open_input(&context, utf8_path.c_str(),
+                                              nullptr, &input_options);
+            av_dict_free(&input_options);
+        }
+        if (open_result < 0) {
+            close_audio_format_input(&context, proprietary_io);
+            return map_open_error(open_result);
+        }
+        const auto finish = [&context, &proprietary_io](
+                                const ag_result result) noexcept {
+            close_audio_format_input(&context, proprietary_io);
             return result;
         };
         if (avformat_find_stream_info(context, nullptr) < 0) {
             return finish(AG_UNSUPPORTED_FORMAT);
+        }
+        if (proprietary_io.input) {
+            proprietary_io.input->apply_format_tags(context);
         }
 
         int audio_index = -1;
@@ -478,9 +495,12 @@ ag_result probe_media_metadata(const std::string& utf8_path,
             metadata.cover_mime_type = image_mime_type(stream->codecpar->codec_id);
             break;
         }
+        if (proprietary_io.input) {
+            proprietary_io.input->apply_container_metadata(metadata);
+        }
         return finish(AG_OK);
     } catch (...) {
-        avformat_close_input(&context);
+        close_audio_format_input(&context, proprietary_io);
         metadata = {};
         return AG_INTERNAL_ERROR;
     }
@@ -508,6 +528,16 @@ public:
         custom_read_ = options.custom_read;
         custom_seek_ = options.custom_seek;
         custom_io_context_ = options.custom_io_context;
+        if (custom_read_ == nullptr
+            && ProprietaryAudioInput::recognizes_path(utf8_path)) {
+            std::string proprietary_error;
+            proprietary_input_ = ProprietaryAudioInput::open(
+                utf8_path, proprietary_error);
+            if (!proprietary_input_) return AG_UNSUPPORTED_FORMAT;
+            custom_read_ = &ProprietaryAudioInput::read_callback;
+            custom_seek_ = &ProprietaryAudioInput::seek_callback;
+            custom_io_context_ = proprietary_input_.get();
+        }
         packet_callback_ = options.packet_callback;
         packet_context_ = options.packet_context;
         interrupt_triggered_ = false;
@@ -575,6 +605,9 @@ public:
             const bool interrupted = interrupt_triggered_;
             reset();
             return interrupted ? AG_CANCELLED : AG_UNSUPPORTED_FORMAT;
+        }
+        if (proprietary_input_) {
+            proprietary_input_->apply_format_tags(format_context_);
         }
 
         const AVCodec* codec = nullptr;
@@ -681,6 +714,8 @@ public:
                 if (convert_result != AG_OK) {
                     return convert_result;
                 }
+                decoded_audio_ = true;
+                consecutive_invalid_mp3_packets_ = 0;
                 if (!trim_to_seek_target(block)) {
                     continue;
                 }
@@ -738,6 +773,7 @@ public:
             const int send_result = avcodec_send_packet(codec_context_, packet_);
             av_packet_unref(packet_);
             if (send_result < 0) {
+                if (skip_invalid_mp3_packet(send_result)) continue;
                 return AG_DECODE_ERROR;
             }
         }
@@ -761,6 +797,10 @@ public:
                 if (final_flac_frame) {
                     avcodec_flush_buffers(codec_context_);
                     input_eof_ = true;
+                }
+                if (convert_result == AG_OK) {
+                    decoded_audio_ = true;
+                    consecutive_invalid_mp3_packets_ = 0;
                 }
                 return convert_result;
             }
@@ -803,6 +843,7 @@ public:
             const int send_result = avcodec_send_packet(codec_context_, packet_);
             av_packet_unref(packet_);
             if (send_result < 0) {
+                if (skip_invalid_mp3_packet(send_result)) continue;
                 return interrupt_triggered_ ? AG_CANCELLED : AG_DECODE_ERROR;
             }
         }
@@ -897,7 +938,9 @@ public:
             format_context_->pb = nullptr;
         }
         avformat_close_input(&format_context_);
+        if (custom_io_ != nullptr) av_freep(&custom_io_->buffer);
         avio_context_free(&custom_io_);
+        proprietary_input_.reset();
         interrupt_handler_ = nullptr;
         interrupt_context_ = nullptr;
         custom_read_ = nullptr;
@@ -912,6 +955,8 @@ public:
         input_eof_ = false;
         drain_sent_ = false;
         resampler_drained_ = false;
+        decoded_audio_ = false;
+        consecutive_invalid_mp3_packets_ = 0;
         seek_target_ms_ = -1;
         seek_target_frame_ = -1;
         block_start_frame_ = 0;
@@ -973,6 +1018,16 @@ private:
         }
     }
 
+    bool skip_invalid_mp3_packet(const int error) noexcept
+    {
+        // A damaged frame should not discard minutes of valid audio, while
+        // sustained corruption and files with no decoded frames still fail.
+        return error == AVERROR_INVALIDDATA
+            && codec_context_->codec_id == AV_CODEC_ID_MP3
+            && decoded_audio_
+            && ++consecutive_invalid_mp3_packets_ <= 4;
+    }
+
     ag_result seek_to(const std::int64_t target_timestamp,
                       const std::int64_t target_frame,
                       const std::int64_t target_ms)
@@ -997,6 +1052,8 @@ private:
         input_eof_ = false;
         drain_sent_ = false;
         resampler_drained_ = false;
+        decoded_audio_ = false;
+        consecutive_invalid_mp3_packets_ = 0;
         seek_target_ms_ = target_ms;
         seek_target_frame_ = target_frame;
         fallback_frame_valid_ = false;
@@ -1572,6 +1629,8 @@ private:
     bool input_eof_ = false;
     bool drain_sent_ = false;
     bool resampler_drained_ = false;
+    bool decoded_audio_ = false;
+    int consecutive_invalid_mp3_packets_ = 0;
     std::int64_t seek_target_ms_ = -1;
     std::int64_t seek_target_frame_ = -1;
     std::int64_t block_start_frame_ = 0;
@@ -1586,6 +1645,7 @@ private:
     DecoderReadCallback custom_read_ = nullptr;
     DecoderSeekCallback custom_seek_ = nullptr;
     void* custom_io_context_ = nullptr;
+    std::unique_ptr<ProprietaryAudioInput> proprietary_input_;
     DecoderPacketCallback packet_callback_ = nullptr;
     void* packet_context_ = nullptr;
     bool interrupt_triggered_ = false;
