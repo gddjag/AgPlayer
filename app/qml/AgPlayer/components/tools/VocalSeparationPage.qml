@@ -552,6 +552,8 @@ Rectangle {
     }
 
     function jobStateText() {
+        if (!page.hasInput)
+            return qsTr("等待添加文件")
         switch (VocalSeparationController.jobState) {
         case VocalSeparationController.Probing: return qsTr("正在探测设备")
         case VocalSeparationController.Running: return qsTr("正在分离")
@@ -769,9 +771,9 @@ Rectangle {
                         objectName: "separationErrorPanel"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 38
-                        visible: VocalSeparationController.error.length > 0
-                        color: Theme.highlightSoft
-                        border.color: Theme.danger
+                        visible: !page.hasInput || VocalSeparationController.error.length > 0
+                        color: page.hasInput ? Theme.highlightSoft : page.raised
+                        border.color: page.hasInput ? Theme.danger : page.border
                         radius: 6
                         RowLayout {
                             anchors.fill: parent
@@ -780,14 +782,17 @@ Rectangle {
                             anchors.topMargin: 4
                             anchors.bottomMargin: 4
                             Label {
+                                objectName: "separationStatusText"
                                 Layout.fillWidth: true
-                                text: VocalSeparationController.error
+                                text: page.hasInput ? VocalSeparationController.error
+                                                    : qsTr("请添加要分离的文件")
                                 color: page.textPrimary
                                 elide: Text.ElideRight
                             }
                             WorkbenchButton {
                                 text: qsTr("重试")
                                 Layout.alignment: Qt.AlignVCenter
+                                visible: page.hasInput
                                 enabled: VocalSeparationController.canRetry
                                 Accessible.name: text
                                 Accessible.role: Accessible.Button
@@ -1591,7 +1596,7 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Label { text: page.jobStateText(); color: VocalSeparationController.jobState === VocalSeparationController.Completed ? page.success : page.textPrimary; font.bold: true }
                                  Label {
-                                     text: VocalSeparationController.stage.length > 0
+                                     text: page.hasInput && VocalSeparationController.stage.length > 0
                                            ? " · " + ({"validation": qsTr("校验模型"),
                                                       "provider_probe": qsTr("验证处理设备"),
                                                       "runtime_verification": qsTr("校验运行环境"),
@@ -2376,8 +2381,9 @@ Rectangle {
                     focusPolicy: Qt.StrongFocus
                     Accessible.name: text; Accessible.role: Accessible.Button
                     ToolTip.visible: hovered && !enabled
-                    ToolTip.text: VocalSeparationController.jobState === VocalSeparationController.Cancelling
-                                  ? qsTr("正在取消分离任务") : VocalSeparationController.startDisabledReason
+                    ToolTip.text: !page.hasInput ? qsTr("请添加要分离的文件")
+                                             : VocalSeparationController.jobState === VocalSeparationController.Cancelling
+                                               ? qsTr("正在取消分离任务") : VocalSeparationController.startDisabledReason
                     onClicked: {
                         if (VocalSeparationController.jobState === VocalSeparationController.Running)
                             VocalSeparationController.cancel()
