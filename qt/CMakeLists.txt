@@ -21,6 +21,8 @@ add_library(agplayer_qt STATIC
     src/audio_editor/playback_clip_drag_adapter.hpp
     src/audio_file_discovery.cpp
     src/audio_file_discovery.hpp
+    src/cover_cache.cpp
+    src/cover_cache.hpp
     src/audio_preview_controller.cpp
     src/audio_preview_controller.hpp
     src/file_association_controller.cpp

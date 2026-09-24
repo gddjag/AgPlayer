@@ -51,6 +51,7 @@ public:
     Q_INVOKABLE void importPaths(const QStringList& paths);
     void importResourcePaths(const QStringList& paths);
     Q_INVOKABLE void importFolder(const QUrl& folder);
+    void recoverMissingCovers();
     Q_INVOKABLE void clearErrors();
     void cancel();
 
@@ -62,6 +63,7 @@ signals:
     void skippedCountChanged();
     void fileRejected(const QString& path, int result);
     void finished();
+    void coverRecoveryFinished();
 
 private:
     void importUrlsImpl(const QList<QUrl>& urls, bool filterFormatFailures);
@@ -80,7 +82,9 @@ private:
     ProbeFunction probe_;
     DiscoveryFunction discovery_;
     std::shared_ptr<ImportCallbackState> callbackState_;
+    std::shared_ptr<ImportCallbackState> coverRecoveryState_;
     QFuture<void> future_;
+    QFuture<void> coverRecoveryFuture_;
     double progress_ = 0.0;
     bool busy_ = false;
     QStringList errors_;

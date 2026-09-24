@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QImageReader>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSemaphore>
@@ -28,6 +29,7 @@ class ImportControllerTest final : public QObject {
 private slots:
     void deduplicatesCanonicalPathsAndContinuesAfterFailure();
     void productionProbeImportsMetadataAndUsesBrandFallback();
+    void recoversMissingCachedCoverAndMetadata();
     void productionProbePreservesAudioAndVideoKinds();
     void modelCanBeDestroyedWhileProbeIsBlocked();
     void controllerCanBeDestroyedWhileProbeIsBlocked();
@@ -410,6 +412,71 @@ void ImportControllerTest::productionProbeImportsMetadataAndUsesBrandFallback()
     QVERIFY(track.fileSize > 0);
     QCOMPARE(track.coverUrl,
              QUrl(QStringLiteral("qrc:/qt/qml/AgPlayer/assets/brand/logo-mark.png")));
+}
+
+void ImportControllerTest::recoversMissingCachedCoverAndMetadata()
+{
+    const QString fixture = QString::fromUtf8(AGPLAYER_TEST_AUDIO);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString tagged = dir.filePath(QStringLiteral("cover-recovery.mp3"));
+    QCOMPARE(ag_transcode(fixture.toUtf8().constData(), tagged.toUtf8().constData(),
+                         "libmp3lame", 192000, 44100, 2,
+                         nullptr, nullptr, nullptr), AG_OK);
+    constexpr unsigned char cover[] = {
+        0x42, 0x4d, 0x3a, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x36, 0x00, 0x00, 0x00, 0x28, 0x00,
+        0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
+        0x00, 0x00, 0x01, 0x00, 0x18, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x13, 0x0b,
+        0x00, 0x00, 0x13, 0x0b, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xff, 0x00};
+    QCOMPARE(ag_metadata_write_extended(
+                 tagged.toUtf8().constData(), "Original title", "Original artist",
+                 "Original album", nullptr, nullptr, nullptr, nullptr,
+                 nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                 nullptr, cover, sizeof(cover), "image/bmp"), AG_OK);
+    ag_metadata* written = nullptr;
+    QCOMPARE(ag_metadata_open(tagged.toUtf8().constData(), &written), AG_OK);
+    QVERIFY(written != nullptr);
+    size_t writtenCoverSize = 0;
+    const char* writtenCoverMime = nullptr;
+    const unsigned char* writtenCover = ag_metadata_cover(
+        written, &writtenCoverSize, &writtenCoverMime);
+    QCOMPARE(writtenCoverSize, sizeof(cover));
+    QVERIFY(writtenCover != nullptr);
+    ag_metadata_destroy(written);
+    const ProbeResult original = probeMetadata(tagged, false);
+    QCOMPARE(original.result, AG_OK);
+    QVERIFY(original.track.coverUrl.isLocalFile());
+
+    LibraryModel model;
+    TrackRecord stale;
+    stale.path = tagged;
+    stale.trackId = trackIdForPath(tagged);
+    stale.title = QStringLiteral("stale title");
+    stale.coverUrl = QUrl::fromLocalFile(
+        QDir::temp().filePath(QStringLiteral("missing-agplayer-cover.jpg")));
+    stale.metadataProbeAttempted = true;
+    stale.available = true;
+    model.appendBatch({stale});
+
+    ImportController importer(&model);
+    QSignalSpy recovered(&importer, &ImportController::coverRecoveryFinished);
+    importer.recoverMissingCovers();
+    QVERIFY(recovered.wait(5000));
+
+    const TrackRecord& track = model.tracks().front();
+    QVERIFY(track.coverUrl.isLocalFile());
+    QVERIFY(QFileInfo::exists(track.coverUrl.toLocalFile()));
+    QVERIFY(QImageReader(track.coverUrl.toLocalFile()).canRead());
+    QVERIFY(track.coverUrl != stale.coverUrl);
+    QCOMPARE(track.title, QStringLiteral("Original title"));
+    QCOMPARE(track.artist, QStringLiteral("Original artist"));
+    QCOMPARE(track.album, QStringLiteral("Original album"));
+    QVERIFY(track.sampleRate > 0);
+    QVERIFY(track.durationMs > 0);
 }
 
 void ImportControllerTest::productionProbePreservesAudioAndVideoKinds()

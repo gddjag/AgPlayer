@@ -1,4 +1,5 @@
 #include "library_model.hpp"
+#include "cover_cache.hpp"
 #include "metadata_text.hpp"
 
 #include "agplayer/c_api.h"
@@ -7,8 +8,6 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
-#include <QSaveFile>
-#include <QStandardPaths>
 #include <QThread>
 
 #include <algorithm>
@@ -45,62 +44,6 @@ QString pathKey(const QString& path)
 QString copiedMetadata(const char* value)
 {
     return agplayer::qt::decodeMetadataText(value);
-}
-
-QString coverSuffix(const QString& mimeType)
-{
-    if (mimeType.compare(QStringLiteral("image/jpeg"), Qt::CaseInsensitive) == 0) {
-        return QStringLiteral(".jpg");
-    }
-    if (mimeType.compare(QStringLiteral("image/png"), Qt::CaseInsensitive) == 0) {
-        return QStringLiteral(".png");
-    }
-    if (mimeType.compare(QStringLiteral("image/webp"), Qt::CaseInsensitive) == 0) {
-        return QStringLiteral(".webp");
-    }
-    if (mimeType.compare(QStringLiteral("image/bmp"), Qt::CaseInsensitive) == 0) {
-        return QStringLiteral(".bmp");
-    }
-    return QStringLiteral(".bin");
-}
-
-QUrl cacheEmbeddedCover(const unsigned char* data,
-                        const std::size_t size,
-                        const QString& mimeType)
-{
-    if (data == nullptr || size == 0
-        || size > static_cast<std::size_t>(
-            (std::numeric_limits<qsizetype>::max)())) {
-        return {};
-    }
-    const QByteArray bytes(reinterpret_cast<const char*>(data),
-                           static_cast<qsizetype>(size));
-    const QStringList cacheRoots{
-        QStandardPaths::writableLocation(QStandardPaths::CacheLocation),
-        QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
-            .filePath(QStringLiteral("AgPlayer"))};
-    QString coverDirectory;
-    for (const QString& cacheRoot : cacheRoots) {
-        if (cacheRoot.isEmpty()) continue;
-        const QString candidate = QDir(cacheRoot).filePath(QStringLiteral("covers"));
-        if (QDir().mkpath(candidate)) {
-            coverDirectory = candidate;
-            break;
-        }
-    }
-    if (coverDirectory.isEmpty()) return {};
-    const QString digest = QString::fromLatin1(
-        QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
-    const QString coverPath = QDir(coverDirectory).filePath(
-        digest + coverSuffix(mimeType));
-    if (!QFileInfo::exists(coverPath)) {
-        QSaveFile output(coverPath);
-        if (!output.open(QIODevice::WriteOnly)
-            || output.write(bytes) != bytes.size() || !output.commit()) {
-            return {};
-        }
-    }
-    return QUrl::fromLocalFile(coverPath);
 }
 
 QStringList normalizeTags(const QStringList& tags)
@@ -857,8 +800,11 @@ TrackRecord readLibraryMetadata(const QString& path, const ag_metadata* metadata
     if (cover == nullptr || coverSize == 0) {
         track.coverUrl = QUrl{};
     } else {
-        const QUrl cached = cacheEmbeddedCover(
-            cover, coverSize, copiedMetadata(coverMime));
+        const QUrl cached = coverSize <= static_cast<size_t>((std::numeric_limits<qsizetype>::max)())
+            ? agplayer::qt::cacheEmbeddedCover(
+                QByteArray(reinterpret_cast<const char*>(cover), static_cast<qsizetype>(coverSize)),
+                copiedMetadata(coverMime))
+            : QUrl{};
         if (cached.isValid()) {
             track.coverUrl = cached;
         } else if (track.coverUrl.isValid()) {

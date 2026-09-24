@@ -1011,6 +1011,11 @@ int main(int argc, char* argv[])
         ImportController importer(&library, [autoReadBpmFlag](const QString& path) {
             return probeMetadata(path, autoReadBpmFlag->load(std::memory_order_relaxed));
         });
+        if (!qaTestMode) {
+            QTimer::singleShot(0, &importer, [&importer] {
+                importer.recoverMissingCovers();
+            });
+        }
         ResourceFolderController resourceFolders;
         resourceFolders.setStoragePath(libraryDataDirectory.filePath(
             QStringLiteral("resource-roots.json")));
