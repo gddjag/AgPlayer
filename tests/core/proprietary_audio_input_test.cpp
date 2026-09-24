@@ -76,6 +76,12 @@ int main(int argc, char** argv)
     assert(argc == 2);
     const fs::path fixtures(argv[1]);
     assert(!agplayer::ProprietaryAudioInput::recognizes_path("ordinary.mp3"));
+    assert(!agplayer::ProprietaryAudioInput::recognizes_path("ordinary.flac"));
+    for (const char* name : {"song.kgm.flac", "song.vpr.flac", "song.mmp4",
+                             "song.666c6163", "song.6d7033", "song.6f6767",
+                             "song.6d3461", "song.776176"}) {
+        assert(agplayer::ProprietaryAudioInput::recognizes_path(name));
+    }
     const fs::path directory = fs::temp_directory_path()
         / ("agplayer-proprietary-" + std::to_string(
             std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -91,14 +97,25 @@ int main(int argc, char** argv)
         assert(actual == expected);
     }
     verify_vector(fixtures, directory, "qmc0_static", ".qmc0");
+    verify_vector(fixtures, directory, "qmc0_static", ".tkm");
+    verify_vector(fixtures, directory, "qmc0_static", ".666c6163");
     verify_vector(fixtures, directory, "mflac_map", ".mflac");
+    verify_vector(fixtures, directory, "mflac_map", ".mmp4");
     verify_vector(fixtures, directory, "mflac_rc4", ".mflac");
     verify_vector(fixtures, directory, "mflac0_rc4", ".mflac0");
     verify_vector(fixtures, directory, "mgg_map", ".mgg");
     const auto wav = load(fixtures / "synthetic.wav");
+    fs::copy_file(fixtures / "synthetic.kgm", directory / "synthetic.kgm.flac");
+    fs::copy_file(fixtures / "synthetic.vpr", directory / "synthetic.vpr.flac");
+    fs::copy_file(fixtures / "synthetic.mflac", directory / "synthetic.mmp4");
+    fs::copy_file(fixtures / "synthetic.qmc0", directory / "synthetic.666c6163");
     for (const std::string extension : {"ncm", "qmc0", "mgg", "mflac",
-                                        "kgm", "kgma", "vpr", "kwm"}) {
-        const fs::path path = fixtures / ("synthetic." + extension);
+                                        "kgm", "kgma", "vpr", "kwm",
+                                        "kgm.flac", "vpr.flac", "mmp4",
+                                        "666c6163"}) {
+        const fs::path path = (extension == "kgm.flac" || extension == "vpr.flac"
+            || extension == "mmp4" || extension == "666c6163"
+            ? directory : fixtures) / ("synthetic." + extension);
         std::string error;
         auto input = agplayer::ProprietaryAudioInput::open(path.u8string(), error);
         assert(input && error.empty());
@@ -209,6 +226,14 @@ int main(int argc, char** argv)
     assert(!agplayer::ProprietaryAudioInput::open(
         missing_key.u8string(), missing_key_error));
     assert(missing_key_error.find("no embedded key") != std::string::npos);
+    const fs::path musicex = directory / "missing-key-musicex.mflac";
+    {
+        std::ofstream output(musicex, std::ios::binary);
+        output << "synthetic audio without an embedded keymusicex" << '\0';
+    }
+    std::string musicex_error;
+    assert(!agplayer::ProprietaryAudioInput::open(musicex.u8string(), musicex_error));
+    assert(musicex_error.find("no embedded key") != std::string::npos);
     const fs::path raw_aac = directory / "raw-adts.kwm";
     std::array<std::uint8_t, 64> adts{};
     adts[0] = 0xff;

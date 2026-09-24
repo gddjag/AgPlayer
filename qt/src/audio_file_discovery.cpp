@@ -31,7 +31,10 @@ const QStringList& supportedExtensionList()
         QStringLiteral("tkm"), QStringLiteral("bkcmp3"),
         QStringLiteral("bkcm4a"), QStringLiteral("bkcflac"),
         QStringLiteral("bkcwav"), QStringLiteral("bkcape"),
-        QStringLiteral("bkcogg"), QStringLiteral("bkcwma")};
+        QStringLiteral("bkcogg"), QStringLiteral("bkcwma"),
+        QStringLiteral("mmp4"), QStringLiteral("666c6163"),
+        QStringLiteral("6d7033"), QStringLiteral("6f6767"),
+        QStringLiteral("6d3461"), QStringLiteral("776176")};
     return extensions;
 }
 

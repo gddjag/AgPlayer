@@ -81,7 +81,31 @@ std::string extension_of(const std::string& path)
     std::string extension = path.substr(dot + 1);
     std::transform(extension.begin(), extension.end(), extension.begin(),
                    [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    if (extension == "flac" && dot > start) {
+        const std::size_t previous_dot = path.find_last_of('.', dot - 1);
+        if (previous_dot != std::string::npos && previous_dot >= start) {
+            std::string previous = path.substr(previous_dot + 1,
+                                               dot - previous_dot - 1);
+            std::transform(previous.begin(), previous.end(), previous.begin(),
+                           [](unsigned char ch) {
+                               return static_cast<char>(std::tolower(ch));
+                           });
+            if (previous == "kgm" || previous == "vpr") {
+                return previous + ".flac";
+            }
+        }
+    }
     return extension;
+}
+
+bool is_static_qmc_extension(const std::string_view extension)
+{
+    constexpr std::array<std::string_view, 13> extensions{
+        "tkm", "bkcmp3", "bkcm4a", "bkcflac", "bkcwav", "bkcape",
+        "bkcogg", "bkcwma", "666c6163", "6d7033", "6f6767",
+        "6d3461", "776176"};
+    return std::find(extensions.begin(), extensions.end(), extension)
+        != extensions.end();
 }
 
 std::string parse_json_string(const std::string_view json, std::size_t quote)
@@ -284,6 +308,7 @@ bool ProprietaryAudioInput::recognizes_path(const std::string& path)
     const std::string extension = extension_of(path);
     return extension == "ncm" || extension == "kwm"
         || extension == "kgm" || extension == "kgma" || extension == "vpr"
+        || extension == "kgm.flac" || extension == "vpr.flac"
         || extension == "qmc0" || extension == "qmc2"
         || extension == "qmc3" || extension == "qmc4"
         || extension == "qmc6" || extension == "qmc8"
@@ -291,10 +316,7 @@ bool ProprietaryAudioInput::recognizes_path(const std::string& path)
         || extension == "mflac" || extension == "mflac0"
         || extension == "mgg" || extension == "mgg0"
         || extension == "mgg1" || extension == "mggl"
-        || extension == "tkm" || extension == "bkcmp3"
-        || extension == "bkcm4a" || extension == "bkcflac"
-        || extension == "bkcwav" || extension == "bkcape"
-        || extension == "bkcogg" || extension == "bkcwma";
+        || extension == "mmp4" || is_static_qmc_extension(extension);
 }
 
 std::unique_ptr<ProprietaryAudioInput> ProprietaryAudioInput::open(
@@ -539,7 +561,8 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
         cipher_ = Cipher::Ncm;
         payload_size_ = static_cast<std::uint64_t>(size) - payload_offset_;
     } else if (extension == "kgm" || extension == "kgma"
-               || extension == "vpr") {
+               || extension == "vpr" || extension == "kgm.flac"
+               || extension == "vpr.flac") {
         if (size <= 0x400) {
             error = "Invalid KGM header";
             return false;
@@ -550,7 +573,7 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
             error = "Truncated KGM header";
             return false;
         }
-        const bool vpr = extension == "vpr";
+        const bool vpr = extension == "vpr" || extension == "vpr.flac";
         const auto& magic = vpr ? kVprHeader : kKgmHeader;
         if (!std::equal(magic.begin(), magic.end(), header.begin())) {
             error = "Unsupported KGM/VPR variant";
@@ -605,17 +628,28 @@ bool ProprietaryAudioInput::initialize(const std::string& extension,
         payload_offset_ = 0x400;
         payload_size_ = static_cast<std::uint64_t>(size) - payload_offset_;
     } else {
-        if (size <= 4) {
+        if (size <= 8) {
             error = "Invalid QMC file";
             return false;
         }
-        std::array<std::uint8_t, 4> trailer{};
-        if (source_read_at(static_cast<std::uint64_t>(size) - trailer.size(),
-                           trailer.data(), static_cast<int>(trailer.size()))
-            != static_cast<int>(trailer.size())) {
+        if (is_static_qmc_extension(extension)) {
+            cipher_ = Cipher::QmcStatic;
+            payload_size_ = static_cast<std::uint64_t>(size);
+            return true;
+        }
+        std::array<std::uint8_t, 8> tail{};
+        if (source_read_at(static_cast<std::uint64_t>(size) - tail.size(),
+                           tail.data(), static_cast<int>(tail.size()))
+            != static_cast<int>(tail.size())) {
             error = "Truncated QMC trailer";
             return false;
         }
+        if (tail == std::array<std::uint8_t, 8>{'m','u','s','i','c','e','x',0}) {
+            error = "QMC MusicEx file has no embedded key";
+            return false;
+        }
+        std::array<std::uint8_t, 4> trailer{};
+        std::copy_n(tail.data() + 4, trailer.size(), trailer.data());
         if (trailer == std::array<std::uint8_t, 4>{'S', 'T', 'a', 'g'}) {
             error = "QMC file has no embedded key";
             return false;
