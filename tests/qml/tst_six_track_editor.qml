@@ -271,16 +271,17 @@ TestCase {
         verify(AudioEditorController.undo())
         compare(canvas.eventById(String(first.id)).sourceEnd, original.sourceEnd)
     }
-    function test_controlDragPansWithoutMovingClip() {
+    function test_blankDragPansWithoutMovingClip() {
         importPcm(2)
         const host = createEditorHost()
         const canvas = visualChild(host.contentItem, "editorWaveformCanvas")
         const viewport = AudioEditorController.viewport
         viewport.zoomAt(4, 0)
         const original = AudioEditorController.timelineEventViews[0]
-        mousePress(canvas, canvas.width * 0.8, 45, Qt.LeftButton, Qt.ControlModifier)
-        mouseMove(canvas, canvas.width * 0.3, 45, 20)
-        mouseRelease(canvas, canvas.width * 0.3, 45, Qt.LeftButton, Qt.ControlModifier)
+        const blankY = canvas.rowHeight * 2 + 45
+        mousePress(canvas, canvas.width * 0.8, blankY, Qt.LeftButton)
+        mouseMove(canvas, canvas.width * 0.3, blankY, 20)
+        mouseRelease(canvas, canvas.width * 0.3, blankY, Qt.LeftButton)
         verify(viewport.visibleStartFrame > 0)
         compare(canvas.eventById(String(original.id)).timelineStart, original.timelineStart)
         const bar = visualChild(host.contentItem, "editorTimelineScrollBar")

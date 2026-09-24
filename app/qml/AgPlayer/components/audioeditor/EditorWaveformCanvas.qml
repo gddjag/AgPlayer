@@ -393,6 +393,7 @@ Rectangle {
         property real pressX: 0
         property real pressY: 0
         property real lastPanX: 0
+        property bool panSeeksOnClick: false
         property double grabOffset: 0
         property double originalPointOffset: 0
         property double candidatePointOffset: 0
@@ -406,7 +407,7 @@ Rectangle {
             pressX = mouse.x; pressY = mouse.y
             pressFrame = canvas.frameAtCanvasPixel(mouse.x)
             if (mouse.button === Qt.MiddleButton || mouse.button === Qt.LeftButton && (mouse.modifiers & Qt.ControlModifier)) {
-                mode = "pan"; lastPanX = mouse.x; return
+                mode = "pan"; lastPanX = mouse.x; panSeeksOnClick = false; return
             }
             const track = canvas.trackAtY(mouse.y)
             AudioEditorController.selectedTrack = track
@@ -477,14 +478,16 @@ Rectangle {
                 grabOffset = pressFrame - Number(originalEvent.timelineStart)
                 mode = "move"; return
             }
-            AudioEditorController.seekFrame(pressFrame)
             canvas.cancelSelectionPreview()
-            mode = ""
+            mode = "pan"; lastPanX = mouse.x; panSeeksOnClick = true
         }
         onPositionChanged: function(mouse) {
             if (!pressed) return
             const frame = canvas.frameAtCanvasPixel(mouse.x)
-            if (mode === "pan") { AudioEditorController.viewport.panByPixels(lastPanX - mouse.x); lastPanX = mouse.x }
+            if (mode === "pan") {
+                if (mouse.x !== lastPanX || mouse.y !== pressY) panSeeksOnClick = false
+                AudioEditorController.viewport.panByPixels(lastPanX - mouse.x); lastPanX = mouse.x
+            }
             else if (mode === "scrub") AudioEditorController.previewScrub(frame)
             else if (mode === "move") AudioEditorController.moveEventToTrack(String(originalEvent.id), Math.max(0, frame - grabOffset), canvas.trackAtY(mouse.y))
             else if (mode === "point") {
@@ -521,6 +524,8 @@ Rectangle {
         onReleased: {
             const finishedMode = mode
             mode = ""
+            if (finishedMode === "pan" && panSeeksOnClick) AudioEditorController.seekFrame(pressFrame)
+            panSeeksOnClick = false
             if (finishedMode === "move" || finishedMode === "trimLeft" || finishedMode === "trimRight" || finishedMode === "sharedBoundary") AudioEditorController.endEventGesture()
             else if (finishedMode === "point") AudioEditorController.commitEnvelopePointGesture(candidatePointOffset, candidatePointGain)
             else if (finishedMode === "gain") AudioEditorController.endEventGainGesture()
@@ -535,7 +540,7 @@ Rectangle {
             else if (finishedMode === "handoff") AudioEditorController.releaseSelectionHandoff()
             else if (finishedMode === "scrub") AudioEditorController.endScrub()
         }
-        onCanceled: canvas.cancelGesture()
+        onCanceled: { panSeeksOnClick = false; canvas.cancelGesture() }
         onDoubleClicked: function(mouse) {
             if (mouse.button === Qt.RightButton && mouse.modifiers & Qt.ControlModifier) {
                 canvas.cancelGesture(); AudioEditorController.clearEventSelection(); AudioEditorController.clearSelection(); return
@@ -553,13 +558,10 @@ Rectangle {
             }
         }
         onWheel: function(wheel) {
-            if (wheel.modifiers & Qt.ControlModifier) {
-                AudioEditorController.viewport.panByPixels(-(wheel.angleDelta.x || wheel.angleDelta.y) / 3)
-                wheel.accepted = true
-            } else {
+            if ((wheel.modifiers & Qt.ControlModifier) && wheel.angleDelta.y !== 0) {
                 AudioEditorController.viewport.zoomAt(wheel.angleDelta.y > 0 ? 1.25 : 0.8, wheel.x)
-                wheel.accepted = true
-            }
+            } else AudioEditorController.viewport.panByPixels(-(wheel.angleDelta.x || wheel.angleDelta.y) / 3)
+            wheel.accepted = true
         }
     }
 

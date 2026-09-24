@@ -370,7 +370,7 @@ Item {
             if (pressed) AudioEditorController.viewport.moveOverviewWindow(position)
         }
         ToolTip.visible: hovered
-        ToolTip.text: qsTr("拖动查看时间线；Ctrl+滚轮或 Ctrl+左键拖动可左右平移")
+        ToolTip.text: qsTr("空白处左键拖动或滚轮平移时间线；Ctrl+滚轮缩放")
     }
 
     Label {
