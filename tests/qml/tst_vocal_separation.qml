@@ -243,8 +243,22 @@ TestCase {
                "the model deck must fit its complete action row")
         verify(settings.height <= 160,
                "output settings must align with the compact source row")
-        verify(timeline.height >= 276,
+        verify(timeline.height >= 306,
                "the five result waveforms need the recovered vertical space")
+        const kinds = [VocalSeparationController.Vocals,
+                       VocalSeparationController.Accompaniment,
+                       VocalSeparationController.Drums,
+                       VocalSeparationController.Bass,
+                       VocalSeparationController.Other]
+        for (const kind of kinds) {
+            const track = findChild(page, "separationTimelineStem-" + kind)
+            verify(track && track.height >= 44,
+                   "each result track needs enough height for its waveform")
+        }
+        const vocalsWaveform = findChild(
+            page, "separationStemWaveform-" + VocalSeparationController.Vocals)
+        verify(vocalsWaveform && vocalsWaveform.height >= 38,
+               "the visible result waveform should gain height with its track")
     }
 
     function test_inputAndStemTracksUseTheSharedWaveformRenderer() {
@@ -707,10 +721,14 @@ TestCase {
         const progressBackground = findChild(
             page, "separationJobProgressBackground")
         const percentage = findChild(page, "separationJobPercentage")
+        const primary = findChild(page, "separationPrimaryAction")
+        const primaryFill = findChild(page, "separationPrimaryProgressFill")
+        const primaryPercent = findChild(page, "separationPrimaryProgressPercent")
         const bottom = findChild(page, "separationBottomBar")
         const play = findChild(page, "separationTransportPlay")
         const time = findChild(page, "separationTransportTime")
-        verify(progress && progressBackground && percentage && bottom && play && time)
+        verify(progress && progressBackground && percentage && primary
+               && primaryFill && primaryPercent && bottom && play && time)
         verify(progressBackground.border.color.a <= 0.4)
         verify(Math.abs(progressBackground.border.color.r
                         - progressBackground.border.color.g) <= 0.08)
@@ -719,16 +737,27 @@ TestCase {
         compare(progress.value, 0)
         compare(percentage.text, "0%")
         compare(percentage.color, page.success)
+        verify(!primaryFill.visible && !primaryPercent.visible)
 
         separationTestDriver.setJobProgress(0.64, "separating")
         compare(progress.value, 0.64)
         compare(percentage.text, "64%")
+        verify(primaryFill.visible && primaryPercent.visible)
+        compare(primaryPercent.text, "64%")
+        verify(Math.abs(primaryFill.width - (primary.width - 2) * 0.64) < 2)
+        verify(primary.Accessible.name.indexOf("64%") >= 0)
+        if (visualFixtureOutput)
+            grabImage(page).save(visualFixtureOutput + "-primary-progress.png")
+        separationTestDriver.setJobState(VocalSeparationController.Cancelling, "cancelling")
+        compare(primaryPercent.text, "64%")
+        verify(primaryFill.visible && !primary.enabled)
         verify(bottom.height >= 78)
         verify(play.width >= 44)
         verify(time.font.pixelSize >= 20)
         const reSeparate = controlWithText(bottom, "重新分离")
         verify(reSeparate && reSeparate.height >= 36)
         separationTestDriver.reset()
+        verify(!primaryFill.visible && !primaryPercent.visible)
     }
 
     function test_gpuCandidateCanBeSelectedAfterProbe() {

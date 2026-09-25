@@ -1557,6 +1557,18 @@ exposesTypedCatalogAndStemAvailabilityFromTheInstalledCatalog()
 
     QVERIFY(controller.selectModel(QStringLiteral("five-stem")));
     QCOMPARE(controller.stems().size(), 5);
+    for (const QVariant& value : controller.stems()) {
+        const QVariantMap stem = value.toMap();
+        QVERIFY(stem.value(QStringLiteral("supported")).toBool());
+        QVERIFY(stem.value(QStringLiteral("selected")).toBool());
+    }
+    QVERIFY(controller.setStemSelected(VocalSeparationController::StemKind::Drums, false));
+    QVERIFY(!stemFor(controller.stems(), VocalSeparationController::StemKind::Drums)
+                 .value(QStringLiteral("selected")).toBool());
+    QVERIFY(controller.selectModel(QStringLiteral("two-stem")));
+    QVERIFY(controller.selectModel(QStringLiteral("five-stem")));
+    for (const QVariant& value : controller.stems())
+        QVERIFY(value.toMap().value(QStringLiteral("selected")).toBool());
     QVERIFY(stemFor(controller.stems(), VocalSeparationController::StemKind::Accompaniment)
                 .value(QStringLiteral("derived")).toBool());
 }
@@ -1836,12 +1848,8 @@ demucsResultMixExcludesTheDerivedAccompanimentWhenComponentsAreComplete()
     VocalSeparationController controller(
         &preview, &waveforms, nullptr, nullptr, nullptr, options);
     QVERIFY(controller.selectModel(QStringLiteral("five-stem")));
-    QVERIFY(controller.setStemSelected(
-        VocalSeparationController::StemKind::Drums, true));
-    QVERIFY(controller.setStemSelected(
-        VocalSeparationController::StemKind::Bass, true));
-    QVERIFY(controller.setStemSelected(
-        VocalSeparationController::StemKind::Other, true));
+    for (const QVariant& stem : controller.stems())
+        QVERIFY(stem.toMap().value(QStringLiteral("selected")).toBool());
     QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
     QVERIFY(controller.start());
     QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),
@@ -1896,18 +1904,12 @@ demucsResultMixFallsBackToTheDerivedAccompanimentWhenComponentsAreIncomplete()
     VocalSeparationController controller(
         &preview, &waveforms, nullptr, nullptr, nullptr, options);
     QVERIFY(controller.selectModel(QStringLiteral("five-stem")));
-    if (drums) {
-        QVERIFY(controller.setStemSelected(
-            VocalSeparationController::StemKind::Drums, true));
-    }
-    if (bass) {
-        QVERIFY(controller.setStemSelected(
-            VocalSeparationController::StemKind::Bass, true));
-    }
-    if (other) {
-        QVERIFY(controller.setStemSelected(
-            VocalSeparationController::StemKind::Other, true));
-    }
+    QVERIFY(controller.setStemSelected(
+        VocalSeparationController::StemKind::Drums, drums));
+    QVERIFY(controller.setStemSelected(
+        VocalSeparationController::StemKind::Bass, bass));
+    QVERIFY(controller.setStemSelected(
+        VocalSeparationController::StemKind::Other, other));
     QVERIFY(controller.selectInput(QUrl::fromLocalFile(audioFixture())));
     QVERIFY(controller.start());
     QTRY_COMPARE_WITH_TIMEOUT(controller.jobState(),

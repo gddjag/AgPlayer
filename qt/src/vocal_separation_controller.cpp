@@ -2575,6 +2575,8 @@ void VocalSeparationController::rebuildStems()
     const QList<StemKind> fixedKinds{
         StemKind::Vocals, StemKind::Accompaniment, StemKind::Drums,
         StemKind::Bass, StemKind::Other};
+    const bool selectAllStems = model != nullptr
+        && model->stems.size() == fixedKinds.size();
     for (const StemKind kind : fixedKinds) {
         const bool supported = model != nullptr
             && model->stems.contains(stemName(kind));
@@ -2583,7 +2585,8 @@ void VocalSeparationController::rebuildStems()
             {QStringLiteral("name"), stemName(kind)},
             {QStringLiteral("supported"), supported},
             {QStringLiteral("selected"), supported
-                 && (kind == StemKind::Vocals || kind == StemKind::Accompaniment)},
+                 && (selectAllStems || kind == StemKind::Vocals
+                     || kind == StemKind::Accompaniment)},
             {QStringLiteral("derived"), supported
                  && kind == StemKind::Accompaniment
                  && model->family == VocalModelFamily::Demucs},
@@ -2598,8 +2601,10 @@ void VocalSeparationController::rebuildStems()
             if (old.value(QStringLiteral("kind")).toInt() != int(kind)
                 || !old.value(QStringLiteral("available")).toBool()) continue;
             QVariantMap current = stems_.last().toMap();
-            for (const auto* key : {"available", "path", "waveform", "selected", "previewVolume", "derived"})
+            for (const auto* key : {"available", "path", "waveform", "selected", "previewVolume", "derived"}) {
+                if (selectAllStems && supported && qstrcmp(key, "selected") == 0) continue;
                 current.insert(QString::fromLatin1(key), old.value(QString::fromLatin1(key)));
+            }
             stems_.last() = current;
         }
     }

@@ -1586,8 +1586,8 @@ Rectangle {
                         id: timeline
                         objectName: "separationTimeline"
                         Layout.fillWidth: true
-                        Layout.preferredHeight: (page.compact ? 350
-                                                        : page.fullDesktop ? 280 : 320)
+                        Layout.preferredHeight: (page.compact ? 380
+                                                        : page.fullDesktop ? 310 : 350)
                             + (page.macCompactPlayback ? 24 : 0)
                         color: page.input; border.color: page.border; radius: 7
                         ColumnLayout {
@@ -1681,7 +1681,7 @@ Rectangle {
                                     readonly property color accent: page.stemColor(modelData.kind)
                                     objectName: "separationTimelineStem-" + modelData.kind
                                     Layout.fillWidth: true; Layout.fillHeight: true
-                                    Layout.minimumHeight: 38
+                                    Layout.minimumHeight: 44
                                     color: Qt.rgba(accent.r, accent.g, accent.b, 0.07)
                                     border.color: page.divider; radius: 3
                                     RowLayout {
@@ -2364,6 +2364,11 @@ Rectangle {
                 WorkbenchButton {
                     id: primaryAction
                     objectName: "separationPrimaryAction"
+                    readonly property bool progressActive:
+                        VocalSeparationController.jobState === VocalSeparationController.Running
+                        || VocalSeparationController.jobState === VocalSeparationController.Cancelling
+                    readonly property real progressFraction:
+                        Math.max(0, Math.min(1, VocalSeparationController.progress))
                      Layout.row: page.compact ? 1 : 0
                      Layout.column: page.compact ? 2 : 10
                      Layout.columnSpan: page.compact ? 2 : 4
@@ -2379,7 +2384,10 @@ Rectangle {
                              || (VocalSeparationController.jobState !== VocalSeparationController.Cancelling
                                  && !page.contextLocked && page.hasInput)
                     focusPolicy: Qt.StrongFocus
-                    Accessible.name: text; Accessible.role: Accessible.Button
+                    Accessible.name: progressActive
+                                     ? text + " " + Math.round(progressFraction * 100) + "%"
+                                     : text
+                    Accessible.role: Accessible.Button
                     ToolTip.visible: hovered && !enabled
                     ToolTip.text: !page.hasInput ? qsTr("请添加要分离的文件")
                                              : VocalSeparationController.jobState === VocalSeparationController.Cancelling
@@ -2393,6 +2401,35 @@ Rectangle {
                             VocalSeparationController.reportStartDisabledReason()
                     }
                     primaryAction: true
+                    background: Rectangle {
+                        radius: 5
+                        clip: true
+                        color: primaryAction.enabled ? page.primary : page.divider
+                        border.color: primaryAction.activeFocus ? page.cyan : page.primary
+                        border.width: primaryAction.activeFocus ? 2 : 1
+                        opacity: primaryAction.enabled ? 1 : 0.62
+                        Rectangle {
+                            objectName: "separationPrimaryProgressFill"
+                            visible: primaryAction.progressActive
+                            x: 1
+                            y: 1
+                            width: (parent.width - 2) * primaryAction.progressFraction
+                            height: parent.height - 2
+                            color: page.success
+                            opacity: 0.4
+                        }
+                    }
+                    Label {
+                        objectName: "separationPrimaryProgressPercent"
+                        visible: primaryAction.progressActive
+                        anchors.right: parent.right
+                        anchors.rightMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: Math.round(primaryAction.progressFraction * 100) + "%"
+                        color: Theme.accentText
+                        font.pixelSize: Theme.fontSizeCaption
+                        font.bold: true
+                    }
                 }
             }
         }
