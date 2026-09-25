@@ -28,7 +28,7 @@ window.AG_COPY = {
       "descriptionDetail": "用波形呈现声音细节，让播放、管理与编辑保持简单。"
     },
     "themes": {
-      "title": "三种主题，随你习惯",
+      "title": "四种界面，桌面与手机随心切换",
       "tabLabel": "选择播放主题",
       "classic": {
         "name": "经典双窗口",
@@ -46,6 +46,11 @@ window.AG_COPY = {
         "description": "加速播放、BPM 调整与节拍网格，直观看清音乐节奏。",
         "imageAlt": "专业模式主题的大幅波形与播放控制",
         "mobileDescription": "加速播放、调整 BPM，用节拍网格把握节奏。"
+      },
+      "mobile": {
+        "name": "手机版",
+        "description": "PC 版核心功能与音频工具延伸到手机，支持音乐管理、音频编辑、伴奏分离、格式转换和元数据管理。",
+        "imageAlt": "AgPlayer 手机版音乐库、音频工具和多轨编辑界面"
       }
     },
     "waveforms": {
@@ -248,16 +253,13 @@ window.AG_COPY = {
       "checksum": {
         "label": "SHA-256 校验值",
         "windowsLabel": "Windows：SHA-256 校验值",
-        "macosLabel": "macOS：SHA-256 校验值",
         "copy": "复制"
       },
       "macos": {
-        "security": "此版本尚未经过 Apple 公证。首次打开如遇系统提示，请先阅读 Apple 官方教程，并确认文件来自可信来源。",
-        "help": "在 Mac 上安全地打开 App（Apple 官方教程）",
         "name": "macOS",
         "status": "暂未提供下载",
         "system": "macOS 13 及以上（Apple / Intel）",
-        "description": "通用安装包，同时支持 Intel 与 Apple Silicon。"
+        "description": "下载地址与系统要求将在发布时更新。"
       },
       "faqTitle": "下载前，了解这些",
       "faq": {
@@ -383,7 +385,7 @@ window.AG_COPY = {
       "descriptionDetail": "Reveal the detail in sound through waveforms. Keep playback, organization, and editing simple."
     },
     "themes": {
-      "title": "Three themes. Your way to listen.",
+      "title": "Four interfaces. Desktop and mobile, your way.",
       "tabLabel": "Choose a player theme",
       "classic": {
         "name": "Classic dual window",
@@ -401,6 +403,11 @@ window.AG_COPY = {
         "description": "Speed up playback, adjust BPM, and follow the rhythm with a beat grid.",
         "imageAlt": "Large waveform and playback controls in the Pro mode",
         "mobileDescription": "Speed up playback, adjust BPM, and follow the beat grid."
+      },
+      "mobile": {
+        "name": "Mobile",
+        "description": "Bring core PC features and audio tools to your phone, including library management, audio editing, vocal separation, format conversion, and metadata editing.",
+        "imageAlt": "AgPlayer mobile music library, audio tools, and multitrack editor"
       }
     },
     "waveforms": {
@@ -603,16 +610,13 @@ window.AG_COPY = {
       "checksum": {
         "label": "SHA-256 checksum",
         "windowsLabel": "Windows: SHA-256 checksum",
-        "macosLabel": "macOS: SHA-256 checksum",
         "copy": "Copy"
       },
       "macos": {
-        "security": "This version has not been notarized by Apple. If macOS displays a warning, read Apple’s guide and verify that the file is from a trusted source.",
-        "help": "Safely open apps on your Mac (Apple guide)",
         "name": "macOS",
         "status": "Not yet available",
         "system": "macOS 13 or later (Apple / Intel)",
-        "description": "One Universal installer for Intel and Apple Silicon."
+        "description": "Links and system requirements at release."
       },
       "faqTitle": "Before you download",
       "faq": {
