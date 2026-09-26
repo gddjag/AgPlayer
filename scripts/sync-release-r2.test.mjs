@@ -21,6 +21,18 @@ test('shared releases require matching Windows and Universal macOS packages', ()
   assert.equal(latest.files[1].r2Url, 'https://download.agplayer.com/releases/v1.0.3/AgPlayer-1.0.3-macOS-universal.dmg');
 });
 
+test('1.0.9 and later releases also require the matching Android arm64 package', () => {
+  const tag = 'v1.0.9';
+  const release = { tag_name: tag, published_at: 'now' };
+  const assets = [
+    { name: 'AgPlayer-Setup-1.0.9-x64.exe', id: 1, state: 'uploaded', size: 42 },
+    { name: 'AgPlayer-1.0.9-macOS-universal.dmg', id: 2, state: 'uploaded', size: 84 },
+    { name: 'AgPlayer-1.0.9-arm64-release.apk', id: 3, state: 'uploaded', size: 126 }
+  ];
+  assert.throws(() => selectAssets(release, assets.slice(0, 2), tag), /Android/);
+  assert.equal(selectAssets(release, assets, tag).length, 3);
+});
+
 test('accept only stable, canonical version tags', () => {
   assert.equal(validateTag('v1.0.0'), 'v1.0.0');
   for (const tag of ['1.0.0', 'v1.0.0-beta', 'v01.0.0', '../v1.0.0', undefined]) assert.throws(() => validateTag(tag));
@@ -229,25 +241,27 @@ test('upload publishes latest JSON last with no-cache and never downgrades it', 
   }
 });
 
-test('prune removes only superseded release packages after verifying both current files', async () => {
+test('prune removes only superseded release packages after verifying all current files', async () => {
   assert.equal(typeof releaseSync.pruneOldReleases, 'function');
   process.env.AWS_ACCESS_KEY_ID = 'test-only';
   process.env.AWS_SECRET_ACCESS_KEY = 'test-only';
   try {
-  const tag = 'v1.0.7';
+  const tag = 'v1.0.9';
   const files = [
-    { name: 'AgPlayer-Setup-1.0.7-x64.exe', size: 42, sha256: 'a'.repeat(64) },
-    { name: 'AgPlayer-1.0.7-macOS-universal.dmg', size: 84, sha256: 'b'.repeat(64) }
+    { name: 'AgPlayer-Setup-1.0.9-x64.exe', size: 42, sha256: 'a'.repeat(64) },
+    { name: 'AgPlayer-1.0.9-macOS-universal.dmg', size: 84, sha256: 'b'.repeat(64) },
+    { name: 'AgPlayer-1.0.9-arm64-release.apk', size: 126, sha256: 'c'.repeat(64) }
   ];
   const latest = releaseSync.buildLatest({ tag, publishedAt: '2026-09-21T00:00:00Z',
-    releaseNotesUrl: 'https://github.com/gddjag/AgPlayer/releases/tag/v1.0.7', files });
+    releaseNotesUrl: 'https://github.com/gddjag/AgPlayer/releases/tag/v1.0.9', files });
   const keys = [
     'releases/v1.0.5/AgPlayer-Setup-1.0.5-x64.exe',
     'releases/v1.0.6/AgPlayer-1.0.6-macOS-universal.dmg',
+    'releases/v1.0.8/AgPlayer-1.0.8-arm64-release.apk',
     'releases/v1.0.6/SHA256SUMS',
     'releases/v1.0.6/release-notes.txt',
-    'releases/v1.0.7/AgPlayer-Setup-1.0.7-x64.exe',
-    'releases/v1.0.8/AgPlayer-Setup-1.0.8-x64.exe'
+    'releases/v1.0.9/AgPlayer-Setup-1.0.9-x64.exe',
+    'releases/v1.0.10/AgPlayer-Setup-1.0.10-x64.exe'
   ];
   const deleted = [];
   const verifiedRemoved = [];
@@ -270,8 +284,8 @@ test('prune removes only superseded release packages after verifying both curren
     assert.fail(`Unexpected AWS command: ${args.join(' ')}`);
   };
   await releaseSync.pruneOldReleases(tag, run);
-  assert.deepEqual(deleted, keys.slice(0, 3));
-  assert.deepEqual(verifiedRemoved, keys.slice(0, 3));
+  assert.deepEqual(deleted, [keys[0], keys[1], keys[2], keys[3]]);
+  assert.deepEqual(verifiedRemoved, [keys[0], keys[1], keys[2], keys[3]]);
   } finally {
     delete process.env.AWS_ACCESS_KEY_ID;
     delete process.env.AWS_SECRET_ACCESS_KEY;

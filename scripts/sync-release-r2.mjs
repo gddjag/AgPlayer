@@ -45,7 +45,7 @@ export function buildLatest(manifest) {
     publishedAt: manifest.publishedAt,
     releaseNotesUrl: manifest.releaseNotesUrl,
     files: manifest.files.map(file => {
-      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:exe|dmg)$/i.test(file.name) || !Number.isSafeInteger(file.size) || file.size <= 0 || !/^[a-f0-9]{64}$/.test(file.sha256)) {
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:exe|dmg|apk)$/i.test(file.name) || !Number.isSafeInteger(file.size) || file.size <= 0 || !/^[a-f0-9]{64}$/.test(file.sha256)) {
         throw new Error('Invalid latest release file');
       }
       const name = encodeURIComponent(file.name);
@@ -64,11 +64,11 @@ export function selectAssets(release, assets, tag) {
   if (release.tag_name !== tag || release.draft || release.prerelease || !release.published_at) {
     throw new Error('Release must be published, non-draft, and non-prerelease');
   }
-  const selected = assets.filter(asset => /\.(?:exe|dmg)$/i.test(asset.name));
+  const selected = assets.filter(asset => /\.(?:exe|dmg|apk)$/i.test(asset.name));
   if (!selected.length) throw new Error('No installer assets: upload the installers, then rerun with the release tag');
   const names = new Set();
   for (const asset of selected) {
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:exe|dmg)$/i.test(asset.name) || names.has(asset.name.toLowerCase())) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(?:exe|dmg|apk)$/i.test(asset.name) || names.has(asset.name.toLowerCase())) {
       throw new Error('installer names must be unique portable filenames using letters, digits, dots, underscores, or hyphens');
     }
     if (!Number.isSafeInteger(asset.id) || asset.id <= 0 || asset.state !== 'uploaded' || !Number.isSafeInteger(asset.size) || asset.size <= 0) {
@@ -81,6 +81,10 @@ export function selectAssets(release, assets, tag) {
     for (const expected of [`AgPlayer-Setup-${tag.slice(1)}-x64.exe`, `AgPlayer-${tag.slice(1)}-macOS-universal.dmg`]) {
       if (!names.has(expected.toLowerCase())) throw new Error(`Synchronized Windows/macOS release requires ${expected}`);
     }
+  }
+  if (compareVersions(tag.slice(1), '1.0.9') >= 0) {
+    const expected = `AgPlayer-${tag.slice(1)}-arm64-release.apk`;
+    if (!names.has(expected.toLowerCase())) throw new Error(`Synchronized Android release requires ${expected}`);
   }
   return selected.sort((a, b) => a.name.localeCompare(b.name, 'en'));
 }
@@ -202,8 +206,9 @@ export async function pruneOldReleases(tag, run = execFileSync) {
   if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) throw new Error('R2 access key secrets are required');
   const aws = args => run('aws', [...args, '--endpoint-url', endpoint, '--region', 'auto'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   const latest = JSON.parse(aws(['s3', 'cp', `s3://${bucket}/updates/latest.json`, '-', '--only-show-errors']));
+  const expectedFileCount = compareVersions(tag.slice(1), '1.0.9') >= 0 ? 3 : 2;
   if (latest.schemaVersion !== 1 || latest.tag !== tag || latest.version !== tag.slice(1)
-      || !Array.isArray(latest.files) || latest.files.length !== 2) {
+      || !Array.isArray(latest.files) || latest.files.length !== expectedFileCount) {
     throw new Error('R2 latest tag is not the complete requested release');
   }
   const expected = buildLatest(latest);
@@ -231,6 +236,7 @@ export async function pruneOldReleases(tag, run = execFileSync) {
       const name = match[4];
       if (name === `AgPlayer-Setup-${version}-x64.exe`
           || name === `AgPlayer-${version}-macOS-universal.dmg`
+          || name === `AgPlayer-${version}-arm64-release.apk`
           || name === 'SHA256SUMS') obsolete.push(key);
     }
     continuation = page.IsTruncated ? page.NextContinuationToken : undefined;
