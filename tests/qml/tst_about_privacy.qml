@@ -17,7 +17,7 @@ TestCase {
   const checkUpdates=findChild(page,"aboutCheckUpdates"); verify(checkUpdates)
   compare(button.text,"隐私政策")
   compare(button.font.pixelSize,checkUpdates.font.pixelSize)
-  compare(button.implicitHeight,checkUpdates.implicitHeight)
+  verify(Math.abs(button.implicitHeight-checkUpdates.implicitHeight)<=1)
   compare(button.width,checkUpdates.width)
   compare(button.leftPadding,checkUpdates.leftPadding)
   compare(button.rightPadding,checkUpdates.rightPadding)

@@ -14,6 +14,7 @@ TestCase {
     MetadataEditPage {
         id: page
         anchors.fill: parent
+        macDesktopLayout: false
     }
 
     function test_generic_metadata_notice_is_compact_and_not_a_write_failure() {
@@ -67,12 +68,19 @@ TestCase {
 
     Component {
         id: compactPageComponent
-        MetadataEditPage { width: 880; height: 560 }
+        MetadataEditPage {
+            width: 880
+            height: 560
+            macDesktopLayout: false
+        }
     }
 
     Component {
         id: responsivePageComponent
-        MetadataEditPage { height: 700 }
+        MetadataEditPage {
+            height: 700
+            macDesktopLayout: false
+        }
     }
 
     function init() {

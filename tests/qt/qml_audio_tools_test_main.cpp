@@ -415,8 +415,10 @@ public:
     {
         const QString source = sourceUrl.toLocalFile();
         if (source.isEmpty() || !QFile::exists(source)) return {};
-        const QString destination = QStandardPaths::writableLocation(
-            QStandardPaths::TempLocation)
+        const QString tempDirectory = QStandardPaths::writableLocation(
+            QStandardPaths::TempLocation);
+        if (tempDirectory.isEmpty() || !QDir().mkpath(tempDirectory)) return {};
+        const QString destination = tempDirectory
             + QStringLiteral("/agplayer-audio-tools-ui-%1-%2.%3")
                 .arg(QCoreApplication::applicationPid())
                 .arg(QUuid::createUuid().toString(QUuid::Id128))

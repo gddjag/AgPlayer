@@ -13,12 +13,20 @@ TestCase {
 
     Component {
         id: pageComponent
-        FilenameProcessPage { width: 1668; height: 835 }
+        FilenameProcessPage {
+            width: 1668
+            height: 835
+            macDesktopLayout: false
+        }
     }
 
     Component {
         id: compactPageComponent
-        FilenameProcessPage { width: 880; height: 468 }
+        FilenameProcessPage {
+            width: 880
+            height: 468
+            macDesktopLayout: false
+        }
     }
 
     Component {
