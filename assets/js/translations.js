@@ -173,35 +173,35 @@ window.AG_COPY = {
       "sceneAlt": "暗色工作室中，侧脸人物面对双屏；左屏显示专业模式播放器，右屏显示伴奏分离",
       "separation": {
         "title": "伴奏分离",
-        "description": "分离人声与伴奏，专注每一层声音。"
+        "description": "从音频或视频中提取人声、伴奏，也可分离鼓组、贝斯等音轨；试听各轨后，按需选择导出。"
       },
       "conversion": {
         "title": "格式转换",
-        "description": "常用音频格式，轻松转换。"
+        "description": "批量转换 MP3、FLAC、WAV、AAC 等常见格式；也可提取视频音轨，并设置采样率、声道与位深。"
       },
       "editing": {
         "title": "音频编辑",
-        "description": "框选、剪辑，保留喜欢的片段。"
+        "description": "拖入音频或视频即可载入并提取音轨；多轨波形支持录音、框选、分割与裁剪，还可调整音量、BPM 和升降调，试听后导出。"
       },
       "pitch": {
         "title": "升降调",
-        "description": "调整音调，找到合适的表达。"
+        "description": "按半音升降调；可启用变速保调与人声 Formant 保护，边听边调，减少音色变化。"
       },
       "bpm": {
         "title": "BPM 分析",
-        "description": "读懂节奏，整理你的音乐。"
+        "description": "自动检测并调整 BPM 与播放速度，配合节拍网格定位节奏，方便练习、混音和剪辑。"
       },
       "metadata": {
         "title": "元数据修改",
-        "description": "标题、艺人、封面，清晰归档。"
+        "description": "批量编辑标题、艺人、专辑、流派、日期、自定义标签和 BPM；更换封面，预览后写入音频文件。"
       },
       "filenames": {
         "title": "文件名处理",
-        "description": "批量整理，让命名井然有序。"
+        "description": "批量添加或移除前后缀、替换空格并自动编号；先预览新名称和冲突状态，再统一重命名。"
       },
       "lossless": {
         "title": "无损鉴别",
-        "description": "查看频谱与编码特征，辅助判断音质。"
+        "description": "分析频谱截止、有效位深与重采样痕迹，提示疑似转码或升频文件；结论依据音频特征推断。"
       }
     },
     "mini": {
@@ -530,35 +530,35 @@ window.AG_COPY = {
       "sceneAlt": "A person in profile at a dark studio desk, with the Pro mode player on the left monitor and stem separation on the right",
       "separation": {
         "title": "Vocal and stem separation",
-        "description": "Separate vocals and accompaniment to focus on each layer of sound."
+        "description": "Extract vocals and accompaniment from audio or video, and split drums, bass, and other stems. Preview each track and export only the parts you need."
       },
       "conversion": {
         "title": "Format conversion",
-        "description": "Convert popular audio formats with ease."
+        "description": "Batch-convert common formats such as MP3, FLAC, WAV, and AAC. Extract audio from video and set the output sample rate, channels, and bit depth."
       },
       "editing": {
         "title": "Audio editing",
-        "description": "Select, trim, and keep your favorite sections."
+        "description": "Add audio or video to load a track or extract its soundtrack. Record and edit across waveform tracks: select, split, and trim, adjust volume, BPM, and pitch, then preview and export."
       },
       "pitch": {
         "title": "Pitch adjustment",
-        "description": "Adjust the pitch to find the right expression."
+        "description": "Shift pitch by semitones, with optional pitch-preserving speed changes and vocal formant protection. Fine-tune while previewing."
       },
       "bpm": {
         "title": "BPM analysis",
-        "description": "Understand the tempo. Organize your music."
+        "description": "Detect and adjust BPM and playback speed. Use the beat grid to follow timing for practice, mixing, and editing."
       },
       "metadata": {
         "title": "Metadata editing",
-        "description": "Keep titles, artists, and artwork neatly organized."
+        "description": "Batch-edit titles, artists, albums, genre, date, custom tags, and BPM. Replace cover art and preview changes before writing them to files."
       },
       "filenames": {
         "title": "File naming",
-        "description": "Organize file names in batches."
+        "description": "Batch-add or remove prefixes and suffixes, replace spaces, and number files automatically. Preview names and conflicts before renaming."
       },
       "lossless": {
         "title": "Audio quality analysis",
-        "description": "Inspect spectral and encoding characteristics to help assess audio quality."
+        "description": "Analyze frequency cutoffs, effective bit depth, and resampling traces to flag possible transcodes or upsampling. Findings are based on audio characteristics."
       }
     },
     "mini": {
