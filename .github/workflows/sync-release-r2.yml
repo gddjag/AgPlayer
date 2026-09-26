@@ -1,4 +1,4 @@
-name: Sync release Windows and macOS installer to R2
+name: Sync release Windows, macOS, and Android installers to R2
 
 on:
   release:
@@ -31,12 +31,12 @@ jobs:
           node-version: '22'
       - name: Validate release sync logic
         run: node --test scripts/sync-release-r2.test.mjs
-      - name: Download and verify published Windows and macOS installer assets
+      - name: Download and verify published Windows, macOS, and Android assets
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: node scripts/sync-release-r2.mjs download
-      - name: Upload Windows and macOS installer assets, checksums, and latest metadata
+      - name: Upload installers, checksums, and latest metadata
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -48,3 +48,13 @@ jobs:
         run: |
           aws --version
           node scripts/sync-release-r2.mjs upload
+      - name: Remove superseded R2 release packages
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+          AWS_EC2_METADATA_DISABLED: 'true'
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: node scripts/sync-release-r2.mjs prune

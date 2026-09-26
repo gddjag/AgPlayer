@@ -6,14 +6,28 @@
   const requestTimeoutMs = 10000;
   const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
   const publishedWindowsRelease = Object.freeze({
-    version: '1.0.8',
-    size: 36655024,
-    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.8/AgPlayer-Setup-1.0.8-x64.exe',
-    r2Url: 'https://download.agplayer.com/releases/v1.0.8/AgPlayer-Setup-1.0.8-x64.exe',
-    sha256: '0565007B72D03168EDE3620EC64314142F089C0676BE6EEA2A6D3D9537A15B4B'
+    version: '1.0.9',
+    size: 36691029,
+    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.9/AgPlayer-Setup-1.0.9-x64.exe',
+    r2Url: 'https://download.agplayer.com/releases/v1.0.9/AgPlayer-Setup-1.0.9-x64.exe',
+    sha256: '23BFD1616449506E1727D77ABE13E1A2258AB11886EEF24F67885F61A78C1C3D'
+  });
+  const publishedMacRelease = Object.freeze({
+    version: '1.0.9',
+    size: 95010781,
+    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.9/AgPlayer-1.0.9-macOS-universal.dmg',
+    r2Url: 'https://download.agplayer.com/releases/v1.0.9/AgPlayer-1.0.9-macOS-universal.dmg',
+    sha256: '85AE4BBEFCAA189544C531817E92787141DEAA8FC4C68F615D584F718E8EF779'
+  });
+  const publishedAndroidRelease = Object.freeze({
+    version: '1.0.9',
+    size: 239792754,
+    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.9/AgPlayer-1.0.9-arm64-release.apk',
+    r2Url: 'https://download.agplayer.com/releases/v1.0.9/AgPlayer-1.0.9-arm64-release.apk',
+    sha256: '4813D65F4F5A3CA197664BFE45A512B8C00D95AF879F44C2669A179A8278ECEC'
   });
 
-  function selectWindowsRelease(manifest, platform = 'windows') {
+  function selectRelease(manifest, platform = 'windows') {
     if (!manifest || manifest.schemaVersion !== 1 || typeof manifest.version !== 'string' || !stableVersion.test(manifest.version)) return null;
     const tag = `v${manifest.version}`;
     if (manifest.tag !== tag
@@ -21,7 +35,13 @@
       || !Number.isFinite(Date.parse(manifest.publishedAt))
       || manifest.releaseNotesUrl !== `https://github.com/gddjag/AgPlayer/releases/tag/${tag}`
       || !Array.isArray(manifest.files)) return null;
-    const name = platform === 'macos' ? `AgPlayer-${manifest.version}-macOS-universal.dmg` : `AgPlayer-Setup-${manifest.version}-x64.exe`;
+    const names = {
+      windows: `AgPlayer-Setup-${manifest.version}-x64.exe`,
+      macos: `AgPlayer-${manifest.version}-macOS-universal.dmg`,
+      android: `AgPlayer-${manifest.version}-arm64-release.apk`
+    };
+    const name = names[platform];
+    if (!name) return null;
     const file = manifest.files.find(item => item?.name === name);
     if (!file || !Number.isSafeInteger(file.size) || file.size <= 0 || !/^[a-f0-9]{64}$/.test(file.sha256)) return null;
     const encodedName = encodeURIComponent(name);
@@ -45,15 +65,17 @@
   function ensureDownloadDetails() {
     const windows = document.querySelector('#windows');
     const macos = document.querySelector('#macos');
-    if (!windows || !macos) return;
+    const android = document.querySelector('#android');
+    if (!windows || !macos || !android) return;
     const details = (systemKey, systemText, filename, size) => {
       const list = document.createElement('dl');
       list.className = 'platform-meta';
       list.innerHTML = `<div><dt data-i18n="downloadPage.meta.system">${AG.t('downloadPage.meta.system')}</dt><dd data-i18n="${systemKey}">${systemText}</dd></div><div><dt data-i18n="downloadPage.meta.filename">${AG.t('downloadPage.meta.filename')}</dt><dd data-meta="filename">${filename}</dd></div><div><dt data-i18n="downloadPage.meta.size">${AG.t('downloadPage.meta.size')}</dt><dd data-meta="size">${size}</dd></div>`;
       return list;
     };
-    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.8-x64.exe', '35.0 MB'));
-    if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), 'AgPlayer-1.0.8-macOS-universal.dmg', '90.5 MB'));
+    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.9-x64.exe', '35.0 MB'));
+    if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), 'AgPlayer-1.0.9-macOS-universal.dmg', '待发布'));
+    if (!android.querySelector('.platform-meta')) android.querySelector('h2')?.after(details('downloadPage.android.system', AG.t('downloadPage.android.system'), 'AgPlayer-1.0.9-arm64-release.apk', '228.7 MB'));
     const platforms = windows.closest('.platforms');
     let checksum = document.querySelector('#windows-checksum');
     if (!checksum) {
@@ -97,29 +119,33 @@
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   }
 
-  function renderMacRelease(release) {
-    const primary = document.querySelector('#macos .download-macos-primary');
-    const github = document.querySelector('#macos .download-macos-github');
+  function renderLinkedRelease(platform, release) {
+    const primary = document.querySelector(`#${platform} .download-${platform}-primary`);
+    const github = document.querySelector(`#${platform} .download-${platform}-github`);
     if (!primary || !github) return;
     primary.href = release.r2Url;
     github.href = release.githubUrl;
-    const filename = document.querySelector('#macos [data-meta="filename"]');
-    const size = document.querySelector('#macos [data-meta="size"]');
-    const checksum = document.querySelector('#macos-sha256');
-    if (filename) filename.textContent = `AgPlayer-${release.version}-macOS-universal.dmg`;
+    const filename = document.querySelector(`#${platform} [data-meta="filename"]`);
+    const size = document.querySelector(`#${platform} [data-meta="size"]`);
+    const checksum = document.querySelector(`#${platform}-sha256`);
+    const suffix = platform === 'macos' ? 'macOS-universal.dmg' : 'arm64-release.apk';
+    if (filename) filename.textContent = `AgPlayer-${release.version}-${suffix}`;
     if (size) size.textContent = `${(release.size / 1048576).toFixed(1)} MB`;
     if (checksum) checksum.textContent = release.sha256;
   }
 
+  function bindChecksumCopy(platform) {
+    const button = document.querySelector(`#${platform}-sha256-copy`);
+    const value = document.querySelector(`#${platform}-sha256`);
+    if (button && value) button.addEventListener('click', () => {
+      void navigator.clipboard?.writeText(value.textContent).catch(() => {});
+    });
+  }
+
   async function hydrateDownloads() {
     ensureDownloadDetails();
-    const macChecksumCopy = document.querySelector('#macos-sha256-copy');
-    const macChecksumValue = document.querySelector('#macos-sha256');
-    if (macChecksumCopy && macChecksumValue) {
-      macChecksumCopy.addEventListener('click', () => {
-        void navigator.clipboard?.writeText(macChecksumValue.textContent).catch(() => {});
-      });
-    }
+    bindChecksumCopy('macos');
+    bindChecksumCopy('android');
     const primary = document.querySelector('.download-primary');
     const github = document.querySelector('.download-github');
     const status = document.querySelector('#windows-download-status');
@@ -147,6 +173,8 @@
       void navigator.clipboard?.writeText(activeRelease.sha256).catch(() => {});
     });
     renderRelease(publishedWindowsRelease);
+    renderLinkedRelease('macos', publishedMacRelease);
+    renderLinkedRelease('android', publishedAndroidRelease);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
     try {
@@ -160,11 +188,13 @@
       const text = await readManifest(response);
       if (text === null) return;
       const manifest = JSON.parse(text);
-      const release = selectWindowsRelease(manifest);
-      const macRelease = selectWindowsRelease(manifest, 'macos');
-      if (!release || !macRelease) return;
+      const release = selectRelease(manifest);
+      const macRelease = selectRelease(manifest, 'macos');
+      const androidRelease = selectRelease(manifest, 'android');
+      if (!release || !macRelease || !androidRelease) return;
       renderRelease(release);
-      renderMacRelease(macRelease);
+      renderLinkedRelease('macos', macRelease);
+      renderLinkedRelease('android', androidRelease);
     } catch (_) {
       // Keep the last published downloads when live metadata is unavailable.
     } finally {

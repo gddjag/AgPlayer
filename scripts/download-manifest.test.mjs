@@ -7,7 +7,6 @@ import { runInNewContext } from 'node:vm';
 
 const scriptPath = join(import.meta.dirname, '..', 'assets', 'js', 'downloads.js');
 const downloadPagePath = join(import.meta.dirname, '..', 'download.html');
-const siteCssPath = join(import.meta.dirname, '..', 'assets', 'css', 'site.css');
 
 function fakeElement() {
   const attributes = new Map([['aria-disabled', 'true']]);
@@ -58,7 +57,12 @@ async function runDownloadScript(response, timers = {}) {
   const macGithub = fakeElement();
   const macChecksum = fakeElement();
   const macChecksumCopy = fakeElement();
-  macChecksum.textContent = 'BDDA37B91E9A6603410ED4CC117414AB4E8A50F9EF58AB6091D1A0A42333E31B';
+  const androidPrimary = fakeElement();
+  const androidGithub = fakeElement();
+  const androidChecksum = fakeElement();
+  const androidChecksumCopy = fakeElement();
+  macChecksum.textContent = '85AE4BBEFCAA189544C531817E92787141DEAA8FC4C68F615D584F718E8EF779';
+  androidChecksum.textContent = '4813D65F4F5A3CA197664BFE45A512B8C00D95AF879F44C2669A179A8278ECEC';
   checksum.setAttribute('hidden', '');
   const documentListeners = new Map();
   const calls = [];
@@ -74,7 +78,11 @@ async function runDownloadScript(response, timers = {}) {
     ['#macos .download-macos-primary', macPrimary],
     ['#macos .download-macos-github', macGithub],
     ['#macos-sha256', macChecksum],
-    ['#macos-sha256-copy', macChecksumCopy]
+    ['#macos-sha256-copy', macChecksumCopy],
+    ['#android .download-android-primary', androidPrimary],
+    ['#android .download-android-github', androidGithub],
+    ['#android-sha256', androidChecksum],
+    ['#android-sha256-copy', androidChecksumCopy]
   ]);
   const context = {
     document: {
@@ -98,7 +106,7 @@ async function runDownloadScript(response, timers = {}) {
   };
   runInNewContext(await readFile(scriptPath, 'utf8'), context, { filename: scriptPath });
   await new Promise(resolve => setTimeout(resolve, 0));
-  return { primary, github, status, checksum, checksumValue, checksumCopy, macPrimary, macGithub, macChecksum, macChecksumCopy, calls, navigations, clipboardWrites, documentListeners };
+  return { primary, github, status, checksum, checksumValue, checksumCopy, macPrimary, macGithub, macChecksum, macChecksumCopy, androidPrimary, androidGithub, androidChecksum, androidChecksumCopy, calls, navigations, clipboardWrites, documentListeners };
 }
 
 function manifest(overrides = {}) {
@@ -116,7 +124,7 @@ function manifest(overrides = {}) {
       sha256: 'a'.repeat(64),
       githubUrl: `https://github.com/gddjag/AgPlayer/releases/download/v${version}/${name}`,
       r2Url: `https://download.agplayer.com/releases/v${version}/${name}`
-    }, macFile(version)],
+    }, macFile(version), androidFile(version)],
     ...overrides
   };
 }
@@ -128,31 +136,40 @@ function macFile(version = '1.0.4') {
     r2Url: `https://download.agplayer.com/releases/v${version}/${name}` };
 }
 
-test('one verified manifest updates both platforms and rejects a forged macOS route', async () => {
+function androidFile(version = '1.0.4') {
+  const name = `AgPlayer-${version}-arm64-release.apk`;
+  return { name, size: 239792754, sha256: 'c'.repeat(64),
+    githubUrl: `https://github.com/gddjag/AgPlayer/releases/download/v${version}/${name}`,
+    r2Url: `https://download.agplayer.com/releases/v${version}/${name}` };
+}
+
+test('one verified manifest updates all downloadable platforms and rejects a forged route', async () => {
   const result = await runDownloadScript(streamedResponse(JSON.stringify(manifest())));
   assert.equal(result.macPrimary.href, macFile().r2Url);
   assert.equal(result.macGithub.href, macFile().githubUrl);
   assert.equal(result.macChecksum.textContent, 'B'.repeat(64));
+  assert.equal(result.androidPrimary.href, androidFile().r2Url);
+  assert.equal(result.androidGithub.href, androidFile().githubUrl);
+  assert.equal(result.androidChecksum.textContent, 'C'.repeat(64));
   const bad = manifest();
   bad.files[1].r2Url = 'https://example.com/forged.dmg';
   const rejected = await runDownloadScript(streamedResponse(JSON.stringify(bad)));
-  assert.equal(rejected.macPrimary.href, undefined);
-  assert.equal(rejected.checksumValue.textContent, '0565007B72D03168EDE3620EC64314142F089C0676BE6EEA2A6D3D9537A15B4B');
+  assert.equal(rejected.macPrimary.href, 'https://download.agplayer.com/releases/v1.0.9/AgPlayer-1.0.9-macOS-universal.dmg');
+  assert.equal(rejected.checksumValue.textContent, '23BFD1616449506E1727D77ABE13E1A2258AB11886EEF24F67885F61A78C1C3D');
 });
 
 test('macOS HTML fallback links the accepted package and official opening guide', async () => {
   const html = await readFile(downloadPagePath, 'utf8');
   assert.match(html, /href="https:\/\/support\.apple\.com\/zh-cn\/102445"/);
   assert.match(html, /尚未经过 Apple 公证/);
-  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.0\.8\/AgPlayer-1\.0\.8-macOS-universal\.dmg"/);
-  assert.match(html, /BDDA37B91E9A6603410ED4CC117414AB4E8A50F9EF58AB6091D1A0A42333E31B/);
+  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.0\.9\/AgPlayer-1\.0\.9-macOS-universal\.dmg"/);
   assert.match(html, /id="macos-sha256-copy"[^>]*data-i18n="downloadPage.checksum.copy"/);
 });
 
 test('macOS copy uses the displayed checksum for fallback and live metadata', async () => {
   const fallback = await runDownloadScript({ok:false});
   fallback.macChecksumCopy.click();
-  assert.deepEqual(fallback.clipboardWrites, ['BDDA37B91E9A6603410ED4CC117414AB4E8A50F9EF58AB6091D1A0A42333E31B']);
+  assert.deepEqual(fallback.clipboardWrites, ['85AE4BBEFCAA189544C531817E92787141DEAA8FC4C68F615D584F718E8EF779']);
   const live = await runDownloadScript(streamedResponse(JSON.stringify(manifest())));
   live.macChecksumCopy.click();
   assert.deepEqual(live.clipboardWrites, ['B'.repeat(64)]);
@@ -184,7 +201,7 @@ test('published Windows release exposes the real uppercase SHA-256 and copies it
   const payload = manifest({ files: [{
     ...manifest().files[0],
     sha256: expected.toLowerCase()
-  }, macFile()] });
+  }, macFile(), androidFile()] });
   const result = await runDownloadScript(streamedResponse(JSON.stringify(payload)));
 
   assert.equal(result.checksum.hasAttribute('hidden'), false);
@@ -195,7 +212,7 @@ test('published Windows release exposes the real uppercase SHA-256 and copies it
   assert.deepEqual(result.clipboardWrites, [expected]);
 });
 
-test('published 1.0.8 remains available when the live manifest cannot be read', async () => {
+test('published 1.0.9 remains available when the live manifest cannot be read', async () => {
   const cases = [
     { ok: false },
     streamedResponse('x'.repeat(65537)),
@@ -207,21 +224,24 @@ test('published 1.0.8 remains available when the live manifest cannot be read', 
     assert.equal(result.primary.disabled, false);
     assert.equal(result.github.disabled, false);
     assert.equal(result.checksum.hasAttribute('hidden'), false);
-    assert.equal(result.checksumValue.textContent, '0565007B72D03168EDE3620EC64314142F089C0676BE6EEA2A6D3D9537A15B4B');
+    assert.equal(result.checksumValue.textContent, '23BFD1616449506E1727D77ABE13E1A2258AB11886EEF24F67885F61A78C1C3D');
     result.primary.click();
     result.github.click();
     assert.deepEqual(result.navigations, [
-      'https://download.agplayer.com/releases/v1.0.8/AgPlayer-Setup-1.0.8-x64.exe',
-      'https://github.com/gddjag/AgPlayer/releases/download/v1.0.8/AgPlayer-Setup-1.0.8-x64.exe'
+      'https://download.agplayer.com/releases/v1.0.9/AgPlayer-Setup-1.0.9-x64.exe',
+      'https://github.com/gddjag/AgPlayer/releases/download/v1.0.9/AgPlayer-Setup-1.0.9-x64.exe'
     ]);
   }
 });
 
-test('download page hides the removed pre-download FAQ section and divider', async () => {
+test('download page removes the FAQ divider and exposes Android plus HarmonyOS cards', async () => {
   const html = await readFile(downloadPagePath, 'utf8');
-  const css = await readFile(siteCssPath, 'utf8');
-  assert.match(css, /\.download-faq\s*\{\s*display:\s*none\s*\}/);
-  assert.match(html, /downloads\.js\?v=20260922-release-108-dual/);
+  assert.doesNotMatch(html, /class="download-faq"/);
+  assert.match(html, /id="android"/);
+  assert.match(html, /AgPlayer-1\.0\.9-arm64-release\.apk/);
+  assert.match(html, /id="harmonyos"/);
+  assert.match(html, /HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版/);
+  assert.match(html, /downloads\.js\?v=20260927-release-109-triple/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
