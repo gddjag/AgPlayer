@@ -9,7 +9,7 @@ const output = join(root, 'public');
 if (dirname(output) !== root) throw new Error('Output must remain inside the repository');
 await rm(output, { recursive: true, force: true });
 await mkdir(output);
-for (const entry of ['index.html', 'download.html', 'about.html', 'assets']) {
+for (const entry of ['index.html', 'download.html', 'about.html', 'assets', 'privacy']) {
   await cp(join(root, entry), join(output, entry), { recursive: true });
 }
-console.log('Static site ready in public/ (3 HTML pages and assets only).');
+console.log('Static site ready in public/ (website pages, assets and privacy policy).');
