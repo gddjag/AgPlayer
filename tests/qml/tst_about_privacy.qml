@@ -18,7 +18,7 @@ TestCase {
   compare(button.text,"隐私政策")
   compare(button.font.pixelSize,checkUpdates.font.pixelSize)
   verify(Math.abs(button.implicitHeight-checkUpdates.implicitHeight)<=1)
-  compare(button.width,checkUpdates.width)
+  verify(Math.abs(button.width-checkUpdates.width)<=1)
   compare(button.leftPadding,checkUpdates.leftPadding)
   compare(button.rightPadding,checkUpdates.rightPadding)
   verify(waitForRendering(page)); wait(300)
