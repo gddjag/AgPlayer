@@ -10,6 +10,8 @@
 
 namespace agplayer {
 
+class ProprietaryAudioInput;
+
 struct MediaMetadata final {
     std::string title;
     std::string artist;
@@ -20,6 +22,8 @@ struct MediaMetadata final {
     std::string composer;
     std::string comment;
     std::string bpm;
+    std::string replay_gain_track_db, replay_gain_album_db;
+    std::string replay_gain_track_peak, replay_gain_album_peak;
     std::string custom_tag;
     std::string copyright;
     std::string encoder;
@@ -73,6 +77,7 @@ struct DecoderOpenOptions final {
     DecoderReadCallback custom_read = nullptr;
     DecoderSeekCallback custom_seek = nullptr;
     void* custom_io_context = nullptr;
+    ProprietaryAudioInput* proprietary_audio_input = nullptr;
     std::string input_format_hint;
     DecoderPacketCallback packet_callback = nullptr;
     void* packet_context = nullptr;

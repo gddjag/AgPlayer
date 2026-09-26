@@ -1,6 +1,7 @@
 #pragma once
 
 #include "scratch_pcm_window.hpp"
+#include "decoder.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -19,6 +20,9 @@ struct ScratchBackfillRequest final {
     std::int64_t anchor_frame{};
     std::uint64_t generation{};
     std::uint64_t epoch{};
+    // Optional caller-authorized input (for sandboxed file providers).
+    // Its context must outlive this worker and is used only by its decode thread.
+    DecoderOpenOptions input_options{};
 };
 
 struct ScratchBackfillLease final {

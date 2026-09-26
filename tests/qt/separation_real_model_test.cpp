@@ -3,6 +3,7 @@
 #include "ort_session.hpp"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QHash>
 #include <QJsonArray>
@@ -157,9 +158,9 @@ void SeparationRealModelTest::cudaPublisherReferenceWhenExplicitlyEnabled()
         }
     CancellationToken cancelled;
     double referenceVsNativeError = 0, referenceVsInputError = 0, referenceInputEnergy = 0;
-    for (int row = 0; row < names.size(); ++row) {
+    {
         QFile model(QDir(qEnvironmentVariable("AGPLAYER_SEPARATION_CATALOG_ROOT"))
-                        .filePath("htdemucs_ft_" + names[row] + "_fp16weights.onnx"));
+                        .filePath("htdemucs_fp16weights.onnx"));
         QVERIFY(model.open(QIODevice::ReadOnly));
         OrtModelSession session;
         const auto opened = session.open(qEnvironmentVariable("AGPLAYER_SEPARATION_ORT_DLL"),
@@ -173,10 +174,11 @@ void SeparationRealModelTest::cudaPublisherReferenceWhenExplicitlyEnabled()
         QCOMPARE(normalized.output.size(), inferred.output.size());
         QVERIFY(std::all_of(inferred.output.cbegin(), inferred.output.cend(), [](float x) { return std::isfinite(x); }));
         QVERIFY(std::all_of(normalized.output.cbegin(), normalized.output.cend(), [](float x) { return std::isfinite(x); }));
+        for (int row = 0; row < names.size(); ++row) {
         double rawEnergy = 0, normalizedEnergy = 0, deltaEnergy = 0;
         double rawPeak = 0, normalizedPeak = 0;
         qint64 comparedSamples = 0;
-        // Publisher contract: raw float32 input, each specialist's own row, no
+        // Publisher contract: raw float32 input, all four rows from one model, no
         // normalization or ensemble average. This bypasses native chunk/OLA/export.
         for (int f = overlap; f < stride && start + f < input.frames; ++f) {
             for (int c = 0; c < 2; ++c) {
@@ -200,6 +202,7 @@ void SeparationRealModelTest::cudaPublisherReferenceWhenExplicitlyEnabled()
                 << "raw RMS/peak" << std::sqrt(rawEnergy / comparedSamples) << rawPeak
                 << "normalized RMS/peak" << std::sqrt(normalizedEnergy / comparedSamples) << normalizedPeak
                 << "delta/raw NRMS" << std::sqrt(deltaEnergy / rawEnergy);
+        }
     }
     double normalizedVsInputError = 0;
     for (int f = overlap; f < stride && start + f < input.frames; ++f) {
@@ -274,10 +277,7 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
         {QStringLiteral("voc-ft"),
          {catalog.filePath(QStringLiteral("UVR-MDX-NET-Voc_FT.onnx"))}},
         {QStringLiteral("demucs"),
-         {catalog.filePath(QStringLiteral("htdemucs_ft_bass_fp16weights.onnx")),
-          catalog.filePath(QStringLiteral("htdemucs_ft_drums_fp16weights.onnx")),
-          catalog.filePath(QStringLiteral("htdemucs_ft_other_fp16weights.onnx")),
-          catalog.filePath(QStringLiteral("htdemucs_ft_vocals_fp16weights.onnx"))}},
+         {catalog.filePath(QStringLiteral("htdemucs_fp16weights.onnx"))}},
     };
     int exercisedModels = 0;
     for (const auto& entry : approved) {
@@ -310,6 +310,9 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
             requestedStems.push_back(stem);
             stemLabels.push_back(stem);
         }
+        QElapsedTimer separationTimer;
+        separationTimer.start();
+        QString lastPhase;
         const BackendResult result = backend.separate(
             {{QStringLiteral("runtimePath"), runtime},
              {QStringLiteral("inputPath"), input},
@@ -323,7 +326,14 @@ approvedCatalogModelRunsOnRequestedDeviceWhenExplicitlyEnabled()
              {QStringLiteral("stems"), requestedStems},
              {QStringLiteral("stemLabels"), stemLabels},
              {QStringLiteral("device"), requestedDevice}},
-            cancelled, [](double, const QString&) {});
+            cancelled, [&](double, const QString& phase) {
+                if (phase == lastPhase) return;
+                lastPhase = phase;
+                qInfo().noquote() << entry.first << phase
+                                  << separationTimer.elapsed() << "ms";
+            });
+        qInfo().noquote() << entry.first << "total"
+                          << separationTimer.elapsed() << "ms";
         QVERIFY2(result.ok,
                  qPrintable(entry.first + QStringLiteral(": ") + result.code
                             + QStringLiteral(": ") + result.message));

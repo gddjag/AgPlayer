@@ -194,6 +194,7 @@ class SettingsController final : public QObject {
 
     // About
     Q_PROPERTY(QString version READ version CONSTANT)
+    Q_PROPERTY(QString privacyPolicyText READ privacyPolicyText CONSTANT)
     Q_PROPERTY(QObject* updateChecker READ updateChecker CONSTANT)
     Q_PROPERTY(QString releaseDate READ releaseDate CONSTANT)
 
@@ -301,6 +302,7 @@ public:
 
     // About getters
     QString version() const;
+    QString privacyPolicyText() const;
     QObject* updateChecker() const;
     QString releaseDate() const;
 

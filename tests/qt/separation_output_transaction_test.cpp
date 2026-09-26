@@ -200,7 +200,7 @@ void SeparationOutputTransactionTest::commitUsesLocalizedStemLabelsAndVisibleMod
         {output.path(), QStringLiteral("陈百强  偏偏喜欢你"), QStringLiteral("flac"),
          {QStringLiteral("vocals"), QStringLiteral("instrumental"),
           QStringLiteral("drums"), QStringLiteral("bass"), QStringLiteral("other")},
-         QStringLiteral("HTDemucs FT FP16"),
+         QStringLiteral("HTDemucs FP16"),
          {QStringLiteral("人声"), QStringLiteral("伴奏"), QStringLiteral("鼓组"),
           QStringLiteral("贝斯"), QStringLiteral("其他")},
          QStringLiteral("陈百强  偏偏喜欢你-five-stem")});
@@ -218,11 +218,11 @@ void SeparationOutputTransactionTest::commitUsesLocalizedStemLabelsAndVisibleMod
 
     QVERIFY2(committed.ok, qPrintable(committed.message));
     QStringList expected{
-        QStringLiteral("陈百强  偏偏喜欢你-人声-HTDemucs FT FP16.flac"),
-        QStringLiteral("陈百强  偏偏喜欢你-伴奏-HTDemucs FT FP16.flac"),
-        QStringLiteral("陈百强  偏偏喜欢你-鼓组-HTDemucs FT FP16.flac"),
-        QStringLiteral("陈百强  偏偏喜欢你-贝斯-HTDemucs FT FP16.flac"),
-        QStringLiteral("陈百强  偏偏喜欢你-其他-HTDemucs FT FP16.flac")};
+        QStringLiteral("陈百强  偏偏喜欢你-人声-HTDemucs FP16.flac"),
+        QStringLiteral("陈百强  偏偏喜欢你-伴奏-HTDemucs FP16.flac"),
+        QStringLiteral("陈百强  偏偏喜欢你-鼓组-HTDemucs FP16.flac"),
+        QStringLiteral("陈百强  偏偏喜欢你-贝斯-HTDemucs FP16.flac"),
+        QStringLiteral("陈百强  偏偏喜欢你-其他-HTDemucs FP16.flac")};
     expected.sort();
     QCOMPARE(QFileInfo(committed.outputs.front()).absolutePath(),
              output.filePath(QStringLiteral("陈百强  偏偏喜欢你-five-stem")));

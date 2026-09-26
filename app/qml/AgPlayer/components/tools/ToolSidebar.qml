@@ -68,6 +68,9 @@ Rectangle {
             }
         }
 
-        Item { Layout.fillWidth: true }
+        Item {
+            visible: !navigation.compactLayout
+            Layout.fillWidth: visible
+        }
     }
 }

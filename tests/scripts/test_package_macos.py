@@ -1,5 +1,6 @@
 """Portable policy tests; these fixtures are not a macOS runtime smoke test."""
 
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -188,6 +189,21 @@ class BundlePolicyTests(BundleFixture):
             self.skipTest(f"symlinks unavailable on this host: {error}")
         self.assertEqual(len(packaging.validate_bundle(self.app)["mach_o"]), 3)
 
+    def test_removed_score_components_rejected(self):
+        for name in ("AgTranscriptionWorker", "verovio-data", "yourmt3-model", "basic_pitch.json", "transcription-capabilities.json"):
+            with self.subTest(name=name):
+                artifact = self.resources / name
+                artifact.write_bytes(b"old score component")
+                with self.assertRaisesRegex(packaging.PackageError, "Removed audio-to-MIDI/score"):
+                    packaging.validate_bundle(self.app)
+                artifact.unlink()
+
+    def test_old_player_with_score_controller_rejected(self):
+        player = self.app / "Contents/MacOS/AgPlayer"
+        player.write_bytes(player.read_bytes() + b"TranscriptionController")
+        with self.assertRaisesRegex(packaging.PackageError, "rebuild from stripped sources"):
+            packaging.validate_bundle(self.app)
+
     def test_model_weights_rejected(self):
         (self.resources / "model.onnx").write_bytes(b"model")
         with self.assertRaisesRegex(packaging.PackageError, "external|model"):
@@ -208,7 +224,7 @@ class PackageFlowTests(BundleFixture):
         for relative in ["assets/licenses", "LICENSES/runtime", "app/qml", "assets/brand"]:
             (self.repo / relative).mkdir(parents=True)
         (self.repo / "THIRD-PARTY-NOTICES.md").write_text("Windows inventory\n", encoding="utf-8")
-        (self.repo / "assets/brand/desktop-install-icon.png").write_bytes(b"source icon")
+        (self.repo / "assets/brand/macos-app-icon.png").write_bytes(b"source icon")
         for relative in packaging.REQUIRED_LICENSES:
             (self.repo / relative).parent.mkdir(parents=True, exist_ok=True)
             (self.repo / relative).write_text("license", encoding="utf-8")
@@ -239,7 +255,7 @@ class PackageFlowTests(BundleFixture):
                 self.assertIn("-no-plugins", args)
                 self.assertIn("-executable=" + str(self.staged / "Contents/MacOS/AgSeparationWorker"), args)
         elif tool == "sips":
-            self.assertIn(str(self.repo / "assets/brand/desktop-install-icon.png"), args)
+            self.assertIn(str(self.repo / "assets/brand/macos-app-icon.png"), args)
             Path(args[args.index("--out") + 1]).write_bytes(b"sized icon")
         elif tool == "iconutil":
             Path(args[args.index("-o") + 1]).write_bytes(b"icns")
@@ -259,6 +275,11 @@ class PackageFlowTests(BundleFixture):
             self.assertTrue((self.staged / "Contents/Resources/THIRD-PARTY-NOTICES.md").is_file())
             self.assertTrue((self.staged / "Contents/Resources/licenses/runtime/Qt-LGPL-3.0-only.txt").is_file())
             Path(args[-1]).write_bytes(b"test disk image")
+        elif tool == "ditto":
+            self.assertEqual(args[1:5], ["-c", "-k", "--sequesterRsrc", "--keepParent"])
+            self.assertEqual(Path(args[-2]), self.staged)
+            self.assertTrue((self.staged / "Contents/Resources/AgPlayer.icns").is_file())
+            Path(args[-1]).write_bytes(b"test app zip")
         elif tool == "xcrun" and "notarytool" in args:
             output = json.dumps({"id": "fixture-submission", "status": "Accepted"})
         return subprocess.CompletedProcess(args, 0, stdout=output, stderr="")
@@ -287,6 +308,57 @@ class PackageFlowTests(BundleFixture):
         self.assertEqual(Path(signing[-1][-1]).suffix, ".app")
         report = json.loads(Path(result["report"]).read_text(encoding="utf-8"))
         self.assertEqual(report["required_architectures"], ["arm64", "x86_64"])
+        self.assertEqual(report["archive_format"], "dmg")
+        self.assertTrue(result["artifact"].endswith(".dmg"))
+        self.assertTrue(any(args[0] == "hdiutil" for args in self.commands))
+
+    def test_zip_preserves_app_packaging_gates_without_creating_a_disk_image(self):
+        result = self.package(archive_format="zip")
+        artifact = Path(result["artifact"])
+        self.assertEqual(artifact.name, "AgPlayer-1.0.3-macOS-universal-internal-adhoc-test.app.zip")
+        self.assertEqual(result["archive_format"], "zip")
+        self.assertEqual(result["sha256"], hashlib.sha256(artifact.read_bytes()).hexdigest())
+        self.assertTrue(result["signing"]["verified"])
+        self.assertEqual(result["required_architectures"], ["arm64", "x86_64"])
+        self.assertTrue((Path(result["app"]) / "Contents/PlugIns/platforms/libqcocoa.dylib").is_file())
+        self.assertFalse(any(args[0] == "hdiutil" or "notarytool" in args for args in self.commands))
+        signatures = [args for args in self.commands if "--sign" in args]
+        self.assertTrue(all("--deep" not in args for args in signatures))
+        self.assertEqual(Path(signatures[-1][-1]), self.staged)
+        archive_index = next(i for i, args in enumerate(self.commands) if args[0] == "ditto")
+        self.assertTrue(any("--verify" in args for args in self.commands[:archive_index]))
+
+    def test_invalid_bundle_cannot_bypass_validation_using_zip(self):
+        universal(self.worker, arches=("arm64",))
+        with self.assertRaises(packaging.PackageError):
+            self.package(archive_format="zip")
+        self.assertFalse(any(args[0] in ("codesign", "ditto", "hdiutil") for args in self.commands))
+
+    def test_empty_zip_is_not_published(self):
+        original_run = self.fake_run
+
+        def empty_zip(argv, **kwargs):
+            result = original_run(argv, **kwargs)
+            if str(argv[0]) == "ditto":
+                Path(argv[-1]).write_bytes(b"")
+            return result
+
+        self.fake_run = empty_zip
+        with self.assertRaisesRegex(packaging.PackageError, "nonempty zip"):
+            self.package(archive_format="zip")
+        self.assertFalse(list(self.output.glob("*.zip")))
+        self.assertFalse((self.output / "staging/AgPlayer.app").exists())
+
+    def test_zip_notarization_rejected_before_any_tool(self):
+        with self.assertRaisesRegex(packaging.PackageError, "archive-format dmg"):
+            self.package(archive_format="zip", notary_profile="profile",
+                         sign_identity="Developer ID Application: Example (1234567890)")
+        self.assertFalse(self.commands)
+
+    def test_unknown_archive_format_rejected_before_any_tool(self):
+        with self.assertRaisesRegex(packaging.PackageError, "archive-format"):
+            self.package(archive_format="tar")
+        self.assertFalse(self.commands)
 
     def test_adhoc_internal_package_does_not_enable_hardened_runtime(self):
         result = self.package()

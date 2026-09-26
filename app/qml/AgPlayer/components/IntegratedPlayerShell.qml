@@ -33,11 +33,9 @@ Item {
     property bool sidePanelExpanded: true
 
     property int topBarHeight: Theme.titleBarHeight
-    property int leftColumnWidth: width < 1300
-                                  ? Theme.navigationWidthCompact
-                                  : Theme.navigationWidth
+    property int leftColumnWidth: Theme.navigationWidth
     property int rightColumnWidth: Theme.playerInspectorWidth
-    property int waveformHeight: 120
+    property int waveformHeight: Qt.platform.os === "osx" ? 100 : 96
     property int waveformNavigatorHeight: 8
     property int bottomBarHeight: Theme.playerBottomBarHeight
     property int contentSpacing: Theme.spacingSm

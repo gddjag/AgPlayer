@@ -403,15 +403,15 @@ TestCase {
         const before = AudioEditorController.viewport.visibleFrameCount
 
         mouseWheel(interaction, interaction.width / 2, interaction.height / 2,
-                   0, 120, Qt.NoButton, Qt.NoModifier)
+                   0, 120, Qt.NoButton, Qt.ControlModifier)
         compare(AudioEditorController.viewport.visibleFrameCount,
                 Math.round(before / 1.25))
         mouseWheel(interaction, interaction.width / 2, interaction.height / 2,
-                   0, -120, Qt.NoButton, Qt.NoModifier)
+                   0, -120, Qt.NoButton, Qt.ControlModifier)
         verify(Math.abs(AudioEditorController.viewport.visibleFrameCount - before) <= 1)
         const start = AudioEditorController.viewport.visibleStartFrame
         mouseWheel(interaction, interaction.width / 2, interaction.height / 2,
-                   0, -120, Qt.NoButton, Qt.ControlModifier)
+                   0, -120, Qt.NoButton, Qt.NoModifier)
         compare(AudioEditorController.viewport.visibleFrameCount, before)
         verify(AudioEditorController.viewport.visibleStartFrame > start)
     }

@@ -243,8 +243,22 @@ TestCase {
                "the model deck must fit its complete action row")
         verify(settings.height <= 160,
                "output settings must align with the compact source row")
-        verify(timeline.height >= 276,
+        verify(timeline.height >= 306,
                "the five result waveforms need the recovered vertical space")
+        const kinds = [VocalSeparationController.Vocals,
+                       VocalSeparationController.Accompaniment,
+                       VocalSeparationController.Drums,
+                       VocalSeparationController.Bass,
+                       VocalSeparationController.Other]
+        for (const kind of kinds) {
+            const track = findChild(page, "separationTimelineStem-" + kind)
+            verify(track && track.height >= 44,
+                   "each result track needs enough height for its waveform")
+        }
+        const vocalsWaveform = findChild(
+            page, "separationStemWaveform-" + VocalSeparationController.Vocals)
+        verify(vocalsWaveform && vocalsWaveform.height >= 38,
+               "the visible result waveform should gain height with its track")
     }
 
     function test_inputAndStemTracksUseTheSharedWaveformRenderer() {
@@ -360,17 +374,19 @@ TestCase {
         verify(findChild(customCard, "separationCustomModelCopy").text
                .indexOf("自动识别支持的模型") >= 0)
         verify(backupText.text.indexOf("支持与环境") >= 0)
-        verify(backupText.text.indexOf("MDX / MDXC ONNX") >= 0)
+        verify(backupText.text.indexOf("MDX ONNX") >= 0)
+        verify(backupText.text.indexOf("htdemucs_fp16weights.onnx") >= 0)
+        verify(backupText.text.indexOf("166 MB") >= 0)
         verify(backupText.text.indexOf("Demucs .th") >= 0)
         verify(backupText.text.indexOf("https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888") >= 0)
         verify(backupText.text.indexOf("提取码: 8888") >= 0)
     }
 
     function test_modelCardsExposeDomesticMirrorAndGreenPercentageProgress() {
-        const card = findChild(page, "separationModelCard-htdemucs-ft-fp16")
+        const card = findChild(page, "separationModelCard-htdemucs-fp16")
         verify(card)
-        verify(findChild(card, "separationDomesticMirror-htdemucs-ft-fp16"))
-        const percentage = findChild(card, "separationDownloadPercentage-htdemucs-ft-fp16")
+        verify(findChild(card, "separationDomesticMirror-htdemucs-fp16"))
+        const percentage = findChild(card, "separationDownloadPercentage-htdemucs-fp16")
         verify(percentage)
         compare(percentage.color.toString(), Theme.success.toString())
     }
@@ -443,6 +459,40 @@ TestCase {
                "five output-track choices must remain compact")
         verify(findChild(page, "separationBackupModelAction"),
                "the free backup model location must remain available")
+    }
+
+    function test_compactStemChecksStayInsideTheirButtons() {
+        const instance = createTemporaryObject(viewportPage, testCase,
+                                               {width: 1200, height: 820})
+        verify(instance)
+        verify(waitForRendering(instance))
+        const accompaniment = findChild(instance, "separationStemOption-"
+                                       + VocalSeparationController.Accompaniment)
+        accompaniment.contentItem.children[1].children[0].text =
+            "Accompaniment (derived) / 伴奏"
+        accompaniment.contentItem.children[1].children[0].font.pixelSize = 18
+        accompaniment.contentItem.children[1].children[1].text =
+            "Long accompaniment description at larger Mac font metrics"
+        wait(0)
+        const kinds = [VocalSeparationController.Vocals,
+                       VocalSeparationController.Accompaniment,
+                       VocalSeparationController.Drums,
+                       VocalSeparationController.Bass,
+                       VocalSeparationController.Other]
+        for (const kind of kinds) {
+            const option = findChild(instance, "separationStemOption-" + kind)
+            const icon = findChild(instance, "separationStemIcon-" + kind)
+            const check = findChild(instance, "separationStemCheck-" + kind)
+            verify(option && icon && check)
+            const left = check.mapToItem(option, 0, 0).x
+            const iconRight = icon.mapToItem(option, icon.width, 0).x
+            verify(option.width <= 120,
+                   "compact track button must not grow past its allotted width: " + kind)
+            verify(left >= 0 && left + check.width <= option.width,
+                   "check must stay inside its track button: " + kind)
+            verify(iconRight < left,
+                   "check must not overlap the track icon: " + kind)
+        }
     }
 
     function test_sourcePlaybackDoesNotAnimateResultWaveforms() {
@@ -705,10 +755,14 @@ TestCase {
         const progressBackground = findChild(
             page, "separationJobProgressBackground")
         const percentage = findChild(page, "separationJobPercentage")
+        const primary = findChild(page, "separationPrimaryAction")
+        const primaryFill = findChild(page, "separationPrimaryProgressFill")
+        const primaryPercent = findChild(page, "separationPrimaryProgressPercent")
         const bottom = findChild(page, "separationBottomBar")
         const play = findChild(page, "separationTransportPlay")
         const time = findChild(page, "separationTransportTime")
-        verify(progress && progressBackground && percentage && bottom && play && time)
+        verify(progress && progressBackground && percentage && primary
+               && primaryFill && primaryPercent && bottom && play && time)
         verify(progressBackground.border.color.a <= 0.4)
         verify(Math.abs(progressBackground.border.color.r
                         - progressBackground.border.color.g) <= 0.08)
@@ -717,16 +771,27 @@ TestCase {
         compare(progress.value, 0)
         compare(percentage.text, "0%")
         compare(percentage.color, page.success)
+        verify(!primaryFill.visible && !primaryPercent.visible)
 
         separationTestDriver.setJobProgress(0.64, "separating")
         compare(progress.value, 0.64)
         compare(percentage.text, "64%")
+        verify(primaryFill.visible && primaryPercent.visible)
+        compare(primaryPercent.text, "64%")
+        verify(Math.abs(primaryFill.width - (primary.width - 2) * 0.64) < 2)
+        verify(primary.Accessible.name.indexOf("64%") >= 0)
+        if (visualFixtureOutput)
+            grabImage(page).save(visualFixtureOutput + "-primary-progress.png")
+        separationTestDriver.setJobState(VocalSeparationController.Cancelling, "cancelling")
+        compare(primaryPercent.text, "64%")
+        verify(primaryFill.visible && !primary.enabled)
         verify(bottom.height >= 78)
         verify(play.width >= 44)
         verify(time.font.pixelSize >= 20)
         const reSeparate = controlWithText(bottom, "重新分离")
         verify(reSeparate && reSeparate.height >= 36)
         separationTestDriver.reset()
+        verify(!primaryFill.visible && !primaryPercent.visible)
     }
 
     function test_gpuCandidateCanBeSelectedAfterProbe() {
@@ -778,11 +843,11 @@ TestCase {
         compare(VocalSeparationController.models.length, 3)
         verify(page.modelSupports("uvr-mdxnet-kara", "vocals"))
         verify(!page.modelSupports("uvr-mdxnet-kara", "drums"))
-        verify(page.modelSupports("htdemucs-ft-fp16", "drums"))
-        verify(page.modelSupports("htdemucs-ft-fp16", "other"))
+        verify(page.modelSupports("htdemucs-fp16", "drums"))
+        verify(page.modelSupports("htdemucs-fp16", "other"))
         verify(findChild(page, "modelStemSummary-uvr-mdxnet-kara").text
                .indexOf("人声 / 伴奏") >= 0)
-        verify(findChild(page, "modelStemSummary-htdemucs-ft-fp16").text
+        verify(findChild(page, "modelStemSummary-htdemucs-fp16").text
                .indexOf("鼓组") >= 0)
     }
 
@@ -1021,7 +1086,7 @@ TestCase {
 
     function test_switchingModelKeepsPublishedWaveformsVisible() {
         separationTestDriver.reset()
-        separationTestDriver.selectModel("htdemucs-ft-fp16")
+        separationTestDriver.selectModel("htdemucs-fp16")
         separationTestDriver.setCompleted()
         const drums = page.stemInfo(VocalSeparationController.Drums)
         verify(drums.available && drums.waveform.length > 0)
@@ -1156,9 +1221,17 @@ TestCase {
         separationTestDriver.reset()
         separationTestDriver.setJobFailure("Worker 意外退出")
         const errorPanel = findChild(page, "separationErrorPanel")
+        const statusText = findChild(errorPanel, "separationStatusText")
         const retry = controlWithText(errorPanel, "重试")
         verify(errorPanel.visible)
-        verify(retry && retry.enabled)
+        compare(statusText.text, "请添加要分离的文件")
+        compare(page.jobStateText(), "等待添加文件")
+        verify(retry && !retry.visible)
+
+        separationTestDriver.setInput(testAudioUrl)
+        separationTestDriver.setJobFailure("Worker 意外退出")
+        compare(statusText.text, "Worker 意外退出")
+        verify(retry.visible && retry.enabled)
         waitForRendering(page)
         const retryPosition = retry.mapToItem(errorPanel, 0, 0)
         verify(retryPosition.y >= 0)
@@ -1171,7 +1244,7 @@ TestCase {
         compare(VocalSeparationController.stems.filter(function(stem) {
             return stem.supported
         }).length, 2)
-        separationTestDriver.selectModel("htdemucs-ft-fp16")
+        separationTestDriver.selectModel("htdemucs-fp16")
         compare(VocalSeparationController.stems.filter(function(stem) {
             return stem.supported
         }).length, 5)

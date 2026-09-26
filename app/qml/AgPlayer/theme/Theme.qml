@@ -48,8 +48,8 @@ QtObject {
     readonly property color background: contentSurface
     readonly property color textPrimary: isLight ? "#202328" : "#F2F3F5"
     readonly property color textSecondary: isLight ? "#5E646D" : "#B7BBC2"
-    readonly property color textTertiary: isLight ? "#898F98" : "#858B95"
-    readonly property color textDisabled: isLight ? "#ADB2BA" : "#666C75"
+    readonly property color textTertiary: isLight ? "#6B737D" : "#858B95"
+    readonly property color textDisabled: isLight ? "#5F6670" : "#666C75"
     readonly property color opaqueBorder: isLight ? "#D5D9E0" : "#353941"
     readonly property color borderStrong: isLight ? "#B9BEC7" : "#4A505A"
     readonly property color opaqueDivider: opaqueBorder
@@ -75,9 +75,9 @@ QtObject {
     readonly property color highlightText: "#FFFFFF"
     readonly property color highlightBorder: accent
 
-    readonly property color success: "#22C55E"
-    readonly property color warning: "#F59E0B"
-    readonly property color error: "#EF4444"
+    readonly property color success: isLight ? "#15803D" : "#22C55E"
+    readonly property color warning: isLight ? "#9A6700" : "#F59E0B"
+    readonly property color error: isLight ? "#C62828" : "#EF4444"
     readonly property color danger: error
     readonly property color recording: "#FF4057"
     readonly property color critical: error

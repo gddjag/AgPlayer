@@ -42,6 +42,34 @@ TestCase {
         }
     }
 
+    function test_retainedListIsSelectedWhenPageReopens() {
+        FilenameProcessor.clear()
+        const copy = nativeDropHelper.copyForNativeDrop(testAudioUrl)
+        verify(copy.toString().length > 0)
+        FilenameProcessor.loadFiles([copy])
+        tryCompare(FilenameProcessor, "busy", false, 30000)
+        compare(FilenameProcessor.fileCount, 1)
+        const reopened = createTemporaryObject(pageComponent, testCase)
+        verify(reopened)
+        wait(0)
+        compare(reopened.selectedIndices.length, 1)
+        const originalName = FilenameProcessor.entryAt(0).fileName
+        const prefix = findChild(reopened, "filenamePrefixField")
+        const start = findChild(reopened, "filenameStartButton")
+        verify(prefix && start)
+        for (let pass = 0; pass < 2; ++pass) {
+            prefix.text = "Again-"
+            reopened.refreshPreview()
+            verify(start.enabled)
+            mouseClick(start, start.width / 2, start.height / 2)
+            tryCompare(FilenameProcessor, "busy", false, 30000)
+            compare(FilenameProcessor.fileCount, 1)
+            compare(FilenameProcessor.entryAt(0).fileName,
+                    (pass === 0 ? "Again-" : "Again-Again-") + originalName)
+        }
+        FilenameProcessor.clear()
+    }
+
     function test_sharedTopNavigationHasFixedLeftInsetAndOrder() {
         var window = createTemporaryObject(navigationWindowComponent, testCase)
         verify(window)
@@ -67,7 +95,13 @@ TestCase {
         compare(scroller.contentWidth, scroller.width)
         const rulesTab = findChild(compactPage, "filenameCompactRulesTab")
         verify(rulesTab)
-        mouseClick(rulesTab, rulesTab.width / 2, rulesTab.height / 2)
+        if (!compactPage.macStackedLayout)
+            mouseClick(rulesTab, rulesTab.width / 2, rulesTab.height / 2)
+        else {
+            verify(!rulesTab.visible)
+            verify(findChild(compactPage, "filenameFilePanel").visible)
+            verify(findChild(compactPage, "filenameRulesPanel").visible)
+        }
         wait(0)
         verify(scroller.contentHeight > scroller.height)
         const commandPosition = commandBar.mapToItem(compactPage, 0, 0)
@@ -109,7 +143,10 @@ TestCase {
             compare(scroller.contentWidth, scroller.width)
             const rulesTab = findChild(candidate, "filenameCompactRulesTab")
             verify(rulesTab)
-            mouseClick(rulesTab, rulesTab.width / 2, rulesTab.height / 2)
+            if (!candidate.macStackedLayout)
+                mouseClick(rulesTab, rulesTab.width / 2, rulesTab.height / 2)
+            else
+                verify(!rulesTab.visible)
             wait(0)
             verify(scroller.contentHeight > scroller.height)
         }

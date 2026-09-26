@@ -95,13 +95,103 @@ int check_external_flac(const std::filesystem::path& directory)
     return checked > 0 && failures == 0 ? 0 : 1;
 }
 
+void check_id3_prefixed_wave(const std::filesystem::path& source)
+{
+    const auto directory = std::filesystem::temp_directory_path()
+        / ("agplayer-id3-wave-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
+    assert(std::filesystem::create_directory(directory));
+    const auto file = directory / "tagged-wave.mp3";
+    {
+        std::ifstream input(source, std::ios::binary);
+        std::ofstream output(file, std::ios::binary);
+        // ID3v2.3 with 16 padding bytes, then an ordinary WAVE container.
+        const char tag[26] = {'I', 'D', '3', 3, 0, 0, 0, 0, 0, 16};
+        output.write(tag, sizeof tag);
+        output << input.rdbuf();
+        assert(output.good());
+    }
+    agplayer::MediaMetadata original, tagged;
+    assert(agplayer::probe_media_metadata(source.u8string(), original) == AG_OK);
+    assert(agplayer::probe_media_metadata(file.u8string(), tagged) == AG_OK);
+    assert(tagged.sample_rate == original.sample_rate);
+    assert(tagged.duration_ms == original.duration_ms);
+    agplayer::Decoder decoder;
+    assert(decoder.open(file.u8string()) == AG_OK);
+    agplayer::DecodedAudioBlock block;
+    std::uint64_t frames = 0;
+    do {
+        assert(decoder.read(block) == AG_OK);
+        frames += block.frames;
+    } while (!block.end_of_stream);
+    assert(frames > 0);
+    assert(decoder.seek(tagged.duration_ms / 2) == AG_OK);
+    assert(decoder.read(block) == AG_OK && block.frames > 0);
+    decoder.close();
+    // Never skip an invalid synchsafe size to make malformed input look valid.
+    {
+        std::fstream corrupt(file, std::ios::binary | std::ios::in | std::ios::out);
+        corrupt.seekp(6);
+        corrupt.put(static_cast<char>(0x80));
+    }
+    assert(decoder.open(file.u8string()) != AG_OK);
+    std::filesystem::remove(file);
+    std::filesystem::remove(directory);
+}
+
+// Read-only regression check for a user-supplied file with recoverable MP3 damage.
+int check_external_audio(const std::filesystem::path& file)
+{
+    const std::string path = file.u8string();
+    agplayer::Decoder decoder;
+    if (decoder.open(path, 44'100, 2) != AG_OK) return 1;
+    agplayer::DecodedAudioBlock block;
+    std::uint64_t frames = 0;
+    ag_result result = AG_OK;
+    do {
+        result = decoder.read(block);
+        if (result != AG_OK) break;
+        frames += block.frames;
+    } while (!block.end_of_stream);
+    if (result != AG_OK || frames == 0) return 1;
+
+    decoder.close();
+    if (decoder.open(path, 44'100, 2) != AG_OK) return 1;
+    agplayer::DecodedAnalysisBlock analysis;
+    std::uint64_t analysis_frames = 0;
+    do {
+        result = decoder.readAnalysis(analysis);
+        if (result != AG_OK) break;
+        analysis_frames += analysis.frames;
+    } while (!analysis.end_of_stream);
+    if (result != AG_OK || analysis_frames != frames) return 1;
+
+    ag_waveform* waveform = nullptr;
+    result = ag_waveform_analyze(path.c_str(), 512, nullptr, nullptr,
+                                 nullptr, &waveform);
+    const bool waveform_ok = result == AG_OK && ag_waveform_count(waveform) > 0;
+    ag_waveform_destroy(waveform);
+    std::cout << "decoded_frames=" << frames
+              << " analysis_frames=" << analysis_frames
+              << " waveform=" << waveform_ok << std::endl;
+    return waveform_ok ? 0 : 1;
+}
+
 int main(const int argc, char** argv)
 {
+    if (argc == 3 && std::strcmp(argv[1], "--id3-wave") == 0) {
+        check_id3_prefixed_wave(std::filesystem::path(argv[2]));
+        return 0;
+    }
+    if (argc == 3 && std::strcmp(argv[1], "--external-audio") == 0) {
+        return check_external_audio(std::filesystem::path(argv[2]));
+    }
     if (argc == 3 && std::strcmp(argv[1], "--external-flac") == 0) {
         return check_external_flac(std::filesystem::path(argv[2]));
     }
     assert(argc == 6);
     const std::filesystem::path sine_path = argv[1];
+    check_id3_prefixed_wave(sine_path);
     const std::filesystem::path video_with_audio_path = argv[2];
     const std::filesystem::path video_only_path = argv[3];
     const std::filesystem::path audio_with_attached_picture_path = argv[4];

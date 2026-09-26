@@ -413,12 +413,14 @@ void SeparationProcessClient::handleLine(const QByteArray& line)
         return;
     }
     if (message.type == ProtocolType::Progress && state_ == Busy
-        && pendingType_ == ProtocolType::Start) {
+        && (pendingType_ == ProtocolType::Start
+            || pendingType_ == ProtocolType::Probe)) {
         heartbeatTimer_.start(std::max(1, deadlines_.heartbeatMs));
-        emit progressReceived(
-            std::clamp(message.payload.value(QStringLiteral("fraction")).toDouble(),
-                       0.0, 1.0),
-            message.payload.value(QStringLiteral("stage")).toString());
+        if (pendingType_ == ProtocolType::Start)
+            emit progressReceived(
+                std::clamp(message.payload.value(QStringLiteral("fraction")).toDouble(),
+                           0.0, 1.0),
+                message.payload.value(QStringLiteral("stage")).toString());
     } else if (message.type == ProtocolType::Probe && state_ == Busy
                && pendingType_ == ProtocolType::Probe) {
         heartbeatTimer_.stop();

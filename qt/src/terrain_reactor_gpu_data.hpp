@@ -1,12 +1,12 @@
 #pragma once
 
-#include <QtGlobal>
+#include <cstdint>
 #include <array>
 #include <cstddef>
 
 namespace agplayer::terrain::gpu {
 
-constexpr quint32 maximumInstances = 224U * 224U + 120U
+constexpr std::uint32_t maximumInstances = 224U * 224U + 120U
     + 28U * (1U + 3U + 16U + 12U) + 1600U;
 
 constexpr int cubeVertexCount = 24;
@@ -98,7 +98,7 @@ constexpr std::array<Vertex, cubeVertexCount> cubeVertices{{
     {{-0.5F, -0.5F,  0.5F}, { 0.0F, -1.0F,  0.0F}},
 }};
 
-constexpr std::array<quint16, cubeIndexCount> cubeIndices{{
+constexpr std::array<std::uint16_t, cubeIndexCount> cubeIndices{{
      0,  1,  2,  0,  2,  3,  4,  5,  6,  4,  6,  7,
      8,  9, 10,  8, 10, 11, 12, 13, 14, 12, 14, 15,
     16, 17, 18, 16, 18, 19, 20, 21, 22, 20, 22, 23,

@@ -35,13 +35,20 @@ bool EditorPlaybackAdapter::prepare(
         return false;
     }
     const ag_result result = agplayer::editor::replace_editor_playback_stream(
-        player_, std::move(stream));
+        player_, stream);
     if (result != AG_OK) {
         error = QStringLiteral("Unable to attach editor playback stream");
         release();
         return false;
     }
+    stream_ = std::move(stream);
     return true;
+}
+
+void EditorPlaybackAdapter::setTrackGains(
+    const std::array<float, agplayer::editor::kTrackCount>& gains)
+{
+    if (stream_) stream_->setTrackGains(gains);
 }
 
 ag_result EditorPlaybackAdapter::play() noexcept
@@ -74,5 +81,6 @@ ag_result EditorPlaybackAdapter::snapshot(
 
 void EditorPlaybackAdapter::release() noexcept
 {
+    stream_.reset();
     if (owner_ != nullptr) owner_->releaseEditorOutput();
 }

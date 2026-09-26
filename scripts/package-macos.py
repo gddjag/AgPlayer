@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage and validate an AgPlayer macOS 13 Universal test or Developer ID DMG.
+"""Stage and validate an AgPlayer macOS 13 Universal development DMG or app ZIP.
 
 This is a packaging gate, not macOS feature-parity, launch or audio acceptance.
 Only --notary-profile opts into uploading an artifact to Apple's notary service.
@@ -193,6 +193,8 @@ def bundle_files(app):
     for directory, directories, names in os.walk(app, followlinks=False):
         for name in directories + names:
             path = Path(directory) / name
+            if re.match(r"(?:AgTranscriptionWorker|transcription|yourmt3|basic[-_]pitch|(?:lib)?verovio)", name, re.I):
+                raise PackageError(f"Removed audio-to-MIDI/score component in package: {path}")
             if path.suffix.lower() in MODEL_SUFFIXES or re.match(r"(?:lib)?onnxruntime.*\.(?:dylib|so|dll)$", name, re.I):
                 raise PackageError(f"Optional model/runtime must remain external: {path}")
             if path.is_symlink():
@@ -244,6 +246,9 @@ def resolve_dependency(value, loader, executable, rpaths, app):
 def validate_bundle(app):
     app = Path(app).resolve(strict=True)
     files = bundle_files(app)
+    player = Path(app) / "Contents/MacOS/AgPlayer"
+    if player.is_file() and b"TranscriptionController" in player.read_bytes():
+        raise PackageError("Removed audio-to-MIDI/score controller; rebuild from stripped sources")
     manifest_path = app / "Contents/Info.plist"
     if not manifest_path.is_file():
         raise PackageError("Missing Contents/Info.plist")
@@ -409,7 +414,7 @@ def clean_development_rpaths(app):
 
 def add_resources(app, repo_root, temporary):
     required = [repo_root / value for value in REQUIRED_LICENSES]
-    required += [repo_root / "THIRD-PARTY-NOTICES.md", repo_root / "assets/brand/desktop-install-icon.png"]
+    required += [repo_root / "THIRD-PARTY-NOTICES.md", repo_root / "assets/brand/macos-app-icon.png"]
     for path in required:
         if not path.is_file():
             raise PackageError(f"Required packaging resource missing: {path}")
@@ -421,7 +426,7 @@ def add_resources(app, repo_root, temporary):
     shutil.copytree(repo_root / "LICENSES", licenses, dirs_exist_ok=True)
     iconset = temporary / "AgPlayer.iconset"
     iconset.mkdir()
-    source = repo_root / "assets/brand/desktop-install-icon.png"
+    source = repo_root / "assets/brand/macos-app-icon.png"
     for size in (16, 32, 128, 256, 512):
         for scale in (1, 2):
             name = f"icon_{size}x{size}{'@2x' if scale == 2 else ''}.png"
@@ -485,7 +490,12 @@ def sign_bundle(app, inventory, identity, temporary):
             "worker_entitlements": {"com.apple.security.cs.disable-library-validation": True}}
 
 
-def package_app(app, qt_root, output_dir, *, sign_identity=None, notary_profile=None, repo_root=None):
+def package_app(app, qt_root, output_dir, *, sign_identity=None, notary_profile=None,
+                archive_format="dmg", repo_root=None):
+    if archive_format not in ("dmg", "zip"):
+        raise PackageError("--archive-format must be 'dmg' or 'zip'")
+    if archive_format == "zip" and notary_profile is not None:
+        raise PackageError("--notary-profile requires --archive-format dmg; ZIP is for unnotarized development testing")
     identity = sign_identity or "-"
     if identity != "-" and not re.fullmatch(r"Developer ID Application: .+ \([A-Z0-9]{10}\)", identity):
         raise PackageError("--sign-identity must be '-' or a full Developer ID Application certificate name")
@@ -511,9 +521,10 @@ def package_app(app, qt_root, output_dir, *, sign_identity=None, notary_profile=
         "developer-id-notarized-development" if notary_profile else "developer-id-unnotarized-development")
     stem = f"AgPlayer-{version}-macOS-universal-{mode}"
     output_dir.mkdir(parents=True, exist_ok=True)
-    final_dmg, final_report = output_dir / f"{stem}.dmg", output_dir / f"{stem}.validation.json"
+    archive_name = f"{stem}.app.zip" if archive_format == "zip" else f"{stem}.dmg"
+    final_archive, final_report = output_dir / archive_name, output_dir / f"{stem}.validation.json"
     final_app = output_dir / "staging/AgPlayer.app"
-    if final_dmg.exists() or final_report.exists() or final_app.exists():
+    if final_archive.exists() or final_report.exists() or final_app.exists():
         raise PackageError(f"Refusing to overwrite existing packaging output: {stem}")
     with tempfile.TemporaryDirectory(prefix=".agplayer-macos-", dir=output_dir) as directory:
         temporary = Path(directory)
@@ -534,35 +545,40 @@ def package_app(app, qt_root, output_dir, *, sign_identity=None, notary_profile=
                        "license_inventory": "Existing bundled notices describe Windows; macOS deployed attributions require review",
                        "signing": sign_bundle(staged_app, report, identity, temporary),
                        "notarization": {"status": "not-requested"}})
-        (image_root / "Applications").symlink_to("/Applications", target_is_directory=True)
-        disk_image = temporary / f"{stem}.dmg"
-        run(["hdiutil", "create", "-volname", f"AgPlayer {version}", "-srcfolder", image_root,
-             "-format", "UDZO", "-fs", "HFS+", disk_image])
-        if identity != "-":
-            run(["codesign", "--force", "--sign", identity, "--timestamp", disk_image])
-            run(["codesign", "--verify", "--strict", disk_image])
+        archive = temporary / archive_name
+        if archive_format == "zip":
+            # ditto preserves executable bits, framework symlinks and resource forks.
+            run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", staged_app, archive])
+        else:
+            (image_root / "Applications").symlink_to("/Applications", target_is_directory=True)
+            run(["hdiutil", "create", "-volname", f"AgPlayer {version}", "-srcfolder", image_root,
+                 "-format", "UDZO", "-fs", "HFS+", archive])
+            if identity != "-":
+                run(["codesign", "--force", "--sign", identity, "--timestamp", archive])
+                run(["codesign", "--verify", "--strict", archive])
         if notary_profile:
-            response = json.loads(run(["xcrun", "notarytool", "submit", disk_image,
+            response = json.loads(run(["xcrun", "notarytool", "submit", archive,
                                        "--keychain-profile", notary_profile, "--wait", "--output-format", "json"]))
             if response.get("status") != "Accepted":
                 raise PackageError(f"Notarization failed: {response.get('status', 'missing status')}; submission {response.get('id')}")
-            run(["xcrun", "stapler", "staple", disk_image])
-            run(["xcrun", "stapler", "validate", disk_image])
+            run(["xcrun", "stapler", "staple", archive])
+            run(["xcrun", "stapler", "validate", archive])
             report["notarization"] = {"status": "Accepted", "submission_id": response.get("id"),
                                       "stapled": True, "staple_verified": True, "container": "dmg"}
-        if not disk_image.is_file() or not disk_image.stat().st_size:
-            raise PackageError("hdiutil did not create a nonempty disk image")
+        if not archive.is_file() or not archive.stat().st_size:
+            raise PackageError(f"Packaging did not create a nonempty {archive_format} archive")
         digest = hashlib.sha256()
-        with disk_image.open("rb") as stream:
+        with archive.open("rb") as stream:
             for block in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(block)
         checksum = digest.hexdigest()
-        report.update({"artifact": str(final_dmg), "report": str(final_report), "app": str(final_app), "sha256": checksum})
+        report.update({"artifact": str(final_archive), "archive_format": archive_format,
+                       "report": str(final_report), "app": str(final_app), "sha256": checksum})
         staged_report = temporary / "validation.json"
         staged_report.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         final_app.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(staged_app), final_app)
-        shutil.move(str(disk_image), final_dmg)
+        shutil.move(str(archive), final_archive)
         shutil.move(str(staged_report), final_report)
         return report
 
@@ -572,12 +588,15 @@ def main(argv=None):
     parser.add_argument("--app", type=Path, required=True, help="Universal AgPlayer.app to copy into staging")
     parser.add_argument("--qt-root", type=Path, required=True, help="Qt macOS root containing bin/macdeployqt")
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--archive-format", choices=("dmg", "zip"), default="dmg",
+                        help="Output container; zip creates a directly extractable .app.zip (default: dmg)")
     parser.add_argument("--sign-identity", help="Full Developer ID Application certificate name; default: internal ad-hoc test package")
     parser.add_argument("--notary-profile", help="Explicit opt-in to upload DMG using a stored notarytool keychain profile")
     args = parser.parse_args(argv)
     try:
         report = package_app(args.app, args.qt_root, args.output_dir,
-                             sign_identity=args.sign_identity, notary_profile=args.notary_profile)
+                             sign_identity=args.sign_identity, notary_profile=args.notary_profile,
+                             archive_format=args.archive_format)
     except (PackageError, OSError, ValueError, plistlib.InvalidFileException) as error:
         print(json.dumps({"status": "failed", "error": str(error)}, ensure_ascii=False), file=sys.stderr)
         return 1

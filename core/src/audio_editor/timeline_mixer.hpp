@@ -2,11 +2,13 @@
 
 #include "audio_document.hpp"
 #include "../decoder.hpp"
+#include "../time_pitch_engine.hpp"
 
 #include <array>
 #include <atomic>
 #include <string>
 #include <vector>
+#include <mutex>
 
 namespace agplayer::editor {
 
@@ -18,8 +20,10 @@ public:
     static constexpr std::size_t kBlockFrames = 4'096;
     [[nodiscard]] static bool prepare(TimelineSnapshot& snapshot, std::string& error);
     explicit TimelineMixer(TimelineSnapshot snapshot,
-                           const std::atomic_bool* cancelled = nullptr);
+                           const std::atomic_bool* cancelled = nullptr,
+                           agplayer::TimePitchEngineFactory engineFactory = &agplayer::create_time_pitch_engine);
     void seek(SampleFrame frame);
+    void setTrackGains(const std::array<float, kTrackCount>& gains);
     [[nodiscard]] ag_result read(std::vector<float>& samples, SampleFrame endFrame);
     [[nodiscard]] SampleFrame cursor() const noexcept { return cursor_; }
     [[nodiscard]] const TimelineSnapshot& snapshot() const noexcept { return snapshot_; }
@@ -31,10 +35,15 @@ private:
         std::unique_ptr<agplayer::Decoder> decoder;
         agplayer::DecodedAudioBlock block;
         std::size_t offset{};
+        std::unique_ptr<agplayer::ITimePitchEngine> processor;
+        std::vector<float> processed;
+        SampleFrame source_frames_left{};
+        bool flushed{};
     };
     [[nodiscard]] bool cancelled() const noexcept;
     [[nodiscard]] bool open(TrackReader& reader, const AudioEvent& event,
                             SampleFrame localOffset);
+    [[nodiscard]] ag_result nextProcessedBlock(TrackReader& reader);
     [[nodiscard]] ag_result mix(TrackReader& reader, std::vector<float>& samples,
                                 SampleFrame blockEnd);
 
@@ -42,6 +51,10 @@ private:
     std::array<TrackReader, kTrackCount> readers_;
     SampleFrame cursor_{};
     const std::atomic_bool* cancelled_{};
+    std::mutex gain_mutex_;
+    std::array<float, kTrackCount> gains_{};
+    std::array<float, kTrackCount> block_gains_{};
+    agplayer::TimePitchEngineFactory engine_factory_{};
 };
 
 // Applied exactly once, after session TimePitch (or after mixing at unity).

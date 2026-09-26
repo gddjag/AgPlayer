@@ -483,7 +483,7 @@ int main(const int argc, char** argv)
     for (int variant = 0; variant < 3; ++variant) {
         const auto file = directory / ("window-history-" + std::to_string(variant) + ".wav");
         write_pcm_wav(file, 32'000, 16, segment_frames * 5U,
-            [variant](std::ofstream& out, std::size_t frame, std::uint16_t channel) {
+            [variant, segment_frames](std::ofstream& out, std::size_t frame, std::uint16_t channel) {
                 const auto segment = frame / segment_frames;
                 double value = 0.0;
                 if (segment == 1U || segment == 3U) {

@@ -17,6 +17,7 @@
 #include <QTest>
 #include <QDataStream>
 #include <QTemporaryFile>
+#include <QThread>
 
 #include <algorithm>
 #include <array>
@@ -48,6 +49,7 @@ private slots:
     void violetHeartUsesElevationDrivenReferenceGlow_data();
     void referenceGlowHasNoPresetOrStageOverrides();
     void densityAndQualityChangesKeepDrawingCompleteFrames();
+    void referenceHighReducesRenderBudgetUnderSustainedLoad();
     void cameraPunchDoesNotMoveTheGroundProjection();
     void denseMaterialFrameBudgetProbe_data();
     void denseMaterialFrameBudgetProbe();
@@ -275,10 +277,47 @@ void TerrainReactorGpuSmokeTest::densityAndQualityChangesKeepDrawingCompleteFram
                          TerrainReactorItem::Quality::High}) {
         const auto before = item.frameCount();
         item.setQuality(quality);
-        window.resize(window.width() + 2, window.height());
-        QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > before + 4, 5000);
+        // Switching cadence must start its own frame; a resize can hide a
+        // missing timer-to-frame handoff by scheduling an unrelated update.
+        QTRY_VERIFY2_WITH_TIMEOUT(item.frameCount() > before + 4,
+            qPrintable(QStringLiteral("Rendering stalled after quality %1").arg(int(quality))), 5000);
         QCOMPARE(item.renderStatus(), TerrainReactorItem::RenderStatus::Ready);
     }
+    item.setActive(false);
+}
+
+void TerrainReactorGpuSmokeTest::referenceHighReducesRenderBudgetUnderSustainedLoad()
+{
+    PlayerExperienceController style;
+    style.applyTheme(QStringLiteral("violet-heart"));
+    style.setTopographyDensity(80);
+    QQuickWindow window;
+    window.resize(640, 360);
+    TerrainReactorItem item(window.contentItem());
+    item.setSize(QSizeF(640, 360));
+    item.setStyleSource(&style);
+    item.setQuality(TerrainReactorItem::Quality::High);
+    item.setUseSyntheticFeatures(true);
+    window.show();
+    QVERIFY(waitForGpuWindow(window));
+    item.setActive(true);
+    const int fullGrid = agplayer::terrain::referenceTerrainGridSize(80);
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderedTerrainCount(), fullGrid * fullGrid, 5000);
+    const QSize fullBuffer = item.effectiveColorBufferSize();
+    QCOMPARE(item.sampleCount(), 4);
+    // Simulate a slow presentation path, independently of the test GPU speed.
+    const auto delay = connect(&window, &QQuickWindow::afterRendering, &window,
+        [] { QThread::msleep(40); }, Qt::DirectConnection);
+    const auto stopDelay = qScopeGuard([&] { disconnect(delay); });
+    QTRY_COMPARE_WITH_TIMEOUT(item.renderedTerrainCount(), 96 * 96, 30000);
+    QTRY_COMPARE_WITH_TIMEOUT(item.sampleCount(), 1, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(item.effectiveColorBufferSize().width()
+                            <= qCeil(fullBuffer.width() * 0.71), 10000);
+    const auto frames = item.frameCount();
+    QTRY_VERIFY_WITH_TIMEOUT(item.frameCount() > frames + 2, 5000);
+    qInfo() << "Adaptive High full/reduced columns and buffers:"
+            << fullGrid * fullGrid << item.renderedTerrainCount()
+            << fullBuffer << item.effectiveColorBufferSize();
     item.setActive(false);
 }
 

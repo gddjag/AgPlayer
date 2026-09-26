@@ -1897,6 +1897,13 @@ void LosslessAnalysisController::addFolder(const QUrl& folder)
 
 void LosslessAnalysisController::start()
 {
+    // Explicitly starting a new batch includes checked retained results.
+    if (!d_->running && !d_->stopping) resetSelectedTasks(true);
+    startWaitingTasks();
+}
+
+void LosslessAnalysisController::startWaitingTasks()
+{
     if (d_->running && !d_->stopping) {
         if (!d_->discoveryJobs.isEmpty()) d_->pendingStart = true;
         d_->dispatchAvailable();
@@ -1973,11 +1980,18 @@ void LosslessAnalysisController::cancel()
 void LosslessAnalysisController::retrySelected()
 {
     if (d_->stopping) return;
+    if (resetSelectedTasks(false)) startWaitingTasks();
+}
+
+bool LosslessAnalysisController::resetSelectedTasks(bool terminalOnly)
+{
     bool any = false;
     for (const QString& id : d_->model.taskIds()) {
         const QVariantMap task = d_->model.task(id);
         if (!task.value(QStringLiteral("checked")).toBool()
-            || d_->activeJobs.contains(id)) {
+            || d_->activeJobs.contains(id)
+            || (terminalOnly && !terminalState(
+                task.value(QStringLiteral("state")).toString()))) {
             continue;
         }
         any = true;
@@ -2010,7 +2024,8 @@ void LosslessAnalysisController::retrySelected()
             emit selectedResultChanged();
         }
     }
-    if (any) start();
+    if (any) d_->updateAggregates();
+    return any;
 }
 
 void LosslessAnalysisController::removeSelected()
@@ -2206,7 +2221,7 @@ void LosslessAnalysisController::requestSpectrogram()
         {QStringLiteral("_includeSpectrogram"), true},
     });
     d_->updateAggregates();
-    start();
+    startWaitingTasks();
 }
 
 void LosslessAnalysisController::refreshTranslations()

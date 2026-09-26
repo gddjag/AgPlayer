@@ -22,6 +22,7 @@ class ResourceFolderController final : public QObject {
     Q_PROPERTY(QStringList resourceDirectories READ resourceDirectories NOTIFY resourceTopologyChanged)
     Q_PROPERTY(QString audioFileNameFilter READ audioFileNameFilter CONSTANT)
     Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged)
+    Q_PROPERTY(QString scanSummary READ scanSummary NOTIFY scanFinished)
     Q_PROPERTY(ImportController* importController READ importController WRITE setImportController NOTIFY importControllerChanged)
     Q_PROPERTY(QString storagePath READ storagePath WRITE setStoragePath NOTIFY storagePathChanged)
     Q_PROPERTY(QString lastPersistenceError READ lastPersistenceError NOTIFY persistenceStateChanged)
@@ -42,7 +43,9 @@ public:
     Q_INVOKABLE bool pathIsWithin(const QString& candidate, const QString& root) const;
     Q_INVOKABLE bool removeTrackFromLibrary(const QString& trackId);
     Q_INVOKABLE void rescan();
+    Q_INVOKABLE void rescanAll();
     bool scanning() const noexcept;
+    QString scanSummary() const { return scanSummary_; }
     ImportController* importController() const noexcept;
     void setImportController(ImportController* controller);
     QString storagePath() const;
@@ -59,6 +62,7 @@ signals:
     void storagePathChanged();
     void persistenceStateChanged();
 private:
+    bool prepareManualScan(const QStringList& roots);
     void scheduleRescan();
     void rebuildDirectoryWatches();
     void applyDirectoryWatches(const QStringList& directories);
@@ -70,10 +74,14 @@ private:
     QTimer debounce_;
     QStringList monitoredRoots_;
     QHash<QString, QString> excludedPaths_;
+    QHash<QString, QString> rejectedFileSignatures_;
+    QHash<QString, QString> pendingFileSignatures_;
+    bool rejectedStateDirty_ = false;
     QStringList resourceDirectories_;
     QString storagePath_;
     QString lastPersistenceError_;
     bool scanning_ = false;
+    QString scanSummary_;
     QPointer<QFutureWatcher<QVariantMap>> scanWatcher_;
     std::shared_ptr<std::atomic_bool> scanCancel_;
     quint64 scanGeneration_ = 0;

@@ -76,6 +76,7 @@ private slots:
     void formatConverterLoadsDroppedFilesAsynchronously();
     void formatConverterReportsReferenceTaskColumns();
     void formatConverterExposesQueueFacadeModelsAndPreflight();
+    void formatConverterRepeatsSelectedQueueWithNewProfiles();
     void formatConverterPreflightRejectsEmptySelectionOnce();
     void formatConverterPreflightReturnsResolvedProfileBeforeStarting();
     void formatConverterBuildPreflightUsesSmartProfilesAndRejectsInvalidCustomValues();
@@ -3030,6 +3031,20 @@ void AudioToolsEndToEndTest::metadataEditorKeepsUntouchedTitle()
     const auto title = QString::fromUtf8(ag_metadata_title(metadata));
     ag_metadata_destroy(metadata);
     QCOMPARE(title, originalTitle);
+    applied.clear();
+    editor.applyMetadata({{QStringLiteral("artist"), QVariantMap{
+        {QStringLiteral("mode"), QStringLiteral("set")},
+        {QStringLiteral("value"), QStringLiteral("Second artist")}}}}, {});
+    QVERIFY(applied.wait(30000));
+    QCOMPARE(applied.first().first().toInt(), 1);
+    QCOMPARE(editor.fileCount(), 1);
+    metadata = nullptr;
+    QCOMPARE(ag_metadata_open(input.toUtf8().constData(), &metadata), AG_OK);
+    const QString secondArtist = QString::fromUtf8(ag_metadata_artist(metadata));
+    const QString secondTitle = QString::fromUtf8(ag_metadata_title(metadata));
+    ag_metadata_destroy(metadata);
+    QCOMPARE(secondArtist, QStringLiteral("Second artist"));
+    QCOMPARE(secondTitle, originalTitle);
     QCOMPARE(library.trackForId(track.trackId).value(QStringLiteral("title")).toString(),
              originalTitle.isEmpty() ? QStringLiteral("Unchanged.name") : originalTitle);
 }
@@ -3766,6 +3781,72 @@ void AudioToolsEndToEndTest::filenameProcessorRenamesWithoutTouchingAudio()
     QCOMPARE(renamedFile.readAll(), originalBytes);
     QCOMPARE(processor.entryAt(0).value(QStringLiteral("sha256")).toString(),
              originalHash);
+    renamedFile.close();
+    const QVariantMap nextRules{{QStringLiteral("prefix"), QStringLiteral("Next-")}};
+    QCOMPARE(processor.preview(nextRules).first().toMap()
+                 .value(QStringLiteral("preview")).toString(),
+             QStringLiteral("Next-P-my_song-S_007.wav"));
+    renamed.clear();
+    processor.apply(nextRules);
+    QVERIFY(renamed.wait(30000));
+    QCOMPARE(renamed.first().at(0).toInt(), 1);
+    QCOMPARE(processor.fileCount(), 1);
+    const QString nextPath = temp.filePath(QStringLiteral("Next-P-my_song-S_007.wav"));
+    QCOMPARE(processor.entryAt(0).value(QStringLiteral("path")).toString(), nextPath);
+    QFile nextFile(nextPath);
+    QVERIFY(nextFile.open(QIODevice::ReadOnly));
+    QCOMPARE(nextFile.readAll(), originalBytes);
+    nextFile.close();
+    QSignalSpy undone(&processor, &FilenameProcessor::undoCompleted);
+    processor.undoLast();
+    QVERIFY(undone.wait(30000));
+    QCOMPARE(undone.first().at(0).toInt(), 1);
+    QCOMPARE(processor.entryAt(0).value(QStringLiteral("path")).toString(), renamedPath);
+    QFile restoredFile(renamedPath);
+    QVERIFY(restoredFile.open(QIODevice::ReadOnly));
+    QCOMPARE(restoredFile.readAll(), originalBytes);
+}
+
+void AudioToolsEndToEndTest::formatConverterRepeatsSelectedQueueWithNewProfiles()
+{
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString input = temp.filePath(QStringLiteral("repeat.wav"));
+    QVERIFY(agplayer::test::writeClickTrackWav(input, 120, 1));
+    FormatConverter converter;
+    converter.loadFiles({QUrl::fromLocalFile(input)});
+    waitForConverterLoad(converter);
+    QCOMPARE(converter.fileCount(), 1);
+    const QString taskId = converter.files().first().toMap()
+        .value(QStringLiteral("taskId")).toString();
+    QSignalSpy errors(&converter, &FormatConverter::errorOccurred);
+    QSignalSpy completed(&converter, &FormatConverter::transcodeCompleted);
+    QStringList outputs;
+    int round = 0;
+    for (const QString& format : {QStringLiteral("flac"), QStringLiteral("mp3"),
+                                  QStringLiteral("flac")}) {
+        const QVariantMap plan = converter.buildPreflight({
+            {QStringLiteral("outputFormat"), format},
+            {QStringLiteral("outputDir"), temp.filePath(QStringLiteral("out"))},
+            {QStringLiteral("conflictPolicy"), QStringLiteral("auto-number")}});
+        QVERIFY2(plan.value(QStringLiteral("ready")).toBool(),
+                 qPrintable(plan.value(QStringLiteral("error")).toString()));
+        const QString output = plan.value(QStringLiteral("tasks")).toList()
+            .first().toMap().value(QStringLiteral("outputPath")).toString();
+        QVERIFY(!outputs.contains(output));
+        converter.confirmPendingPlan();
+        QVERIFY2(errors.isEmpty(), errors.isEmpty() ? "" : qPrintable(errors.last().first().toString()));
+        ++round;
+        QTRY_COMPARE_WITH_TIMEOUT(completed.count(), round, 30000);
+        QCOMPARE(completed.last().at(0).toInt(), 1);
+        QCOMPARE(completed.last().at(1).toInt(), 0);
+        QCOMPARE(converter.fileCount(), 1);
+        QCOMPARE(converter.checkedCount(), 1);
+        QCOMPARE(converter.files().first().toMap().value(QStringLiteral("taskId")).toString(), taskId);
+        verifyAudioFile(output);
+        outputs.append(output);
+    }
+    verifyAudioFile(input);
 }
 
 void AudioToolsEndToEndTest::filenameProcessorAppliesExactlyThePreviewedConflictPlan()

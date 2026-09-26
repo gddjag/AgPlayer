@@ -22,7 +22,7 @@ public:
     Impl(TimelineSnapshot snapshot, EditorPlaybackParameters settings,
          agplayer::TimePitchEngineFactory factory, const std::optional<Selection>& range,
          const std::atomic_bool* cancelled)
-        : mixer(std::move(snapshot), cancelled), parameters(settings),
+        : mixer(std::move(snapshot), cancelled, factory), parameters(settings),
           range_start(range ? range->start : 0),
           range_end(range ? range->end : mixer.snapshot().totalFrames),
           engine_factory(factory), cancelled_(cancelled)
@@ -159,6 +159,11 @@ public:
 EditorPlaybackStream::EditorPlaybackStream(std::unique_ptr<Impl> impl) noexcept
     : impl_(std::move(impl)) {}
 EditorPlaybackStream::~EditorPlaybackStream() = default;
+
+void EditorPlaybackStream::setTrackGains(const std::array<float, kTrackCount>& gains)
+{
+    impl_->mixer.setTrackGains(gains);
+}
 
 std::shared_ptr<EditorPlaybackStream> EditorPlaybackStream::create(
     TimelineSnapshot snapshot, const EditorPlaybackParameters& parameters,

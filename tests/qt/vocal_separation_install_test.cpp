@@ -57,7 +57,7 @@ private slots:
 void VocalSeparationInstallTest::domesticMirrorOnlyRewritesSupportedHuggingFaceDownloads()
 {
     const QUrl huggingFace(QStringLiteral(
-        "https://huggingface.co/StemSplitio/htdemucs-ft-onnx/resolve/main/model.onnx"));
+        "https://huggingface.co/StemSplitio/htdemucs-onnx/resolve/d54ed9eb60e258ea82131c6ee14578628816456a/htdemucs_fp16weights.onnx"));
     const QUrl mirrored = vocalDomesticMirrorUrl(huggingFace);
     QCOMPARE(mirrored.host(), QStringLiteral("hf-mirror.com"));
     QCOMPARE(mirrored.path(), huggingFace.path());
@@ -169,8 +169,15 @@ void VocalSeparationInstallTest::exposesPinnedApprovedCatalog()
     QCOMPARE(models.at(1).files.at(0).url.toString(),
              QStringLiteral("https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR-MDX-NET-Inst_HQ_3.onnx"));
     QCOMPARE(models.at(2).family, VocalModelFamily::Demucs);
-    QCOMPARE(models.at(2).files.size(), 4);
-    QCOMPARE(models.at(2).files.at(3).bytes, qint64{165'612'636});
+    QCOMPARE(models.at(2).id, QStringLiteral("htdemucs-fp16"));
+    QCOMPARE(models.at(2).files.size(), 1);
+    QCOMPARE(models.at(2).files.at(0).bytes, qint64{165'612'636});
+    QCOMPARE(models.at(2).files.at(0).fileName, QStringLiteral("htdemucs_fp16weights.onnx"));
+    QCOMPARE(models.at(2).files.at(0).sha256,
+             QStringLiteral("d05c269d0178d2a72ad484b10b11dd370193fc923201c3b27a99f848745db70a"));
+    QCOMPARE(models.at(2).files.at(0).url.toString(), QStringLiteral(
+        "https://huggingface.co/StemSplitio/htdemucs-onnx/resolve/d54ed9eb60e258ea82131c6ee14578628816456a/htdemucs_fp16weights.onnx"));
+    QCOMPARE(models.at(2).stems.size(), 5);
     QVERIFY(models.at(2).provenance.contains(QStringLiteral("Meta Demucs")));
     QVERIFY(models.at(2).provenance.contains(QStringLiteral("StemSplit")));
 
@@ -214,6 +221,30 @@ void VocalSeparationInstallTest::installerOwnsCanonicalRuntimePaths()
 
 void VocalSeparationInstallTest::rejectsUnsafeCustomManifests()
 {
+    QJsonObject singleDemucs{
+        {"id", "custom-demucs"}, {"profile", "htdemucs-fp16"}, {"family", "Demucs"},
+        {"stems", QJsonArray{"vocals", "instrumental", "drums", "bass", "other"}},
+        {"files", QJsonArray{QJsonObject{
+            {"name", "htdemucs_fp16weights.onnx"}, {"bytes", 165612636},
+            {"sha256", QString(64, QLatin1Char('a'))},
+            {"shape", QJsonArray{1, 2, 343980}}}}}};
+    QVERIFY(validateCustomModelManifest(singleDemucs).accepted);
+    auto badShape = singleDemucs.value("files").toArray().first().toObject();
+    badShape.insert("shape", QJsonArray{1, 2, 343808});
+    singleDemucs.insert("files", QJsonArray{badShape});
+    QVERIFY(!validateCustomModelManifest(singleDemucs).accepted);
+    QJsonArray legacyFiles;
+    for (const QString& role : QStringList{"drums", "bass", "other", "vocals"}) {
+        auto legacyFile = badShape;
+        legacyFile.insert("name", role + ".onnx");
+        legacyFile.insert("role", role);
+        legacyFile.insert("shape", QJsonArray{1, 2, 256});
+        legacyFiles.append(legacyFile);
+    }
+    singleDemucs.insert("profile", "htdemucs-ft-fp16");
+    singleDemucs.insert("files", legacyFiles);
+    QVERIFY(validateCustomModelManifest(singleDemucs).accepted);
+
     const CustomManifestValidationResult valid = validateCustomModelManifest(validMdxManifest());
     QVERIFY2(valid.accepted, qPrintable(valid.error));
 

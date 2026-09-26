@@ -13,6 +13,47 @@ TestCase {
     Component { id: settingsPage; SettingsPage { width: 1040; height: 720 } }
     Component { id: listPage; ListWindow { width: 1000; height: 620 } }
     Component { id: mini; MiniPlayerWindow {} }
+    Component { id: editorPage; AudioEditorPage { width: 980; height: 720 } }
+    Component { id: metadataPage; MetadataEditPage { width: 980; height: 720 } }
+    Component { id: filenamePage; FilenameProcessPage { width: 980; height: 720 } }
+    Component { id: evidencePage; LosslessIdentifyPage { width: 980; height: 720 } }
+
+    function test_compactMacToolsKeepDesktopColumns() {
+        if (Qt.platform.os !== "osx") skip("macOS compact tool layout")
+        const editor = createTemporaryObject(editorPage, main.contentItem)
+        const metadata = createTemporaryObject(metadataPage, main.contentItem)
+        const filename = createTemporaryObject(filenamePage, main.contentItem)
+        const lossless = createTemporaryObject(evidencePage, main.contentItem)
+        verify(editor && metadata && filename && lossless)
+        verify(editor.macDesktopLayout)
+        const tracks = findChild(editor, "editorTrackScroller")
+        verify(tracks && tracks.height >= tracks.contentHeight)
+        const inspector = findChild(editor, "editorInspector")
+        compare(inspector.x, editor.mainWidth)
+        compare(findChild(editor, "editorPageScroller").contentHeight, editor.height)
+
+        verify(metadata.macDesktopLayout)
+        verify(!findChild(metadata, "metadataCompactTabs").visible)
+        const files = findChild(metadata, "metadataFilePanel")
+        const fields = findChild(metadata, "metadataInspectorPanel")
+        verify(files.visible && fields.visible && fields.x >= files.x + files.width)
+        verify(findChild(metadata, "metadataWorkbenchScroller").contentHeight > 0)
+
+        verify(filename.macDesktopLayout)
+        verify(!findChild(filename, "filenameCompactTabs").visible)
+        verify(findChild(filename, "filenameFilePanel").visible)
+        verify(findChild(filename, "filenameRulesPanel").visible)
+        const filenameFiles = findChild(filename, "filenameFilePanel")
+        const filenameRules = findChild(filename, "filenameRulesPanel")
+        verify(filenameRules.mapToItem(filename, 0, 0).x
+               >= filenameFiles.mapToItem(filename, filenameFiles.width, 0).x)
+
+        verify(lossless.macDesktopLayout)
+        verify(!findChild(lossless, "losslessCompactViewSwitch").visible)
+        verify(findChild(lossless, "losslessEvidencePanel").visible)
+        verify(findChild(lossless, "losslessConclusionPanel").visible)
+        verify(findChild(lossless, "losslessEvidencePanel").x > 0)
+    }
 
     function test_miniBrandStaysCenteredOnMac() {
         if (Qt.platform.os !== "osx") skip("macOS title alignment")

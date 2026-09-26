@@ -12,8 +12,8 @@
 namespace agplayer::lossless {
 
 inline constexpr std::string_view kAnalysisSchemaVersion = "1";
-inline constexpr std::string_view kAlgorithmVersion = "lossless-1.17";
-inline constexpr std::string_view kParameterVersion = "lossless-params-16";
+inline constexpr std::string_view kAlgorithmVersion = "lossless-1.18";
+inline constexpr std::string_view kParameterVersion = "lossless-params-17";
 inline constexpr std::string_view kInferenceDisclaimer =
     u8"\u7ed3\u679c\u4e3a\u4fe1\u53f7\u7279\u5f81\u63a8\u65ad\uff0c"
     u8"\u4e0d\u4ee3\u8868\u53ef\u6062\u590d\u539f\u59cb\u6587\u4ef6\u3002";

@@ -49,6 +49,11 @@ struct MdctFramingProbe::Impl final {
         std::array<std::size_t, excerptCount> phases{};
     };
     std::array<Accumulator, 3> accumulators{};
+    std::array<std::vector<double>, excerptCount> stereoExcerpts;
+    std::array<std::array<Accumulator, 3>, 2> stereoAccumulators{};
+    bool stereoRefined = false;
+    int primaryChannel = -1;
+    bool primaryMixedChannels = false;
 
     Impl(int rate, int channelCount, std::uint64_t total, std::size_t transformSize)
         : channels(channelCount), size(transformSize), hop(size / 2),
@@ -110,8 +115,17 @@ struct MdctFramingProbe::Impl final {
             if (power > maximumPower) { maximumPower = power; selected = channel; }
         }
         if (maximumPower / excerptSize < minimumRms * minimumRms) return;
+        if (primaryChannel < 0) primaryChannel = static_cast<int>(selected);
+        else if (primaryChannel != static_cast<int>(selected)) primaryMixedChannels = true;
         std::vector<double> mono(excerptSize);
         for (std::size_t n = 0; n < excerptSize; ++n) mono[n] = captured[n * channels + selected];
+        measureMono(mono, current, accumulators, cancel);
+    }
+
+    void measureMono(const std::vector<double>& mono, std::size_t anchor,
+                     std::array<Accumulator, 3>& target,
+                     const std::atomic_bool& cancel)
+    {
         for (std::size_t profile = 0; profile < profileCount; ++profile) {
             std::vector<double> energies(hop + 1);
             for (std::size_t shift = 0; shift <= hop; ++shift) {
@@ -140,13 +154,13 @@ struct MdctFramingProbe::Impl final {
             }
             const double mean = sum / hop;
             const double deviation = std::sqrt(std::max(0.0, squares / hop - mean * mean));
-            const double phase = 2.0 * pi * static_cast<double>((starts[current] + peakOffset) % hop) / hop;
-            auto& accumulator = accumulators[profile];
+            const double phase = 2.0 * pi * static_cast<double>((starts[anchor] + peakOffset) % hop) / hop;
+            auto& accumulator = target[profile];
             accumulator.real += peak * std::cos(phase);
             accumulator.imaginary += peak * std::sin(phase);
             accumulator.peaks += peak;
             accumulator.z += peak / std::max(deviation, 1e-12);
-            accumulator.phases[accumulator.count] = static_cast<std::size_t>((starts[current] + peakOffset) % hop);
+            accumulator.phases[accumulator.count] = static_cast<std::size_t>((starts[anchor] + peakOffset) % hop);
             ++accumulator.count;
         }
     }
@@ -178,6 +192,8 @@ void MdctFramingProbe::consume(const double* samples, std::size_t frames,
             }
             if (p.captured.size() != p.excerptSize * static_cast<std::size_t>(p.channels)) break;
             p.measure(cancel);
+            if (p.channels == 2 && !cancel.load(std::memory_order_relaxed))
+                p.stereoExcerpts[p.current] = std::move(p.captured);
             p.captured.clear();
             ++p.current;
             if (cancel.load(std::memory_order_relaxed)) break;
@@ -188,13 +204,53 @@ void MdctFramingProbe::consume(const double* samples, std::size_t frames,
 
 std::array<MdctFrameEvidence, 4> MdctFramingProbe::result() const noexcept
 {
+    return resultForChannel(-1);
+}
+
+void MdctFramingProbe::refineStereo(const std::atomic_bool& cancel)
+{
+    if (!impl_ || impl_->channels != 2 || cancel.load(std::memory_order_relaxed)) return;
+    for (auto* state : {impl_.get(), mp3_.get()}) {
+        auto& p = *state;
+        if (p.stereoRefined) continue;
+        p.stereoRefined = true;
+        const int reusableChannel = p.primaryMixedChannels ? -1 : p.primaryChannel;
+        if (reusableChannel >= 0) p.stereoAccumulators[reusableChannel] = p.accumulators;
+        for (std::size_t anchor = 0; anchor < p.current; ++anchor) {
+            const auto& excerpt = p.stereoExcerpts[anchor];
+            if (excerpt.size() != p.excerptSize * 2) continue;
+            for (int channel = 0; channel < 2; ++channel) {
+                if (channel == reusableChannel) continue;
+                if (cancel.load(std::memory_order_relaxed)) return;
+                std::vector<double> mono(p.excerptSize);
+                double power = 0.0;
+                for (std::size_t n = 0; n < p.excerptSize; ++n) {
+                    mono[n] = excerpt[n * 2 + channel];
+                    power += mono[n] * mono[n];
+                }
+                if (!std::isfinite(power) || power / p.excerptSize < minimumRms * minimumRms) continue;
+                p.measureMono(mono, anchor, p.stereoAccumulators[channel], cancel);
+            }
+        }
+    }
+}
+
+std::array<MdctFrameEvidence, 4> MdctFramingProbe::channelResult(int channel) const noexcept
+{
+    if (channel < 0 || channel > 1) return {};
+    return resultForChannel(channel);
+}
+
+std::array<MdctFrameEvidence, 4> MdctFramingProbe::resultForChannel(int channel) const noexcept
+{
     std::array<MdctFrameEvidence, 4> result{};
     constexpr std::array<const char*, 4> names{"sine", "kbd4", "slope", "sine1152"};
     for (std::size_t index = 0; index < result.size(); ++index) {
         auto& value = result[index]; value.window = names[index];
         if (!impl_) continue;
         const auto& state = index == 3 ? *mp3_ : *impl_;
-        const auto& a = state.accumulators[index == 3 ? 0 : index];
+        const auto& a = channel < 0 ? state.accumulators[index == 3 ? 0 : index]
+                                   : state.stereoAccumulators[channel][index == 3 ? 0 : index];
         value.activeBlocks = a.count;
         if (a.count == 0) continue;
         const double magnitude = std::hypot(a.real, a.imaginary);

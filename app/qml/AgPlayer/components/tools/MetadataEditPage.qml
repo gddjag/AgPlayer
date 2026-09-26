@@ -12,7 +12,11 @@ Rectangle {
     focus: true
 
     readonly property real desktopMinimumWidth: 1206
-    readonly property bool compactLayout: width < desktopMinimumWidth
+    readonly property bool compactLayout: !macDesktopLayout && width < desktopMinimumWidth
+    property bool macDesktopLayout: Qt.platform.os === "osx"
+    readonly property bool macStackedLayout: false
+    readonly property real layoutWidth: macDesktopLayout ? Math.max(width, 1280) : width
+    readonly property real layoutScale: macDesktopLayout ? Math.max(1, width) / layoutWidth : 1
     readonly property real inspectorRatio: 0.44
     readonly property color canvasColor: Theme.editorCanvas
     readonly property color panelColor: Theme.panel
@@ -598,8 +602,11 @@ Rectangle {
     }
 
     ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 10
+        x: 10 * page.layoutScale; y: 10 * page.layoutScale
+        width: page.layoutWidth - 20
+        height: page.height / page.layoutScale - 20
+        scale: page.layoutScale
+        transformOrigin: Item.TopLeft
         spacing: 8
 
         RowLayout {
@@ -685,7 +692,7 @@ Rectangle {
             id: compactMetadataTabs
             objectName: "metadataCompactTabs"
             property int currentIndex: 0
-            visible: page.compactLayout
+            visible: page.compactLayout && !page.macStackedLayout
             Layout.fillWidth: true
             Layout.preferredHeight: visible ? 36 : 0
             Layout.maximumHeight: Layout.preferredHeight
@@ -718,24 +725,43 @@ Rectangle {
             color: page.canvasColor
             radius: 6
 
-            RowLayout {
+            Flickable {
+                id: metadataWorkbenchScroller
+                objectName: "metadataWorkbenchScroller"
                 anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 10
-                anchors.topMargin: 8
-                anchors.bottomMargin: 8
-                spacing: 8
+                anchors.margins: 8
+                contentWidth: width
+                contentHeight: page.macStackedLayout
+                    ? Math.max(height, metadataWorkbenchLayout.implicitHeight) : height
+                interactive: page.macStackedLayout
+                flickableDirection: Flickable.VerticalFlick
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {
+                    policy: page.macStackedLayout ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                }
+
+            GridLayout {
+                id: metadataWorkbenchLayout
+                width: metadataWorkbenchScroller.contentWidth
+                height: page.macStackedLayout ? implicitHeight
+                       : metadataWorkbenchScroller.contentHeight
+                columns: page.macStackedLayout ? 1 : 2
+                columnSpacing: 8
+                rowSpacing: 8
 
                 Rectangle {
                     id: filePanel
                     objectName: "metadataFilePanel"
-                    visible: !page.compactLayout || compactMetadataTabs.currentIndex === 0
-                    Layout.fillWidth: page.compactLayout ? visible : true
-                    Layout.fillHeight: true
+                    visible: page.macStackedLayout || !page.compactLayout
+                             || compactMetadataTabs.currentIndex === 0
+                    Layout.fillWidth: true
+                    Layout.fillHeight: !page.macStackedLayout
+                    Layout.preferredHeight: page.macStackedLayout ? 300 : -1
                     Layout.preferredWidth: page.compactLayout
                                            ? 0
                                            : workbench.width - 26
-                                             - (page.width * page.inspectorRatio - 12)
+                                             - (page.layoutWidth * page.inspectorRatio - 12)
                     Layout.minimumWidth: page.compactLayout ? 0 : 560
                     color: page.panelColor
                     border.width: 1
@@ -1000,12 +1026,14 @@ Rectangle {
                 Rectangle {
                     id: inspectorPanel
                     objectName: "metadataInspectorPanel"
-                    visible: !page.compactLayout || compactMetadataTabs.currentIndex === 1
-                    Layout.fillWidth: page.compactLayout && visible
-                    Layout.fillHeight: true
+                    visible: page.macStackedLayout || !page.compactLayout
+                             || compactMetadataTabs.currentIndex === 1
+                    Layout.fillWidth: page.compactLayout
+                    Layout.fillHeight: !page.macStackedLayout
+                    Layout.preferredHeight: page.macStackedLayout ? 650 : -1
                     Layout.preferredWidth: page.compactLayout
                                            ? 0
-                                           : page.width * page.inspectorRatio - 12
+                                           : page.layoutWidth * page.inspectorRatio - 12
                     Layout.minimumWidth: page.compactLayout ? 0 : 620
                     color: page.panelColor
                     border.width: 1
@@ -1493,18 +1521,21 @@ Rectangle {
                             }
                 }
             }
+            }
         }
+    }
+
+    function selectLoadedEntries() {
+        selectedIndices = Array.from({length: MetadataEditor.fileCount},
+                                     function(_, index) { return index })
+        selectionAnchor = selectedIndices.length > 0 ? selectedIndices[0] : -1
+        ++entryRevision
+        Qt.callLater(refreshFields)
     }
 
     Connections {
         target: MetadataEditor
-        function onEntriesLoaded() {
-            page.selectedIndices = Array.from({length: MetadataEditor.fileCount},
-                                              function(_, index) { return index })
-            page.selectionAnchor = page.selectedIndices.length > 0 ? page.selectedIndices[0] : -1
-            ++page.entryRevision
-            Qt.callLater(page.refreshFields)
-        }
+        function onEntriesLoaded() { page.selectLoadedEntries() }
         function onEntriesChanged() {
             ++page.entryRevision
             Qt.callLater(page.refreshFields)
@@ -1516,5 +1547,5 @@ Rectangle {
         }
     }
 
-    Component.onCompleted: Qt.callLater(refreshFields)
+    Component.onCompleted: selectLoadedEntries()
 }

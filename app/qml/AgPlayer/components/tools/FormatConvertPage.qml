@@ -94,7 +94,7 @@ Rectangle {
         id: fileDialogComponent
         FileDialog {
             fileMode: FileDialog.OpenFiles
-            nameFilters: [qsTr("音频与视频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.aif *.aiff *.mp4 *.mkv *.avi *.mov *.webm)")]
+            nameFilters: [qsTr("音频与视频文件 (*.wav *.mp3 *.flac *.aac *.m4a *.ogg *.opus *.aif *.aiff *.mp4 *.mkv *.avi *.mov *.webm *.ncm *.kgm *.kgma *.vpr *.kwm *.qmc0 *.qmc2 *.qmc3 *.qmc4 *.qmc6 *.qmc8 *.qmcflac *.qmcogg *.mflac *.mflac0 *.mgg *.mgg0 *.mgg1 *.mggl *.mmp4 *.tkm *.bkcmp3 *.bkcm4a *.bkcflac *.bkcwav *.bkcape *.bkcogg *.bkcwma *.666c6163 *.6d7033 *.6f6767 *.6d3461 *.776176)")]
             onAccepted: {
                 converter.addUrls(selectedFiles)
                 destroy()

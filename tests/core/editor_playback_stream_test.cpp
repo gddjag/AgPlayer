@@ -604,6 +604,24 @@ int main(int argc, char** argv)
     const auto originalSamples = readAll(*original);
     require(!originalSamples.empty(), "neutral editor stream returned no audio");
 
+    auto liveMix = EditorPlaybackStream::create(snapshot, neutral, error);
+    require(liveMix != nullptr, "live track mix creation failed");
+    std::array<float, kTrackCount> gains{};
+    agplayer::DecodedAudioBlock mutedBlock;
+    liveMix->setTrackGains(gains);
+    require(liveMix->read(mutedBlock) == AG_OK && mutedBlock.frames > 0
+        && std::all_of(mutedBlock.samples.begin(), mutedBlock.samples.end(),
+            [](float sample) { return sample == 0; }), "live mute did not silence track PCM");
+    gains[0] = 1;
+    liveMix->setTrackGains(gains);
+    agplayer::DecodedAudioBlock unmutedBlock;
+    require(liveMix->read(unmutedBlock) == AG_OK && unmutedBlock.frames > 0,
+        "live unmute failed");
+    require(std::equal(unmutedBlock.samples.begin(), unmutedBlock.samples.end(),
+        originalSamples.begin() + mutedBlock.samples.size(),
+        [](float left, float right) { return std::abs(left - right) < 0.0001F; }),
+        "unmuted track resumed stale PCM instead of current timeline position");
+
     auto timestamped = EditorPlaybackStream::create(snapshot, neutral, error);
     require(timestamped != nullptr,
             "timestamp editor stream creation failed");

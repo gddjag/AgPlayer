@@ -1,5 +1,7 @@
 #include "decoder.hpp"
 #include "flac_stream_boundary.hpp"
+#include "proprietary_audio_input.hpp"
+#include "proprietary_format_io.hpp"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -20,6 +22,8 @@ extern "C" {
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <new>
 #include <utility>
@@ -32,6 +36,33 @@ namespace {
 constexpr std::size_t kMaxProbeTagBytes = 4U * 1024U * 1024U;
 constexpr std::size_t kMaxProbeCoverBytes = 32U * 1024U * 1024U;
 constexpr int kMaxMetadataProbePackets = 32;
+
+// Some music files contain an ID3v2 tag before a RIFF/WAVE container
+// (including MP3-in-WAVE). FFmpeg detects WAV but its header reader starts
+// at the ID3 bytes. Skip only a validated tag followed by a WAVE signature;
+// retain physical file offsets so seeking works without rewriting the file.
+void set_wave_prefix_option(const std::string& path, AVDictionary** options)
+{
+    std::ifstream input(std::filesystem::u8path(path), std::ios::binary);
+    unsigned char header[10]{};
+    if (!input.read(reinterpret_cast<char*>(header), sizeof header)
+        || std::memcmp(header, "ID3", 3) != 0
+        || header[3] < 2 || header[3] > 4 || header[4] == 0xff)
+        return;
+    std::int64_t size = 0;
+    for (int i = 6; i < 10; ++i) {
+        if (header[i] & 0x80) return;
+        size = (size << 7) | header[i];
+    }
+    const std::int64_t offset = 10 + size
+        + ((header[3] == 4 && (header[5] & 0x10)) ? 10 : 0);
+    input.seekg(offset);
+    char signature[12]{};
+    if (input.read(signature, sizeof signature)
+        && std::memcmp(signature, "RIFF", 4) == 0
+        && std::memcmp(signature + 8, "WAVE", 4) == 0)
+        av_dict_set_int(options, "skip_initial_bytes", offset, 0);
+}
 
 bool format_uses_shared_year_date(const AVFormatContext* context) noexcept
 {
@@ -250,6 +281,14 @@ std::string read_lyrics(AVDictionary* preferred, AVDictionary* fallback)
             return value;
         }
     }
+    // FFmpeg exposes ID3 USLT as lyrics-<description>-<language> (or lyrics-eng).
+    // Keep canonical tags first, then prefer the selected audio stream.
+    for (AVDictionary* dictionary : {preferred, fallback}) {
+        const AVDictionaryEntry* entry = nullptr;
+        while ((entry = av_dict_get(dictionary, "lyrics-", entry, AV_DICT_IGNORE_SUFFIX)) != nullptr) {
+            if (entry->value != nullptr && entry->value[0] != '\0') return entry->value;
+        }
+    }
     return "";
 }
 
@@ -285,6 +324,14 @@ std::string read_lyrics_limited(AVDictionary* preferred,
             preferred, fallback, key, remaining, limit_exceeded);
         if (limit_exceeded || !value.empty()) return value;
     }
+    for (AVDictionary* dictionary : {preferred, fallback}) {
+        const AVDictionaryEntry* entry = nullptr;
+        while ((entry = av_dict_get(dictionary, "lyrics-", entry, AV_DICT_IGNORE_SUFFIX)) != nullptr) {
+            const std::string value = read_tag_limited(
+                dictionary, nullptr, entry->key, remaining, limit_exceeded);
+            if (limit_exceeded || !value.empty()) return value;
+        }
+    }
     return {};
 }
 
@@ -310,20 +357,38 @@ ag_result probe_media_metadata(const std::string& utf8_path,
 {
     metadata = {};
     AVFormatContext* context = nullptr;
+    ProprietaryFormatIo proprietary_io;
     try {
         if (test_hooks != nullptr && test_hooks->throw_allocation_failure) {
             throw std::bad_alloc{};
         }
         if (utf8_path.empty()) return AG_INVALID_ARGUMENT;
-        const int open_result = avformat_open_input(&context, utf8_path.c_str(),
-                                                    nullptr, nullptr);
-        if (open_result < 0) return map_open_error(open_result);
-        const auto finish = [&context](const ag_result result) noexcept {
-            avformat_close_input(&context);
+        std::string proprietary_error;
+        int open_result = 0;
+        if (ProprietaryAudioInput::recognizes_path(utf8_path)) {
+            open_result = open_audio_format_input(
+                utf8_path, &context, proprietary_io, proprietary_error);
+        } else {
+            AVDictionary* input_options = nullptr;
+            set_wave_prefix_option(utf8_path, &input_options);
+            open_result = avformat_open_input(&context, utf8_path.c_str(),
+                                              nullptr, &input_options);
+            av_dict_free(&input_options);
+        }
+        if (open_result < 0) {
+            close_audio_format_input(&context, proprietary_io);
+            return map_open_error(open_result);
+        }
+        const auto finish = [&context, &proprietary_io](
+                                const ag_result result) noexcept {
+            close_audio_format_input(&context, proprietary_io);
             return result;
         };
         if (avformat_find_stream_info(context, nullptr) < 0) {
             return finish(AG_UNSUPPORTED_FORMAT);
+        }
+        if (proprietary_io.input) {
+            proprietary_io.input->apply_format_tags(context);
         }
 
         int audio_index = -1;
@@ -382,6 +447,10 @@ ag_result probe_media_metadata(const std::string& utf8_path,
         metadata.artist = read_canonical(CanonicalField::Artist);
         metadata.album = read_canonical(CanonicalField::Album);
         metadata.album_artist = read_canonical(CanonicalField::AlbumArtist);
+        metadata.replay_gain_track_db = read_limited("replaygain_track_gain");
+        metadata.replay_gain_album_db = read_limited("replaygain_album_gain");
+        metadata.replay_gain_track_peak = read_limited("replaygain_track_peak");
+        metadata.replay_gain_album_peak = read_limited("replaygain_album_peak");
         metadata.track = read_limited("track");
         metadata.disc = read_limited("disc");
         metadata.composer = read_canonical(CanonicalField::Composer);
@@ -446,9 +515,12 @@ ag_result probe_media_metadata(const std::string& utf8_path,
             metadata.cover_mime_type = image_mime_type(stream->codecpar->codec_id);
             break;
         }
+        if (proprietary_io.input) {
+            proprietary_io.input->apply_container_metadata(metadata);
+        }
         return finish(AG_OK);
     } catch (...) {
-        avformat_close_input(&context);
+        close_audio_format_input(&context, proprietary_io);
         metadata = {};
         return AG_INTERNAL_ERROR;
     }
@@ -476,6 +548,18 @@ public:
         custom_read_ = options.custom_read;
         custom_seek_ = options.custom_seek;
         custom_io_context_ = options.custom_io_context;
+        active_proprietary_input_ = options.proprietary_audio_input;
+        if (custom_read_ == nullptr
+            && ProprietaryAudioInput::recognizes_path(utf8_path)) {
+            std::string proprietary_error;
+            proprietary_input_ = ProprietaryAudioInput::open(
+                utf8_path, proprietary_error);
+            if (!proprietary_input_) return AG_UNSUPPORTED_FORMAT;
+            custom_read_ = &ProprietaryAudioInput::read_callback;
+            custom_seek_ = &ProprietaryAudioInput::seek_callback;
+            custom_io_context_ = proprietary_input_.get();
+            active_proprietary_input_ = proprietary_input_.get();
+        }
         packet_callback_ = options.packet_callback;
         packet_context_ = options.packet_context;
         interrupt_triggered_ = false;
@@ -527,8 +611,12 @@ public:
             format_context_->flags |= AVFMT_FLAG_CUSTOM_IO;
         }
 
+        AVDictionary* input_options = nullptr;
+        if (custom_read_ == nullptr)
+            set_wave_prefix_option(utf8_path, &input_options);
         int result = avformat_open_input(&format_context_, utf8_path.c_str(),
-                                         input_format, nullptr);
+                                         input_format, &input_options);
+        av_dict_free(&input_options);
         if (result < 0) {
             const bool interrupted = interrupt_triggered_;
             reset();
@@ -539,6 +627,9 @@ public:
             const bool interrupted = interrupt_triggered_;
             reset();
             return interrupted ? AG_CANCELLED : AG_UNSUPPORTED_FORMAT;
+        }
+        if (active_proprietary_input_) {
+            active_proprietary_input_->apply_format_tags(format_context_);
         }
 
         const AVCodec* codec = nullptr;
@@ -603,6 +694,8 @@ public:
         }
 
         populate_metadata(*stream);
+        if (active_proprietary_input_)
+            active_proprietary_input_->apply_container_metadata(metadata_);
         populate_native_format(*stream);
         return AG_OK;
     }
@@ -645,6 +738,8 @@ public:
                 if (convert_result != AG_OK) {
                     return convert_result;
                 }
+                decoded_audio_ = true;
+                consecutive_invalid_mp3_packets_ = 0;
                 if (!trim_to_seek_target(block)) {
                     continue;
                 }
@@ -702,6 +797,7 @@ public:
             const int send_result = avcodec_send_packet(codec_context_, packet_);
             av_packet_unref(packet_);
             if (send_result < 0) {
+                if (skip_invalid_mp3_packet(send_result)) continue;
                 return AG_DECODE_ERROR;
             }
         }
@@ -725,6 +821,10 @@ public:
                 if (final_flac_frame) {
                     avcodec_flush_buffers(codec_context_);
                     input_eof_ = true;
+                }
+                if (convert_result == AG_OK) {
+                    decoded_audio_ = true;
+                    consecutive_invalid_mp3_packets_ = 0;
                 }
                 return convert_result;
             }
@@ -767,6 +867,7 @@ public:
             const int send_result = avcodec_send_packet(codec_context_, packet_);
             av_packet_unref(packet_);
             if (send_result < 0) {
+                if (skip_invalid_mp3_packet(send_result)) continue;
                 return interrupt_triggered_ ? AG_CANCELLED : AG_DECODE_ERROR;
             }
         }
@@ -861,7 +962,10 @@ public:
             format_context_->pb = nullptr;
         }
         avformat_close_input(&format_context_);
+        if (custom_io_ != nullptr) av_freep(&custom_io_->buffer);
         avio_context_free(&custom_io_);
+        proprietary_input_.reset();
+        active_proprietary_input_ = nullptr;
         interrupt_handler_ = nullptr;
         interrupt_context_ = nullptr;
         custom_read_ = nullptr;
@@ -876,6 +980,8 @@ public:
         input_eof_ = false;
         drain_sent_ = false;
         resampler_drained_ = false;
+        decoded_audio_ = false;
+        consecutive_invalid_mp3_packets_ = 0;
         seek_target_ms_ = -1;
         seek_target_frame_ = -1;
         block_start_frame_ = 0;
@@ -937,6 +1043,16 @@ private:
         }
     }
 
+    bool skip_invalid_mp3_packet(const int error) noexcept
+    {
+        // A damaged frame should not discard minutes of valid audio, while
+        // sustained corruption and files with no decoded frames still fail.
+        return error == AVERROR_INVALIDDATA
+            && codec_context_->codec_id == AV_CODEC_ID_MP3
+            && decoded_audio_
+            && ++consecutive_invalid_mp3_packets_ <= 4;
+    }
+
     ag_result seek_to(const std::int64_t target_timestamp,
                       const std::int64_t target_frame,
                       const std::int64_t target_ms)
@@ -961,6 +1077,8 @@ private:
         input_eof_ = false;
         drain_sent_ = false;
         resampler_drained_ = false;
+        decoded_audio_ = false;
+        consecutive_invalid_mp3_packets_ = 0;
         seek_target_ms_ = target_ms;
         seek_target_frame_ = target_frame;
         fallback_frame_valid_ = false;
@@ -1086,6 +1204,10 @@ private:
         metadata_.album = read_tag(audio_stream.metadata,
                                    format_context_->metadata,
                                    "album");
+        metadata_.replay_gain_track_db = read_tag(audio_stream.metadata, format_context_->metadata, "replaygain_track_gain");
+        metadata_.replay_gain_album_db = read_tag(audio_stream.metadata, format_context_->metadata, "replaygain_album_gain");
+        metadata_.replay_gain_track_peak = read_tag(audio_stream.metadata, format_context_->metadata, "replaygain_track_peak");
+        metadata_.replay_gain_album_peak = read_tag(audio_stream.metadata, format_context_->metadata, "replaygain_album_peak");
         metadata_.album_artist = read_tag(audio_stream.metadata,
                                           format_context_->metadata,
                                           "album_artist");
@@ -1101,9 +1223,11 @@ private:
         metadata_.comment = read_tag(audio_stream.metadata,
                                      format_context_->metadata,
                                      "comment");
-        metadata_.bpm = read_tag(audio_stream.metadata,
-                                 format_context_->metadata,
-                                 "bpm");
+        for (const char* alias : known_metadata_aliases(CanonicalField::Bpm)) {
+            metadata_.bpm = read_tag(audio_stream.metadata,
+                                     format_context_->metadata, alias);
+            if (!metadata_.bpm.empty()) break;
+        }
         metadata_.custom_tag = read_tag(audio_stream.metadata,
                                         format_context_->metadata,
                                         "AGPLAYER_TAG");
@@ -1536,6 +1660,8 @@ private:
     bool input_eof_ = false;
     bool drain_sent_ = false;
     bool resampler_drained_ = false;
+    bool decoded_audio_ = false;
+    int consecutive_invalid_mp3_packets_ = 0;
     std::int64_t seek_target_ms_ = -1;
     std::int64_t seek_target_frame_ = -1;
     std::int64_t block_start_frame_ = 0;
@@ -1550,6 +1676,8 @@ private:
     DecoderReadCallback custom_read_ = nullptr;
     DecoderSeekCallback custom_seek_ = nullptr;
     void* custom_io_context_ = nullptr;
+    std::unique_ptr<ProprietaryAudioInput> proprietary_input_;
+    ProprietaryAudioInput* active_proprietary_input_ = nullptr;
     DecoderPacketCallback packet_callback_ = nullptr;
     void* packet_context_ = nullptr;
     bool interrupt_triggered_ = false;

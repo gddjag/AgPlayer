@@ -292,6 +292,31 @@ private slots:
             }
         }
     }
+    void droppedVideoImportsItsAudioWaveformAtThePointer()
+    {
+        const QString path = qEnvironmentVariable("AGPLAYER_EDITOR_VIDEO_FIXTURE");
+        QVERIFY2(QFileInfo::exists(path), "video-with-audio fixture must exist");
+        AudioEditorController editor(AG_AUDIO_BACKEND_NULL);
+        QVERIFY(editor.addFiles({QUrl::fromLocalFile(path)}, 3, 24000));
+        QVERIFY(waitForDocumentLoad(editor));
+        QCOMPARE(editor.timelineEventViews().size(), 1);
+        const auto clip = editor.timelineEventViews().front().toMap();
+        QCOMPARE(clip.value("trackIndex").toInt(), 3);
+        QCOMPARE(clip.value("timelineStart").toLongLong(), editor.sampleRate() / 2);
+        QVERIFY(clip.value("sourceTotalFrames").toLongLong() > 0);
+        const auto channels = editor.eventPeaks(clip.value("id").toString(), 256);
+        QVERIFY(!channels.isEmpty());
+        bool audible = false;
+        for (const auto& channel : channels)
+            for (const auto& peak : channel.toList())
+                audible |= std::abs(peak.toDouble()) > 0.01;
+        QVERIFY2(audible, "video must publish the real audio waveform");
+        QVERIFY(editor.openDroppedUrls({QUrl::fromLocalFile(
+            qEnvironmentVariable("AGPLAYER_EDITOR_SILENT_VIDEO_FIXTURE"))}));
+        QTRY_VERIFY_WITH_TIMEOUT(!editor.loading(), 15000);
+        QCOMPARE(editor.timelineEventViews().size(), 1);
+        QVERIFY(!editor.importResults().front().toMap().value("success").toBool());
+    }
     void droppedBatchUsesPointerTrackAndFrameWithoutOverwriting()
     {
         QTemporaryDir directory;

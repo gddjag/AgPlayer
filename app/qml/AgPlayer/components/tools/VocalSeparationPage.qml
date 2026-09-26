@@ -6,6 +6,7 @@ import AgPlayer
 
 Rectangle {
     id: page
+    property bool macCompactPlayback: Qt.platform.os === "osx"
     objectName: "vocalSeparationPage"
     color: Theme.background
     focus: true
@@ -551,6 +552,8 @@ Rectangle {
     }
 
     function jobStateText() {
+        if (!page.hasInput)
+            return qsTr("等待添加文件")
         switch (VocalSeparationController.jobState) {
         case VocalSeparationController.Probing: return qsTr("正在探测设备")
         case VocalSeparationController.Running: return qsTr("正在分离")
@@ -643,7 +646,7 @@ Rectangle {
                     color: page.textPrimary
                     selectionColor: page.primary
                     selectedTextColor: "white"
-                    text: page.macOS ? qsTr("macOS 分离环境：\n• MDX / HTDemucs ONNX：原模型卡片一键配置 ONNX Runtime。Intel 与 Apple Silicon 均提供 CPU，Apple Silicon 逐模型验证 CoreML 后显示可用。\n• 5_HP-Karaoke-UVR.pth：原卡片一键配置独立 Python 3.10、PyTorch、audio-separator 与 FFmpeg；Intel 使用兼容的 PyTorch 2.2.2，Apple Silicon 使用 2.5.1 并逐模型验证 MPS。\n\n运行环境和模型均外置下载，不修改系统 Python。下载进度、暂停、继续和失败原因显示在原卡片中。\n\n模型可放入模型目录任意子目录后点击“检测”；已验证的本地模型不会重复下载。其他 .pth / .th / .ckpt 仍需对应适配器，尚未验证不表示不兼容。运行验证失败或尚未适配的卡片提供 UVR 官方 macOS 支持链接，可查看 Intel / Apple Silicon 兼容模型和下载。\n\n模型来源：卡片官方仓库与官方下载；HTDemucs 支持 HF-Mirror 自动备用线路。\n组件来源：\nhttps://onnxruntime.ai/\nhttps://docs.astral.sh/uv/\nhttps://github.com/nomadkaraoke/python-audio-separator\nhttps://pytorch.org/\n\n第三方公益服务：百度网盘人声伴奏分离模型。\n百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888") : qsTr("支持与环境：\n• MDX / MDXC ONNX、HTDemucs ONNX：使用 AgPlayer 一键配置的 ONNX Runtime（CPU / DirectML GPU）。\n• Demucs .th、UVR .pth：需要可选的外置 Python / PyTorch 运行环境，不会塞入轻量主安装包。\n\n模型来源：\n1. 官方线路：模型卡的“下载”按钮。\n2. 国内公益镜像：HTDemucs 支持 HF-Mirror 自动线路，官方失败会自动切换。\n3. 第三方公益服务：百度网盘人声伴奏分离模型。\n4. 用户自行下载：放入模型目录后点击“检测”。\n\n放置方法：模型可以直接放在模型根目录，也可以放在任意层级的分类子目录；检测会递归扫描全部子目录。内置模型须保留原文件名和完整文件组。其他兼容 ONNX 模型请附带同名 .agmodel.json 描述文件。\n\n本地文件不会再次下载。“已识别 · 待配置”表示文件已经找到；ONNX 模型可点击“一键配置”自动安装运行组件，未知张量契约仍需可信 sidecar。悬停模型介绍可查看具体原因。\n\n百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888")
+                    text: page.macOS ? qsTr("macOS 分离环境：\n• 五轨模型：HTDemucs FP16，htdemucs_fp16weights.onnx 单文件约 166 MB；直接分离鼓组、贝斯、其他和人声，再合成为第五轨伴奏。\n• MDX / HTDemucs ONNX：原模型卡片一键配置 ONNX Runtime。Intel 与 Apple Silicon 均提供 CPU，Apple Silicon 逐模型验证 CoreML 后显示可用。\n• 5_HP-Karaoke-UVR.pth：原卡片一键配置独立 Python 3.10、PyTorch、audio-separator 与 FFmpeg；Intel 使用兼容的 PyTorch 2.2.2，Apple Silicon 使用 2.5.1 并逐模型验证 MPS。\n\n运行环境和模型均外置下载，不修改系统 Python。下载进度、暂停、继续和失败原因显示在原卡片中。\n\n模型可放入模型目录任意子目录后点击“检测”；已验证的本地模型不会重复下载。其他 .pth / .th / .ckpt 仍需对应适配器，尚未验证不表示不兼容。运行验证失败或尚未适配的卡片提供 UVR 官方 macOS 支持链接，可查看 Intel / Apple Silicon 兼容模型和下载。\n\n模型来源：卡片官方仓库与官方下载；HTDemucs 支持 HF-Mirror 自动备用线路。\n组件来源：\nhttps://onnxruntime.ai/\nhttps://docs.astral.sh/uv/\nhttps://github.com/nomadkaraoke/python-audio-separator\nhttps://pytorch.org/\n\n第三方公益服务：百度网盘人声伴奏分离模型。\n百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888") : qsTr("支持与环境：\n• MDX ONNX：一键配置 ONNX Runtime，支持 CPU / DirectML GPU。\n• 五轨模型：HTDemucs FP16，htdemucs_fp16weights.onnx 单文件约 166 MB；直接分离鼓组、贝斯、其他和人声，再合成为第五轨伴奏。使用 CPU 或验证通过的 NVIDIA CUDA；CUDA 组件可在模型卡片配置。\n• Demucs .th、UVR .pth：需要可选的外置 Python / PyTorch 运行环境，不会塞入轻量主安装包。\n\n模型来源：\n1. 官方线路：模型卡的“下载”按钮。\n2. 国内公益镜像：HTDemucs 支持 HF-Mirror 自动线路，官方失败会自动切换。\n3. 第三方公益服务：百度网盘人声伴奏分离模型。\n4. 用户自行下载：放入模型目录后点击“检测”。\n\n放置方法：模型可以直接放在模型根目录，也可以放在任意层级的分类子目录；检测会递归扫描全部子目录。内置模型须保留原文件名；五轨分离只需 htdemucs_fp16weights.onnx 一个模型文件。其他兼容 ONNX 模型请附带同名 .agmodel.json 描述文件。\n\n本地文件不会再次下载。“已识别 · 待配置”表示文件已经找到；ONNX 模型可点击“一键配置”自动安装运行组件，未知张量契约仍需可信 sidecar。悬停模型介绍可查看具体原因。\n\n百度网盘链接: https://pan.baidu.com/s/1dTojqRg2QLrB7D9I4dYUcA?pwd=8888\n提取码: 8888")
                           + (!page.macOS ? qsTr("\n\n一键 Python 配置：当前已适配 5_HP-Karaoke-UVR.pth，模型卡片可直接下载独立 Python 3.11、CPU PyTorch、audio-separator 与 FFmpeg。约 450 MB 下载 / 1.5 GB 磁盘，可暂停后使用缓存续装，官方包源失败会切换清华 PyPI 镜像。环境位于 separation/runtime/python-vr-1，不修改系统 Python，不进入主安装包。其他 .pth / .th / .ckpt 架构仍显示诊断，不会仅凭扩展名标为可运行。\n组件许可与来源：uv（MIT / Apache-2.0）：https://docs.astral.sh/uv/；audio-separator（MIT）：https://github.com/nomadkaraoke/python-audio-separator；PyTorch（BSD）：https://pytorch.org/；FFmpeg 构建许可随外置 imageio-ffmpeg 包附带。") : "")
                     background: Rectangle {
                         color: page.input
@@ -768,9 +771,9 @@ Rectangle {
                         objectName: "separationErrorPanel"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 38
-                        visible: VocalSeparationController.error.length > 0
-                        color: Theme.highlightSoft
-                        border.color: Theme.danger
+                        visible: !page.hasInput || VocalSeparationController.error.length > 0
+                        color: page.hasInput ? Theme.highlightSoft : page.raised
+                        border.color: page.hasInput ? Theme.danger : page.border
                         radius: 6
                         RowLayout {
                             anchors.fill: parent
@@ -779,14 +782,17 @@ Rectangle {
                             anchors.topMargin: 4
                             anchors.bottomMargin: 4
                             Label {
+                                objectName: "separationStatusText"
                                 Layout.fillWidth: true
-                                text: VocalSeparationController.error
+                                text: page.hasInput ? VocalSeparationController.error
+                                                    : qsTr("请添加要分离的文件")
                                 color: page.textPrimary
                                 elide: Text.ElideRight
                             }
                             WorkbenchButton {
                                 text: qsTr("重试")
                                 Layout.alignment: Qt.AlignVCenter
+                                visible: page.hasInput
                                 enabled: VocalSeparationController.canRetry
                                 Accessible.name: text
                                 Accessible.role: Accessible.Button
@@ -1133,7 +1139,7 @@ Rectangle {
                                     RowLayout {
                                         Layout.fillWidth: true
                                         Label { text: qsTr("文件大小："); color: page.muted; font.pixelSize: Theme.fontSizeCaption; Layout.preferredWidth: 62 }
-                                        Label { Layout.fillWidth: true; text: page.formatBytes(cardData.bytes); color: page.textPrimary; font.pixelSize: Theme.fontSizeCaption }
+                                        Label { Layout.fillWidth: true; text: Math.ceil(cardData.bytes / 1000000) + " MB"; color: page.textPrimary; font.pixelSize: Theme.fontSizeCaption }
                                     }
                                     RowLayout {
                                         Layout.fillWidth: true
@@ -1517,6 +1523,7 @@ Rectangle {
                                             opacity: stemOption.enabled ? 1 : 0.38
                                         }
                                         contentItem: RowLayout {
+                                            clip: true
                                             spacing: 7
                                             ThemedIcon {
                                                 objectName: "separationStemIcon-" + modelData.kind
@@ -1529,12 +1536,15 @@ Rectangle {
                                             }
                                             ColumnLayout {
                                                 Layout.fillWidth: true
+                                                Layout.minimumWidth: 0
                                                 spacing: 0
                                                 Label {
                                                     text: modelData.text
                                                           + (stemOption.info.derived ? qsTr("（派生）") : "")
                                                     color: stemOption.enabled ? page.textPrimary : page.muted
                                                     font.pixelSize: Theme.fontSizeCaption
+                                                    Layout.fillWidth: true
+                                                    elide: Text.ElideRight
                                                 }
                                                 Label {
                                                     text: stemOption.info.supported
@@ -1580,8 +1590,9 @@ Rectangle {
                         id: timeline
                         objectName: "separationTimeline"
                         Layout.fillWidth: true
-                        Layout.preferredHeight: page.compact ? 350
-                                                        : page.fullDesktop ? 280 : 320
+                        Layout.preferredHeight: (page.compact ? 380
+                                                        : page.fullDesktop ? 310 : 350)
+                            + (page.macCompactPlayback ? 24 : 0)
                         color: page.input; border.color: page.border; radius: 7
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 8; spacing: 3
@@ -1589,7 +1600,7 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Label { text: page.jobStateText(); color: VocalSeparationController.jobState === VocalSeparationController.Completed ? page.success : page.textPrimary; font.bold: true }
                                  Label {
-                                     text: VocalSeparationController.stage.length > 0
+                                     text: page.hasInput && VocalSeparationController.stage.length > 0
                                            ? " · " + ({"validation": qsTr("校验模型"),
                                                       "provider_probe": qsTr("验证处理设备"),
                                                       "runtime_verification": qsTr("校验运行环境"),
@@ -1674,7 +1685,7 @@ Rectangle {
                                     readonly property color accent: page.stemColor(modelData.kind)
                                     objectName: "separationTimelineStem-" + modelData.kind
                                     Layout.fillWidth: true; Layout.fillHeight: true
-                                    Layout.minimumHeight: 38
+                                    Layout.minimumHeight: 44
                                     color: Qt.rgba(accent.r, accent.g, accent.b, 0.07)
                                     border.color: page.divider; radius: 3
                                     RowLayout {
@@ -2217,14 +2228,15 @@ Rectangle {
              id: bottomBar
              objectName: "separationBottomBar"
              Layout.fillWidth: true
-             Layout.preferredHeight: page.compact ? 124 : 82
+             Layout.preferredHeight: (page.compact ? 124 : 82) - (page.macCompactPlayback ? 24 : 0)
             Layout.leftMargin: 14
             Layout.rightMargin: 14
             Layout.bottomMargin: 10
             color: "transparent"
             border.width: 0
              GridLayout {
-                 anchors.fill: parent; anchors.margins: 6; rowSpacing: 8; columnSpacing: 8
+                 anchors.fill: parent; anchors.margins: page.macCompactPlayback ? 2 : 6
+                 rowSpacing: page.macCompactPlayback ? 4 : 8; columnSpacing: 8
                 columns: page.compact ? 4 : 14
                 Rectangle {
                     id: transport
@@ -2234,14 +2246,14 @@ Rectangle {
                      Layout.columnSpan: page.compact ? 2 : 3
                      Layout.fillWidth: page.compact
                      Layout.preferredWidth: page.compact ? 0 : 330
-                     Layout.preferredHeight: 56
+                     Layout.preferredHeight: page.macCompactPlayback ? 48 : 56
                     Layout.fillHeight: true
                     color: "transparent"
                     border.width: 0
                     radius: 6
                     RowLayout {
                          anchors.fill: parent
-                         anchors.margins: 5
+                         anchors.margins: page.macCompactPlayback ? 3 : 5
                          spacing: 10
                          TransportIconButton {
                              implicitWidth: 38
@@ -2260,8 +2272,8 @@ Rectangle {
                              objectName: "separationTransportPlay"
                              implicitWidth: 46
                              implicitHeight: 46
-                             Layout.preferredWidth: 46
-                             Layout.preferredHeight: 46
+                             Layout.preferredWidth: page.macCompactPlayback ? 40 : 46
+                             Layout.preferredHeight: page.macCompactPlayback ? 40 : 46
                              enabled: page.hasAvailableResultStem()
                              iconName: page.resultPreviewCurrent
                                        && AudioPreviewController.playing
@@ -2356,6 +2368,11 @@ Rectangle {
                 WorkbenchButton {
                     id: primaryAction
                     objectName: "separationPrimaryAction"
+                    readonly property bool progressActive:
+                        VocalSeparationController.jobState === VocalSeparationController.Running
+                        || VocalSeparationController.jobState === VocalSeparationController.Cancelling
+                    readonly property real progressFraction:
+                        Math.max(0, Math.min(1, VocalSeparationController.progress))
                      Layout.row: page.compact ? 1 : 0
                      Layout.column: page.compact ? 2 : 10
                      Layout.columnSpan: page.compact ? 2 : 4
@@ -2371,10 +2388,14 @@ Rectangle {
                              || (VocalSeparationController.jobState !== VocalSeparationController.Cancelling
                                  && !page.contextLocked && page.hasInput)
                     focusPolicy: Qt.StrongFocus
-                    Accessible.name: text; Accessible.role: Accessible.Button
+                    Accessible.name: progressActive
+                                     ? text + " " + Math.round(progressFraction * 100) + "%"
+                                     : text
+                    Accessible.role: Accessible.Button
                     ToolTip.visible: hovered && !enabled
-                    ToolTip.text: VocalSeparationController.jobState === VocalSeparationController.Cancelling
-                                  ? qsTr("正在取消分离任务") : VocalSeparationController.startDisabledReason
+                    ToolTip.text: !page.hasInput ? qsTr("请添加要分离的文件")
+                                             : VocalSeparationController.jobState === VocalSeparationController.Cancelling
+                                               ? qsTr("正在取消分离任务") : VocalSeparationController.startDisabledReason
                     onClicked: {
                         if (VocalSeparationController.jobState === VocalSeparationController.Running)
                             VocalSeparationController.cancel()
@@ -2384,6 +2405,35 @@ Rectangle {
                             VocalSeparationController.reportStartDisabledReason()
                     }
                     primaryAction: true
+                    background: Rectangle {
+                        radius: 5
+                        clip: true
+                        color: primaryAction.enabled ? page.primary : page.divider
+                        border.color: primaryAction.activeFocus ? page.cyan : page.primary
+                        border.width: primaryAction.activeFocus ? 2 : 1
+                        opacity: primaryAction.enabled ? 1 : 0.62
+                        Rectangle {
+                            objectName: "separationPrimaryProgressFill"
+                            visible: primaryAction.progressActive
+                            x: 1
+                            y: 1
+                            width: (parent.width - 2) * primaryAction.progressFraction
+                            height: parent.height - 2
+                            color: page.success
+                            opacity: 0.4
+                        }
+                    }
+                    Label {
+                        objectName: "separationPrimaryProgressPercent"
+                        visible: primaryAction.progressActive
+                        anchors.right: parent.right
+                        anchors.rightMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: Math.round(primaryAction.progressFraction * 100) + "%"
+                        color: Theme.accentText
+                        font.pixelSize: Theme.fontSizeCaption
+                        font.bold: true
+                    }
                 }
             }
         }

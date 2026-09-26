@@ -34,6 +34,7 @@ private slots:
     void newExplicitRequestAfterCrashUsesTheSuppliedPayload();
     void failureSignalCanRetrySynchronously();
     void heartbeatTimeoutCancelsThenFailsRetryably();
+    void probeHeartbeatDoesNotFailTheProtocol();
     void rejectsWrongDirectionAndProtocolVersion();
     void rejectsAnOversizedRemainingProtocolTailImmediately();
     void protocolFailureKeepsTheEventLoopResponsive();
@@ -286,6 +287,22 @@ void SeparationProcessClientTest::heartbeatTimeoutCancelsThenFailsRetryably()
     QVERIFY(failed.first().at(1).toBool());
     QCOMPARE(client.state(), SeparationProcessClient::Error);
     QVERIFY(!client.isProcessRunning());
+}
+
+void SeparationProcessClientTest::probeHeartbeatDoesNotFailTheProtocol()
+{
+    SeparationProcessClient client(
+        QString::fromUtf8(AG_SEPARATION_CONTROLLER_TEST_WORKER_PATH),
+        {QStringLiteral("probe-heartbeat")}, shortDeadlines());
+    QSignalSpy probe(&client, &SeparationProcessClient::probeReceived);
+    QSignalSpy failed(&client, &SeparationProcessClient::failed);
+    QVERIFY(client.startProbe({}));
+    QTRY_VERIFY_WITH_TIMEOUT(!probe.isEmpty() || !failed.isEmpty(), 5000);
+    QVERIFY2(failed.isEmpty(),
+             qPrintable(failed.isEmpty() ? QString()
+                                         : failed.first().at(0).toString()));
+    QCOMPARE(probe.count(), 1);
+    QTRY_VERIFY_WITH_TIMEOUT(client.canAcceptRequest(), 1500);
 }
 
 void SeparationProcessClientTest::rejectsWrongDirectionAndProtocolVersion()

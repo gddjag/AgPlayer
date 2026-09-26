@@ -17,6 +17,19 @@ if (-not $NewRelease -and ($FromVersion -or $PSBoundParameters.ContainsKey('Bump
     throw '-FromVersion and -Bump require -NewRelease'
 }
 
+function Assert-NoScoreTools {
+    param([string]$Directory)
+    $removed = Get-ChildItem -LiteralPath $Directory -Recurse -Force |
+        Where-Object { $_.Name -match '^(AgTranscriptionWorker|transcription|yourmt3|basic[-_]pitch|(?:lib)?verovio)' } |
+        Select-Object -First 1
+    if ($removed) { throw "Removed audio-to-MIDI/score component in package: $($removed.FullName)" }
+    $player = Join-Path $Directory 'AgPlayer.exe'
+    if ((Test-Path -LiteralPath $player) -and
+        [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($player)).Contains('TranscriptionController')) {
+        throw 'Removed audio-to-MIDI/score controller in AgPlayer.exe; rebuild from stripped sources'
+    }
+}
+
 function Publish-Installer {
     param(
         [string]$Iscc,
@@ -332,6 +345,8 @@ foreach ($relativePath in $requiredRuntime) {
         throw "Deployment validation failed; missing $relativePath"
     }
 }
+
+Assert-NoScoreTools -Directory $stage
 
 Publish-Installer -Iscc $iscc -InstallerScript (Join-Path $repo 'installer/AgPlayer.iss') `
     -AppVersion $appVersion -OutputDirectory $installerOutput

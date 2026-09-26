@@ -99,6 +99,9 @@ set(BRAND_FILES
     ${CMAKE_SOURCE_DIR}/assets/brand/desktop-install-icon.ico
     ${CMAKE_SOURCE_DIR}/assets/brand/logo-mark.png
 )
+if(APPLE)
+    list(APPEND BRAND_FILES ${CMAKE_SOURCE_DIR}/assets/brand/macos-app-icon.png)
+endif()
 
 foreach(resource_file ${BRAND_FILES} ${ICON_FILES})
     file(RELATIVE_PATH alias ${CMAKE_SOURCE_DIR} ${resource_file})
@@ -131,6 +134,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/EqualizerWindow.qml
         qml/AgPlayer/SettingsWindow.qml
         qml/AgPlayer/SettingsPage.qml
+        qml/AgPlayer/components/PrivacyPolicyDialog.qml
         qml/AgPlayer/theme/Theme.qml
         qml/AgPlayer/components/TitleBar.qml
         qml/AgPlayer/components/IntegratedPlayerShell.qml
@@ -211,6 +215,7 @@ qt_add_qml_module(agplayer_app_qml
         qml/AgPlayer/components/audioeditor/EditorSixTrackWorkspace.qml
         qml/AgPlayer/components/audioeditor/EditorSlider.qml
     RESOURCES
+        assets/legal/privacy-policy.html
         ${BRAND_FILES}
         ${ICON_FILES}
 )

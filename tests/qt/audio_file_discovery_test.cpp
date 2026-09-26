@@ -10,6 +10,7 @@ class AudioFileDiscoveryTest final : public QObject {
 private slots:
     void videoExtensionsAreDistinctAndCaseInsensitive();
     void directoryExpansionRemainsAudioOnly();
+    void proprietaryExtensionsJoinAudioDiscovery();
 };
 
 void AudioFileDiscoveryTest::videoExtensionsAreDistinctAndCaseInsensitive()
@@ -43,6 +44,21 @@ void AudioFileDiscoveryTest::directoryExpansionRemainsAudioOnly()
         {QUrl::fromLocalFile(directory.path())});
     QCOMPARE(expanded.size(), 1);
     QCOMPARE(expanded.constFirst().fileName(), QStringLiteral("track.MP3"));
+}
+
+void AudioFileDiscoveryTest::proprietaryExtensionsJoinAudioDiscovery()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    for (const QString& fileName : {
+             QStringLiteral("song.MMP4"), QStringLiteral("song.666c6163"),
+             QStringLiteral("song.kgm.flac"), QStringLiteral("song.vpr.flac")}) {
+        QFile file(directory.filePath(fileName));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+    }
+    const QList<QUrl> expanded = agplayer::qt::expandAudioUrls(
+        {QUrl::fromLocalFile(directory.path())});
+    QCOMPARE(expanded.size(), 4);
 }
 
 QTEST_MAIN(AudioFileDiscoveryTest)

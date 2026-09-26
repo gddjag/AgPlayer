@@ -2,6 +2,7 @@
 #include "ffmpeg_codec_support.hpp"
 #include "flac_stream_boundary.hpp"
 #include "transcode_probe.hpp"
+#include "proprietary_format_io.hpp"
 #include "transcode_verifier.hpp"
 
 extern "C" {
@@ -127,16 +128,20 @@ ag_result count_attached_pictures(const std::string& input_path,
 {
     count = 0;
     AVFormatContext* input = nullptr;
-    if (avformat_open_input(&input, input_path.c_str(), nullptr, nullptr) < 0
+    ProprietaryFormatIo proprietary_io;
+    if (open_audio_format_input(input_path, &input, proprietary_io, error) < 0
         || input == nullptr) {
-        avformat_close_input(&input);
-        error = "Failed to inspect source cover images";
+        close_audio_format_input(&input, proprietary_io);
+        if (error.empty()) error = "Failed to inspect source cover images";
         return AG_IO_ERROR;
     }
     if (avformat_find_stream_info(input, nullptr) < 0) {
-        avformat_close_input(&input);
+        close_audio_format_input(&input, proprietary_io);
         error = "Failed to inspect source cover images";
         return AG_DECODE_ERROR;
+    }
+    if (proprietary_io.input) {
+        proprietary_io.input->apply_format_tags(input);
     }
     for (unsigned int index = 0; index < input->nb_streams; ++index) {
         const AVStream* stream = input->streams[index];
@@ -146,7 +151,7 @@ ag_result count_attached_pictures(const std::string& input_path,
             ++count;
         }
     }
-    avformat_close_input(&input);
+    close_audio_format_input(&input, proprietary_io);
     return AG_OK;
 }
 
@@ -444,6 +449,7 @@ void build_channel_layout(AVChannelLayout& layout, int channels)
 
 struct DecoderState {
     AVFormatContext* fmt_ctx = nullptr;
+    ProprietaryFormatIo proprietary_io;
     const AVCodec* codec = nullptr;
     AVCodecContext* ctx = nullptr;
     int stream_index = -1;
@@ -453,9 +459,7 @@ struct DecoderState {
         if (ctx != nullptr) {
             avcodec_free_context(&ctx);
         }
-        if (fmt_ctx != nullptr) {
-            avformat_close_input(&fmt_ctx);
-        }
+        close_audio_format_input(&fmt_ctx, proprietary_io);
     }
 };
 
@@ -497,13 +501,16 @@ ag_result open_decoder(const std::string& path,
                        DecoderState& d,
                        std::string& error)
 {
-    if (avformat_open_input(&d.fmt_ctx, path.c_str(), nullptr, nullptr) < 0) {
-        error = "Failed to open input file";
+    if (open_audio_format_input(path, &d.fmt_ctx, d.proprietary_io, error) < 0) {
+        if (error.empty()) error = "Failed to open input file";
         return AG_IO_ERROR;
     }
     if (avformat_find_stream_info(d.fmt_ctx, nullptr) < 0) {
         error = "Failed to find stream info";
         return AG_DECODE_ERROR;
+    }
+    if (d.proprietary_io.input) {
+        d.proprietary_io.input->apply_format_tags(d.fmt_ctx);
     }
 
     if (requested_stream_index >= 0

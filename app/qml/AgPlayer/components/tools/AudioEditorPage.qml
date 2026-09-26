@@ -12,9 +12,12 @@ Rectangle {
     focus: true
 
     readonly property bool narrowLayout: width < 1100
+    property bool macDesktopLayout: Qt.platform.os === "osx"
+    readonly property bool macStackedLayout: false
     readonly property bool compactHeight: height < 800
-    readonly property real inspectorWidth: narrowLayout ? 300 : 380
-    readonly property real mainWidth: width - inspectorWidth
+    readonly property real inspectorWidth: macDesktopLayout
+        ? Math.max(220, Math.min(280, width * 0.24)) : narrowLayout ? 300 : 380
+    readonly property real mainWidth: macStackedLayout ? width : width - inspectorWidth
     property bool pendingExportAfterDirectory: false
     property bool pendingSelectionExport: false
     property string pendingRelinkSourceId: ""
@@ -216,7 +219,7 @@ Rectangle {
         id: relinkSourceDialog
         objectName: "editorRelinkSourceDialog"
         fileMode: FileDialog.OpenFile
-        nameFilters: [qsTr("音频文件 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma)")]
+        nameFilters: [qsTr("音频或视频 (*.wav *.flac *.mp3 *.aac *.m4a *.ogg *.opus *.wma *.ape *.aif *.aiff *.mp4 *.mkv *.webm *.mov *.avi *.m4v)")]
         onAccepted: {
             AudioEditorController.relinkProjectSource(
                 page.pendingRelinkSourceId, selectedFile)
@@ -279,7 +282,8 @@ Rectangle {
     function handleDropUrls(urls, x, y) {
         if (urls.length === 1 && urls[0].toString().toLowerCase().endsWith(".agproj"))
             return AudioEditorController.openProject(urls[0])
-        return mainColumn.dropAudio(urls, x, y)
+        const point = mainColumn.mapFromItem(page, x, y)
+        return mainColumn.dropAudio(urls, point.x, point.y)
     }
     DropArea {
         id: editorAudioDropArea
@@ -291,12 +295,32 @@ Rectangle {
             drop.acceptProposedAction()
         }
     }
+    Flickable {
+        id: editorPageScroller
+        objectName: "editorPageScroller"
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: editorContent.height
+        flickableDirection: Flickable.VerticalFlick
+        interactive: page.macStackedLayout
+        boundsBehavior: Flickable.StopAtBounds
+        clip: true
+        ScrollBar.vertical: ScrollBar {
+            policy: page.macStackedLayout ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+        }
+
+    Item {
+        id: editorContent
+        width: editorPageScroller.width
+        height: page.macStackedLayout ? mainColumn.height + inspector.height : page.height
+
     EditorSixTrackWorkspace {
         id: mainColumn
         objectName: "editorMainColumn"
         shortcutsEnabled: page.editorShortcutAvailable()
+        singleRowTransport: page.macDesktopLayout
         width: page.mainWidth
-        height: page.height
+        height: page.macStackedLayout ? Math.max(820, page.height) : page.height
         onImportRequested: openDialog.open()
         onSaveProjectRequested: AudioEditorController.save()
     }
@@ -331,10 +355,10 @@ Rectangle {
     Rectangle {
         id: inspector
         objectName: "editorInspector"
-        x: page.mainWidth
-        y: 0
-        width: page.inspectorWidth
-        height: page.height
+        x: page.macStackedLayout ? 0 : page.mainWidth
+        y: page.macStackedLayout ? mainColumn.height : 0
+        width: page.macStackedLayout ? page.width : page.inspectorWidth
+        height: page.macStackedLayout ? 440 : page.height
         z: 2
         color: Theme.background
         border.color: Theme.borderStrong
@@ -346,22 +370,25 @@ Rectangle {
             anchors.fill: parent
             anchors.margins: 8
             anchors.rightMargin: 14
+            anchors.bottomMargin: page.compactHeight ? 0 : 8
             contentWidth: width
-            contentHeight: inspectorGroups.height
+            contentHeight: inspectorGroups.height * inspectorGroups.scale
             clip: true
             boundsBehavior: Flickable.StopAtBounds
 
             Column {
                 id: inspectorGroups
-                width: inspectorScroller.width
-                spacing: Theme.spacingSm
+                width: page.macDesktopLayout ? Math.max(278, inspectorScroller.width) : inspectorScroller.width
+                scale: inspectorScroller.width / width
+                transformOrigin: Item.TopLeft
+                spacing: page.compactHeight ? Theme.spacingXs : Theme.spacingSm
 
                 Rectangle {
                     id: tempoGroup
                     objectName: "inspectorTempoGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : page.compactHeight ? 124 : 156
+                    height: collapsed ? 38 : page.compactHeight ? 172 : 198
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -402,19 +429,43 @@ Rectangle {
                         RowLayout {
                             visible: !tempoGroup.collapsed
                             Layout.fillWidth: true
+                            Label { text: qsTr("作用范围"); color: Theme.textSecondary }
+                            ThemedComboBox {
+                                id: tempoScope
+                                objectName: "inspectorTempoScope"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Theme.controlHeight
+                                model: [qsTr("全部音轨"), qsTr("当前音轨")]
+                            }
+                        }
+                        RowLayout {
+                            visible: !tempoGroup.collapsed
+                            Layout.fillWidth: true
                             Label { text: qsTr("BPM"); color: Theme.textSecondary }
                             ThemedTextField {
                                 objectName: "inspectorBpmInput"
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: Theme.controlHeight
-                                text: AudioEditorController.targetBpm > 0
-                                    ? AudioEditorController.targetBpm.toFixed(0) : ""
+                                enabled: AudioEditorController.timePitchSupported
+                                    && AudioEditorController.hasDocument
+                                    && (tempoScope.currentIndex === 0 || AudioEditorController.tracks[AudioEditorController.selectedTrack].hasEvents)
+                                text: {
+                                    AudioEditorController.tracks
+                                    if (AudioEditorController.originalBpm <= 0) return ""
+                                    const percent = tempoScope.currentIndex === 1
+                                        ? AudioEditorController.timelineTrackSpeedPercent(AudioEditorController.selectedTrack)
+                                        : AudioEditorController.timelineAllSpeedPercent()
+                                    return (AudioEditorController.originalBpm * percent / 100).toFixed(0)
+                                }
                                 horizontalAlignment: TextInput.AlignHCenter
                                 validator: IntValidator { bottom: 20; top: 400 }
                                 onEditingFinished: {
                                     const bpm = Number(text)
-                                    if (bpm >= 20 && bpm <= 400)
-                                        AudioEditorController.setTargetBpm(bpm)
+                                    if (bpm >= 20 && bpm <= 400) {
+                                        if (tempoScope.currentIndex === 1)
+                                            AudioEditorController.setTimelineTrackTargetBpm(AudioEditorController.selectedTrack, bpm)
+                                        else AudioEditorController.setTimelineAllTargetBpm(bpm)
+                                    }
                                 }
                             }
                             ThemedButton {
@@ -464,17 +515,31 @@ Rectangle {
                                 }
                                 Layout.fillWidth: true; from: 0.5; to: 2.0
                                 stepSize: 0.01
-                                value: AudioEditorController.speedPercent / 100
+                                value: {
+                                    AudioEditorController.tracks
+                                    return (tempoScope.currentIndex === 1
+                                        ? AudioEditorController.timelineTrackSpeedPercent(AudioEditorController.selectedTrack)
+                                        : AudioEditorController.timelineAllSpeedPercent()) / 100
+                                }
                                 enabled: AudioEditorController.timePitchSupported
                                     && AudioEditorController.hasDocument
+                                    && (tempoScope.currentIndex === 0 || AudioEditorController.tracks[AudioEditorController.selectedTrack].hasEvents)
                                 onPressedChanged: {
-                                    if (!pressed)
-                                        AudioEditorController.setSpeedPercent(value * 100)
+                                    if (!pressed) {
+                                        if (tempoScope.currentIndex === 1)
+                                            AudioEditorController.setTimelineTrackSpeedPercent(AudioEditorController.selectedTrack, value * 100)
+                                        else AudioEditorController.setTimelineAllSpeedPercent(value * 100)
+                                    }
                                 }
                                 onValueChanged: {
                                     if (!pressed && Math.abs(value * 100
-                                            - AudioEditorController.speedPercent) > 0.001)
-                                        AudioEditorController.setSpeedPercent(value * 100)
+                                            - (tempoScope.currentIndex === 1
+                                               ? AudioEditorController.timelineTrackSpeedPercent(AudioEditorController.selectedTrack)
+                                               : AudioEditorController.timelineAllSpeedPercent())) > 0.001) {
+                                        if (tempoScope.currentIndex === 1)
+                                            AudioEditorController.setTimelineTrackSpeedPercent(AudioEditorController.selectedTrack, value * 100)
+                                        else AudioEditorController.setTimelineAllSpeedPercent(value * 100)
+                                    }
                                 }
                             }
                             Label {
@@ -497,7 +562,15 @@ Rectangle {
                                 text: qsTr("重置")
                                 available: AudioEditorController.timePitchSupported
                                     && AudioEditorController.hasDocument
-                                onClicked: AudioEditorController.resetTimePitch()
+                                onClicked: {
+                                    if (tempoScope.currentIndex === 1) {
+                                        AudioEditorController.setTimelineTrackSpeedPercent(AudioEditorController.selectedTrack, 100)
+                                        AudioEditorController.setTimelineTrackPitch(AudioEditorController.selectedTrack, 0)
+                                    } else {
+                                        AudioEditorController.setTimelineAllSpeedPercent(100)
+                                        AudioEditorController.setTimelineAllPitch(0)
+                                    }
+                                }
                             }
                         }
                     }
@@ -508,7 +581,7 @@ Rectangle {
                     objectName: "inspectorPitchGroup"
                     width: parent.width
                     property bool collapsed: false
-                    height: collapsed ? 38 : page.compactHeight ? 90 : 105
+                    height: collapsed ? 38 : page.compactHeight ? 138 : 150
                     clip: true
                     color: Theme.surfaceElevated
                     border.color: Theme.borderStrong
@@ -549,6 +622,18 @@ Rectangle {
                         RowLayout {
                             visible: !pitchGroup.collapsed
                             Layout.fillWidth: true
+                            Label { text: qsTr("作用范围"); color: Theme.textSecondary }
+                            ThemedComboBox {
+                                id: pitchScope
+                                objectName: "inspectorPitchScope"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: Theme.controlHeight
+                                model: [qsTr("全部音轨"), qsTr("当前音轨")]
+                            }
+                        }
+                        RowLayout {
+                            visible: !pitchGroup.collapsed
+                            Layout.fillWidth: true
                             Label { text: qsTr("半音"); color: Theme.textSecondary }
                             ThemedButton {
                                 objectName: "inspectorPitchMinus"
@@ -568,8 +653,9 @@ Rectangle {
                                     && pitchSlider.value > pitchSlider.from
                                 onClicked: {
                                     pitchSlider.value -= 1
-                                    AudioEditorController.setPitch(
-                                        Math.round(pitchSlider.value), 0)
+                                    if (pitchScope.currentIndex === 1)
+                                        AudioEditorController.setTimelineTrackPitch(AudioEditorController.selectedTrack, Math.round(pitchSlider.value))
+                                        else AudioEditorController.setTimelineAllPitch(Math.round(pitchSlider.value))
                                 }
                             }
                             Label { text: "−12"; color: Theme.textSecondary }
@@ -580,19 +666,31 @@ Rectangle {
                                     event.accepted = true
                                 }
                                 Layout.fillWidth: true; from: -12; to: 12; stepSize: 1
-                                value: Math.trunc(AudioEditorController.pitchCents / 100)
+                                value: {
+                                    AudioEditorController.tracks
+                                    return pitchScope.currentIndex === 1
+                                        ? AudioEditorController.timelineTrackPitchSemitones(AudioEditorController.selectedTrack)
+                                        : AudioEditorController.timelineAllPitchSemitones()
+                                }
                                 enabled: AudioEditorController.timePitchSupported
                                     && AudioEditorController.hasDocument
+                                    && (pitchScope.currentIndex === 0 || AudioEditorController.tracks[AudioEditorController.selectedTrack].hasEvents)
                                 onPressedChanged: {
-                                    if (!pressed)
-                                        AudioEditorController.setPitch(
-                                            Math.round(value), 0)
+                                    if (!pressed) {
+                                        if (pitchScope.currentIndex === 1)
+                                            AudioEditorController.setTimelineTrackPitch(AudioEditorController.selectedTrack, Math.round(value))
+                                        else AudioEditorController.setTimelineAllPitch(Math.round(value))
+                                    }
                                 }
                                 onValueChanged: {
                                     if (!pressed && Math.round(value) * 100
-                                        !== AudioEditorController.pitchCents)
-                                        AudioEditorController.setPitch(
-                                            Math.round(value), 0)
+                                        !== (pitchScope.currentIndex === 1
+                                             ? AudioEditorController.timelineTrackPitchSemitones(AudioEditorController.selectedTrack) * 100
+                                             : AudioEditorController.timelineAllPitchSemitones() * 100)) {
+                                        if (pitchScope.currentIndex === 1)
+                                            AudioEditorController.setTimelineTrackPitch(AudioEditorController.selectedTrack, Math.round(value))
+                                        else AudioEditorController.setTimelineAllPitch(Math.round(value))
+                                    }
                                 }
                             }
                             Label {
@@ -617,8 +715,9 @@ Rectangle {
                                     && pitchSlider.value < pitchSlider.to
                                 onClicked: {
                                     pitchSlider.value += 1
-                                    AudioEditorController.setPitch(
-                                        Math.round(pitchSlider.value), 0)
+                                    if (pitchScope.currentIndex === 1)
+                                        AudioEditorController.setTimelineTrackPitch(AudioEditorController.selectedTrack, Math.round(pitchSlider.value))
+                                    else AudioEditorController.setTimelineAllPitch(Math.round(pitchSlider.value))
                                 }
                             }
                             Label {
@@ -635,7 +734,7 @@ Rectangle {
                     id: preservePitchGroup
                     objectName: "inspectorPreservePitchGroup"
                     width: parent.width
-                    property bool collapsed: false
+                    property bool collapsed: page.compactHeight
                     height: collapsed ? 38 : page.compactHeight ? 100 : 130
                     clip: true
                     color: Theme.surfaceElevated
@@ -1114,6 +1213,8 @@ Rectangle {
                 }
             }
         }
+    }
+    }
     }
 
 }

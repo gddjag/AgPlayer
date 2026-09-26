@@ -237,7 +237,7 @@ private slots:
         QVERIFY(editor.cancelEventGesture());
         QCOMPARE(editor.timelineEventViews().front().toMap().value("timelineStart").toLongLong(), 0);
     }
-    void recordingBlocksExistingMixPlayback() {
+    void recordingPlaysExistingMixAndAllowsLiveMuteSolo() {
         auto input = std::make_shared<CaptureFixture>();
         AudioEditorController editor(AG_AUDIO_BACKEND_NULL);
         QVERIFY(editor.recorder()->setCaptureFactoryForTesting([input] { return std::make_unique<FixtureInput>(input); }));
@@ -249,11 +249,22 @@ private slots:
         QVERIFY(editor.startRecording());
         QTRY_VERIFY(input->started.load(std::memory_order_acquire));
         QVERIFY(!editor.playPause());
+        QTRY_VERIFY(editor.playing());
+        QVERIFY(editor.setTrackMute(0, true));
+        QVERIFY(editor.playing());
+        QVERIFY(editor.setTimelineTrackSolo(0, true));
+        QVERIFY(editor.setTrackMute(0, false));
+        QVERIFY(editor.playing());
+        QVERIFY(!editor.trimEvent(QStringLiteral("1"), 0, 24000, 0));
+        editor.pauseResumeRecording();
         QVERIFY(!editor.playing());
+        editor.pauseResumeRecording();
+        QVERIFY(editor.playing());
         input->push(480, 0.125F);
         QTRY_COMPARE(editor.recorder()->recordedFrames(), 480);
         editor.stopRecording();
         QTRY_COMPARE_WITH_TIMEOUT(editor.timelineEventViews().size(), 2, 10000);
+        QVERIFY(!editor.playing());
         QTemporaryDir saved;
         QVERIFY(saved.isValid());
         QVERIFY(editor.saveProject(QUrl::fromLocalFile(saved.filePath("capture.agproj"))));

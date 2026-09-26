@@ -85,6 +85,11 @@ int main(int argc, char* argv[])
                     std::exit(8);
                 }
             } else if (message.type == ProtocolType::Probe) {
+                if (scenario == QStringLiteral("probe-heartbeat")) {
+                    send(ProtocolType::Progress, message.requestId,
+                         {{QStringLiteral("fraction"), 0.0},
+                          {QStringLiteral("stage"), QStringLiteral("provider_probe")}});
+                }
                 send(ProtocolType::Probe, message.requestId,
                      {{QStringLiteral("cpu"), true},
                       {QStringLiteral("gpu"), scenario == QStringLiteral("gpu-probe")},

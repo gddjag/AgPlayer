@@ -319,6 +319,15 @@ bool AudioDocument::setTrackMuted(int trackIndex, bool muted)
     return applySnapshot(std::move(state));
 }
 
+bool AudioDocument::setTrackSolo(int trackIndex, bool solo)
+{
+    if (trackIndex < 0 || trackIndex >= static_cast<int>(kTrackCount)) return false;
+    auto state = timeline_.snapshot();
+    if (state.tracks[static_cast<std::size_t>(trackIndex)].solo == solo) return true;
+    state.tracks[static_cast<std::size_t>(trackIndex)].solo = solo;
+    return applySnapshot(std::move(state));
+}
+
 bool AudioDocument::cropEventToSelection(EventId id)
 {
     if (!hasValidSelection()) return false;
@@ -339,6 +348,72 @@ bool AudioDocument::setTrackGain(int trackIndex, float gain)
     auto state = timeline_.snapshot();
     state.tracks[static_cast<std::size_t>(trackIndex)].gain = gain;
     return applySnapshot(std::move(state));
+}
+
+bool AudioDocument::setTrackSpeedRatio(int trackIndex, double ratio)
+{
+    if (trackIndex < -1 || trackIndex >= static_cast<int>(kTrackCount)
+        || !std::isfinite(ratio) || ratio < 0.5 || ratio > 2.0) return false;
+    auto candidate = timeline_.snapshot().events;
+    bool changed = false;
+    for (int track = 0; track < static_cast<int>(kTrackCount); ++track) {
+        if (trackIndex >= 0 && track != trackIndex) continue;
+        std::vector<AudioEvent*> trackEvents;
+        for (auto& event : candidate)
+            if (event.trackIndex == track) trackEvents.push_back(&event);
+        std::stable_sort(trackEvents.begin(), trackEvents.end(),
+            [](const AudioEvent* a, const AudioEvent* b) { return a->timelineStart < b->timelineStart; });
+        SampleFrame shift = 0;
+        for (AudioEvent* event : trackEvents) {
+            const SampleFrame oldFrames = audibleFrames(*event);
+            const SampleFrame oldStart = event->timelineStart;
+            const long double newStart = static_cast<long double>(oldStart) + shift;
+            if (newStart < 0 || newStart > static_cast<long double>((std::numeric_limits<SampleFrame>::max)())) return false;
+            event->timelineStart = static_cast<SampleFrame>(newStart);
+            if (event->speedRatio != ratio) {
+                changed = true;
+                event->speedRatio = ratio;
+                const SampleFrame newFrames = audibleFrames(*event);
+                if (newFrames <= 0) return false;
+                const auto scaleOffset = [oldFrames, newFrames](SampleFrame offset) {
+                    return static_cast<SampleFrame>(std::llround(
+                        static_cast<long double>(offset) * newFrames / oldFrames));
+                };
+                event->fadeIn = std::min(newFrames, scaleOffset(event->fadeIn));
+                event->fadeOut = std::min(newFrames - event->fadeIn, scaleOffset(event->fadeOut));
+                SampleFrame previous = -1;
+                std::vector<EnvelopePoint> points;
+                points.reserve(event->envelope.size());
+                for (auto point : event->envelope) {
+                    point.offset = std::min(newFrames - 1, scaleOffset(point.offset));
+                    if (point.offset == previous) points.back().gain = point.gain;
+                    else { points.push_back(point); previous = point.offset; }
+                }
+                event->envelope = std::move(points);
+                const long double nextShift = static_cast<long double>(shift) + newFrames - oldFrames;
+                if (nextShift < static_cast<long double>((std::numeric_limits<SampleFrame>::min)())
+                    || nextShift > static_cast<long double>((std::numeric_limits<SampleFrame>::max)())) return false;
+                shift = static_cast<SampleFrame>(nextShift);
+            }
+        }
+    }
+    return changed && applyCandidate(std::move(candidate));
+}
+
+bool AudioDocument::setTrackPitchSemitone(int trackIndex, int semitones)
+{
+    if (trackIndex < -1 || trackIndex >= static_cast<int>(kTrackCount)
+        || semitones < -12 || semitones > 12) return false;
+    auto candidate = timeline_.snapshot().events;
+    bool changed = false;
+    for (auto& event : candidate) {
+        if ((trackIndex < 0 || event.trackIndex == trackIndex)
+            && event.pitchSemitone != semitones) {
+            event.pitchSemitone = semitones;
+            changed = true;
+        }
+    }
+    return changed && applyCandidate(std::move(candidate));
 }
 
 bool AudioDocument::moveEvent(EventId id, SampleFrame start, int trackIndex)

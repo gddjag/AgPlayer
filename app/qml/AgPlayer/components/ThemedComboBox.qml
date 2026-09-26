@@ -21,8 +21,7 @@ ComboBox {
         leftPadding: control.textLeftPadding
         rightPadding: control.textRightPadding
         text: control.displayText
-        color: control.enabled ? Theme.primaryText : Theme.secondaryText
-        opacity: control.enabled ? 1.0 : 0.55
+        color: control.enabled ? Theme.primaryText : Theme.textDisabled
         font.family: Theme.fontPrimary
         font.pixelSize: Theme.fontSizeBody
         verticalAlignment: Text.AlignVCenter

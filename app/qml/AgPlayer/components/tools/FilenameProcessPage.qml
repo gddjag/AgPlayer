@@ -18,7 +18,11 @@ Control {
     readonly property color actionBlue: Theme.accent
     readonly property bool compactLayout: width < 1500
     readonly property real desktopWorkspaceWidth: 1440
-    readonly property bool narrowLayout: width < desktopWorkspaceWidth
+    readonly property bool narrowLayout: !macDesktopLayout && width < desktopWorkspaceWidth
+    property bool macDesktopLayout: Qt.platform.os === "osx"
+    readonly property bool macStackedLayout: false
+    readonly property real layoutWidth: macDesktopLayout ? Math.max(width, 1440) : width
+    readonly property real layoutScale: macDesktopLayout ? Math.max(1, width) / layoutWidth : 1
 
     component AccentCheckBox: ThemedCheckBox {}
 
@@ -332,11 +336,12 @@ Control {
     }
 
     ColumnLayout {
-        anchors.fill: parent
-        anchors.leftMargin: Theme.spacingXs
-        anchors.rightMargin: Theme.spacingSm
-        anchors.topMargin: Theme.spacingSm
-        anchors.bottomMargin: Theme.spacingXs
+        x: Theme.spacingXs * page.layoutScale
+        y: Theme.spacingSm * page.layoutScale
+        width: page.layoutWidth - Theme.spacingXs - Theme.spacingSm
+        height: page.height / page.layoutScale - Theme.spacingSm - Theme.spacingXs
+        scale: page.layoutScale
+        transformOrigin: Item.TopLeft
         spacing: Theme.spacingXs
 
         Rectangle {
@@ -402,7 +407,7 @@ Control {
             id: compactTabs
             objectName: "filenameCompactTabs"
             property int currentIndex: 0
-            visible: page.narrowLayout
+            visible: page.narrowLayout && !page.macStackedLayout
             Layout.fillWidth: true
             Layout.preferredHeight: visible ? Theme.controlHeightProminent : 0
             Layout.maximumHeight: Layout.preferredHeight
@@ -430,25 +435,31 @@ Control {
             Layout.fillWidth: true
             Layout.fillHeight: true
             contentWidth: width
-            contentHeight: page.narrowLayout && compactTabs.currentIndex === 1
-                ? Math.max(height, rulesPanel.height + 300) : height
+            contentHeight: page.macStackedLayout
+                ? Math.max(height, 1120)
+                : page.narrowLayout && compactTabs.currentIndex === 1
+                  ? Math.max(height, rulesPanel.height + 300) : height
             flickableDirection: Flickable.VerticalFlick
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-            RowLayout {
+            GridLayout {
                 width: workspaceScroller.contentWidth
                 height: workspaceScroller.contentHeight
-                spacing: Theme.spacingXs
+                columns: page.macStackedLayout ? 1 : 2
+                columnSpacing: Theme.spacingXs
+                rowSpacing: Theme.spacingXs
 
             Rectangle {
                 id: filePanel
                 objectName: "filenameFilePanel"
-                visible: !page.narrowLayout || compactTabs.currentIndex === 0
+                visible: page.macStackedLayout || !page.narrowLayout
+                         || compactTabs.currentIndex === 0
                 Layout.fillWidth: page.narrowLayout
-                Layout.fillHeight: true
-                Layout.preferredWidth: page.narrowLayout ? 0 : Math.max(380, Math.round(page.width * 0.3711))
+                Layout.fillHeight: !page.macStackedLayout
+                Layout.preferredHeight: page.macStackedLayout ? 260 : -1
+                Layout.preferredWidth: page.narrowLayout ? 0 : Math.max(380, Math.round(page.layoutWidth * 0.3711))
                 Layout.maximumWidth: page.narrowLayout ? 10000 : Layout.preferredWidth
                 color: page.panelColor
                 border.color: Theme.border
@@ -607,10 +618,12 @@ Control {
 
             ColumnLayout {
                 id: rulesColumn
-                visible: !page.narrowLayout || compactTabs.currentIndex === 1
+                visible: page.macStackedLayout || !page.narrowLayout
+                         || compactTabs.currentIndex === 1
                 Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredWidth: page.narrowLayout ? 0 : Math.max(620, page.width * 0.61)
+                Layout.fillHeight: !page.macStackedLayout
+                Layout.preferredHeight: page.macStackedLayout ? 850 : -1
+                Layout.preferredWidth: page.narrowLayout ? 0 : Math.max(620, page.layoutWidth * 0.61)
                 spacing: 6
 
                 Rectangle {
@@ -672,7 +685,7 @@ Control {
                                     id: prefixField
                                     objectName: "filenamePrefixField"
                                     Layout.fillWidth: true
-                                    Layout.leftMargin: 28
+                                    Layout.leftMargin: page.macDesktopLayout ? 16 : 28
                                     Layout.rightMargin: 9
                                     Layout.preferredHeight: Theme.controlHeight
                                     enabled: prefixAddRadio.checked
@@ -692,7 +705,7 @@ Control {
                                     id: removePrefixField
                                     objectName: "filenameRemovePrefixField"
                                     Layout.fillWidth: true
-                                    Layout.leftMargin: 28
+                                    Layout.leftMargin: page.macDesktopLayout ? 16 : 28
                                     Layout.rightMargin: 9
                                     Layout.preferredHeight: Theme.controlHeight
                                     enabled: prefixRemoveRadio.checked
@@ -723,7 +736,7 @@ Control {
                                     id: suffixField
                                     objectName: "filenameSuffixField"
                                     Layout.fillWidth: true
-                                    Layout.leftMargin: 28
+                                    Layout.leftMargin: page.macDesktopLayout ? 16 : 28
                                     Layout.rightMargin: 9
                                     Layout.preferredHeight: Theme.controlHeight
                                     enabled: suffixAddRadio.checked
@@ -743,7 +756,7 @@ Control {
                                     id: removeSuffixField
                                     objectName: "filenameRemoveSuffixField"
                                     Layout.fillWidth: true
-                                    Layout.leftMargin: 28
+                                    Layout.leftMargin: page.macDesktopLayout ? 16 : 28
                                     Layout.rightMargin: 9
                                     Layout.preferredHeight: Theme.controlHeight
                                     enabled: suffixRemoveRadio.checked
@@ -1292,16 +1305,19 @@ Control {
         }
     }
 
+    function selectLoadedEntries() {
+        selectedIndices = Array.from({length: FilenameProcessor.fileCount},
+                                     function(_, index) { return index })
+        selectionAnchor = -1
+        ++entryRevision
+        refreshPreview()
+    }
+
+    Component.onCompleted: selectLoadedEntries()
+
     Connections {
         target: FilenameProcessor
-        function onEntriesLoaded() {
-            page.selectedIndices = Array.from(
-                {length: FilenameProcessor.fileCount},
-                function(_, index) { return index })
-            page.selectionAnchor = -1
-            ++page.entryRevision
-            page.refreshPreview()
-        }
+        function onEntriesLoaded() { page.selectLoadedEntries() }
         function onEntriesChanged() {
             ++page.entryRevision
             page.refreshPreview()

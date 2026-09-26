@@ -92,6 +92,13 @@ private slots:
         const auto first = controller.eventPeaks("1", 200).front().toList();
         QCOMPARE(first.size(), qsizetype{48});
         for (const auto& value : first) QVERIFY(std::abs(std::abs(value.toFloat()) - 0.125F) < 0.0001F);
+        // Panning within the decoded guard band keeps source-frame detail
+        // immediately, before the next debounced background job can start.
+        QVERIFY(controller.viewport()->setVisibleRange(4'001, 4'025));
+        const auto shifted = controller.eventPeaks("2", 160).front().toList();
+        QCOMPARE(shifted.size(), qsizetype{48});
+        QVERIFY(std::abs(shifted[0].toFloat() + 4.0F / 64.0F) < 0.0001F);
+        QVERIFY(std::abs(shifted[1].toFloat() - 4.0F / 64.0F) < 0.0001F);
     }
 
     void rapidViewportChangesAreDebouncedAndPlayheadDoesNotDecode()

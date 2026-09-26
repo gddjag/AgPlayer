@@ -2575,6 +2575,8 @@ void VocalSeparationController::rebuildStems()
     const QList<StemKind> fixedKinds{
         StemKind::Vocals, StemKind::Accompaniment, StemKind::Drums,
         StemKind::Bass, StemKind::Other};
+    const bool selectAllStems = model != nullptr
+        && model->stems.size() == fixedKinds.size();
     for (const StemKind kind : fixedKinds) {
         const bool supported = model != nullptr
             && model->stems.contains(stemName(kind));
@@ -2583,7 +2585,8 @@ void VocalSeparationController::rebuildStems()
             {QStringLiteral("name"), stemName(kind)},
             {QStringLiteral("supported"), supported},
             {QStringLiteral("selected"), supported
-                 && (kind == StemKind::Vocals || kind == StemKind::Accompaniment)},
+                 && (selectAllStems || kind == StemKind::Vocals
+                     || kind == StemKind::Accompaniment)},
             {QStringLiteral("derived"), supported
                  && kind == StemKind::Accompaniment
                  && model->family == VocalModelFamily::Demucs},
@@ -2598,8 +2601,10 @@ void VocalSeparationController::rebuildStems()
             if (old.value(QStringLiteral("kind")).toInt() != int(kind)
                 || !old.value(QStringLiteral("available")).toBool()) continue;
             QVariantMap current = stems_.last().toMap();
-            for (const auto* key : {"available", "path", "waveform", "selected", "previewVolume", "derived"})
+            for (const auto* key : {"available", "path", "waveform", "selected", "previewVolume", "derived"}) {
+                if (selectAllStems && supported && qstrcmp(key, "selected") == 0) continue;
                 current.insert(QString::fromLatin1(key), old.value(QString::fromLatin1(key)));
+            }
             stems_.last() = current;
         }
     }
@@ -2869,6 +2874,9 @@ void VocalSeparationController::discoverCustomModels(
              {VocalModelFamily::Mdx, 1}},
             {QStringLiteral("uvr-mdx-net-inst-hq3"),
              {VocalModelFamily::Mdx, 1}},
+            {QStringLiteral("htdemucs-fp16"),
+             {VocalModelFamily::Demucs, 1}},
+            // Compatibility for manually supplied legacy ensemble sidecars only.
             {QStringLiteral("htdemucs-ft-fp16"),
              {VocalModelFamily::Demucs, 4}},
         };
@@ -2895,7 +2903,7 @@ void VocalSeparationController::discoverCustomModels(
         sortedRoles.sort();
         QStringList sortedExpectedRoles = expectedRoles;
         sortedExpectedRoles.sort();
-        const bool validRoles = family == VocalModelFamily::Mdx
+        const bool validRoles = profileFileCount == 1
             ? sortedRoles.isEmpty() : sortedRoles == sortedExpectedRoles;
         if (!safeFiles || profileFileCount <= 0
             || modelFiles.size() != profileFileCount || !validRoles) {
@@ -2907,7 +2915,7 @@ void VocalSeparationController::discoverCustomModels(
         if (knownProfiles.contains(profileId)) {
             CustomModelBinding binding;
             binding.profileId = profileId;
-            binding.roles = family == VocalModelFamily::Demucs ? roles : QStringList{};
+            binding.roles = profileFileCount == 4 ? roles : QStringList{};
             for (const VocalDownloadFile& modelFile : modelFiles) {
                 binding.sha256.push_back(modelFile.sha256.toLower());
                 binding.bytes.push_back(modelFile.bytes);
@@ -3155,7 +3163,9 @@ void VocalSeparationController::handleProbe(const QJsonObject& payload)
     }
     const QString workerReason =
         payload.value(QStringLiteral("gpuReason")).toString();
-    const bool cpuAvailable = payload.value(QStringLiteral("cpu")).toBool();
+    const bool cpuValidated = payload.value(QStringLiteral("cpuValidated")).toBool();
+    const bool cpuAvailable = !cpuValidated
+        || payload.value(QStringLiteral("cpu")).toBool();
     const bool gpuAvailable = payload.value(QStringLiteral("gpu")).toBool();
     const QString gpuReason = !workerReason.isEmpty() ? workerReason : gpuAvailable
         ? tr("已发现 DirectML 硬件候选；开始分离时将用所选模型验证")
@@ -3167,7 +3177,8 @@ void VocalSeparationController::handleProbe(const QJsonObject& payload)
         {QStringLiteral("reason"), gpuAvailable
              ? tr("自动优先使用 %1 GPU，失败时安全回退 CPU").arg(provider.isEmpty() ? "DirectML" : provider.toUpper())
              : cpuAvailable
-                 ? tr("自动使用 CPU")
+                 ? cpuValidated ? tr("自动使用已验证的 CPU")
+                                : tr("未检测到可用 GPU，默认自动；CPU 将在模型就绪后验证")
                  : tr("CPU 和 GPU 均未通过设备探测")},
     };
     availableDevices_[1] = QVariantMap{
@@ -3186,7 +3197,8 @@ void VocalSeparationController::handleProbe(const QJsonObject& payload)
         {QStringLiteral("reason"), gpuReason},
     };
     emit availableDevicesChanged();
-    if (!deviceChosenByUser_) {
+    if (!deviceChosenByUser_ || !deviceAvailable(deviceMode_)) {
+        deviceChosenByUser_ = false;
         deviceMode_ = gpuAvailable ? DeviceMode::GPU : DeviceMode::Auto;
         emit deviceModeChanged();
     }

@@ -21,6 +21,8 @@ add_library(agplayer_qt STATIC
     src/audio_editor/playback_clip_drag_adapter.hpp
     src/audio_file_discovery.cpp
     src/audio_file_discovery.hpp
+    src/cover_cache.cpp
+    src/cover_cache.hpp
     src/audio_preview_controller.cpp
     src/audio_preview_controller.hpp
     src/file_association_controller.cpp
@@ -234,6 +236,7 @@ if(WIN32)
 endif()
 
 if(APPLE)
+    find_package(Iconv REQUIRED)
     enable_language(OBJCXX)
     set_target_properties(agplayer_qt PROPERTIES
         OBJCXX_STANDARD 17
@@ -244,6 +247,7 @@ if(APPLE)
         src/macos_system_integration.mm
     )
     target_link_libraries(agplayer_qt PRIVATE
+        Iconv::Iconv
         "-framework AppKit"
         "-framework ServiceManagement"
         "-framework Carbon"

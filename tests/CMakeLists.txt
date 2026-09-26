@@ -622,6 +622,17 @@ add_custom_target(gapless_fixtures
 add_executable(decoder_test
     core/decoder_test.cpp
 )
+add_executable(proprietary_audio_input_test core/proprietary_audio_input_test.cpp)
+target_include_directories(proprietary_audio_input_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/core/src")
+target_link_libraries(proprietary_audio_input_test PRIVATE agplayer_core)
+agplayer_enable_warnings(proprietary_audio_input_test)
+add_test(NAME proprietary_audio_input_test COMMAND proprietary_audio_input_test
+    "${CMAKE_SOURCE_DIR}/tests/fixtures/proprietary")
+set_tests_properties(proprietary_audio_input_test PROPERTIES
+    TIMEOUT 10
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
 add_dependencies(decoder_test decoder_fixture video_fixtures)
 target_include_directories(decoder_test PRIVATE
     "${CMAKE_SOURCE_DIR}/core/src"
@@ -1472,11 +1483,11 @@ target_include_directories(audio_editor_controller_test PRIVATE
 )
 target_link_libraries(audio_editor_controller_test PRIVATE agplayer_qt Qt6::Test)
 agplayer_enable_warnings(audio_editor_controller_test)
-add_dependencies(audio_editor_controller_test decoder_fixture)
+add_dependencies(audio_editor_controller_test decoder_fixture video_fixtures)
 add_test(NAME audio_editor_controller_test COMMAND audio_editor_controller_test)
 set_tests_properties(audio_editor_controller_test PROPERTIES
     TIMEOUT 120
-    ENVIRONMENT "AGPLAYER_EDITOR_FIXTURE=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT "AGPLAYER_EDITOR_FIXTURE=${SINE_WAV_FIXTURE};AGPLAYER_EDITOR_VIDEO_FIXTURE=${VIDEO_WITH_AUDIO_FIXTURE};AGPLAYER_EDITOR_SILENT_VIDEO_FIXTURE=${VIDEO_ONLY_FIXTURE}"
     ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
@@ -1818,6 +1829,13 @@ set_tests_properties(qml_six_track_editor_test PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
     ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
 
+add_test(NAME qml_macos_compact_workspace_test
+    COMMAND qml_audio_tools_test -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_macos_compact_workspace.qml)
+set_tests_properties(qml_macos_compact_workspace_test PROPERTIES
+    TIMEOUT 30 RESOURCE_LOCK qml_audio_tools_runtime
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic"
+    ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin")
+
 add_test(NAME qml_six_track_native_input_test
     COMMAND qml_audio_tools_test
         -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_six_track_native_input.qml
@@ -1921,6 +1939,22 @@ set_tests_properties(qml_macos_separation_links_test PROPERTIES
         "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
 )
 
+add_test(NAME qml_settings_privacy_test
+    COMMAND qml_main_window_test
+        -o ${CMAKE_BINARY_DIR}/qml-settings-privacy.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_settings_privacy.qml)
+add_test(NAME qml_about_privacy_test
+    COMMAND qml_main_window_test
+        -o ${CMAKE_BINARY_DIR}/qml-about-privacy.txt,txt
+        -input ${CMAKE_CURRENT_SOURCE_DIR}/qml/tst_about_privacy.qml)
+set_tests_properties(qml_settings_privacy_test qml_about_privacy_test PROPERTIES
+    TIMEOUT 30
+    RESOURCE_LOCK qml_main_window_runtime
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_CONTROLS_STYLE=Basic;AGPLAYER_TEST_AUDIO=${SINE_WAV_FIXTURE}"
+    ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:AgPlayer>;PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin"
+)
+
 add_test(NAME qml_settings_cache_feedback_test
     COMMAND qml_main_window_test
         -o ${CMAKE_BINARY_DIR}/qml-settings-cache-feedback.txt,txt
@@ -1979,7 +2013,8 @@ endforeach()
 
 if(WIN32)
     set_property(TEST qml_popup_sizing_test qml_screen_fit_test
-        qml_settings_cache_feedback_test qml_macos_separation_links_test
+        qml_settings_cache_feedback_test qml_settings_privacy_test
+        qml_about_privacy_test qml_macos_separation_links_test
         qml_format_responsive_test qml_audio_tools_responsive_test
         qml_auxiliary_responsive_test
         APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=$ENV{SystemRoot}/Fonts")

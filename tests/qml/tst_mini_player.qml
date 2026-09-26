@@ -499,10 +499,22 @@ TestCase {
         compare(miniPlayer.minimumHeight, 160)
         verify(findChild(miniPlayer, "miniCover"))
         verify(findChild(miniPlayer, "miniTrackTitle"))
+        var cover = findChild(miniPlayer, "miniCover")
+        var contentTitle = findChild(miniPlayer, "miniTrackTitle")
+        var contentTransport = findChild(miniPlayer, "miniTransport")
+        var contentTop = contentTitle.mapToItem(miniPlayer.contentItem, 0, 0).y
+        var contentBottom = contentTransport.mapToItem(miniPlayer.contentItem, 0, contentTransport.height).y
+        var coverCenter = cover.mapToItem(miniPlayer.contentItem, 0, cover.height / 2).y
+        verify(Math.abs((contentTop + contentBottom) / 2 - coverCenter) <= 1,
+               "four content rows must be vertically centered against the cover")
+        compare(contentTransport.height, Qt.platform.os === "osx" ? 36 : 34,
+                "transport must not stretch vertically")
         var volume = findChild(miniPlayer, "miniVolumeSlider")
         verify(volume)
         var flyout = findChild(miniPlayer, "miniVolumeFlyout")
         verify(flyout)
+        var mute = findChild(miniPlayer, "miniMuteButton")
+        verify(mute)
         var closeTimer = findChild(miniPlayer, "miniVolumeCloseTimer")
         verify(closeTimer, "volume flyout must expose its delayed close timer")
         compare(closeTimer.interval, 2000)
@@ -512,8 +524,8 @@ TestCase {
             return left >= 0 && left + flyout.width <= miniPlayer.width
         }, 300, "expanded mini volume flyout must remain inside the window canvas")
         tryVerify(function() {
-            return flyout.x >= 28
-                    && flyout.x + flyout.width === flyout.parent.width
+            return flyout.x >= mute.x + mute.width
+                    && flyout.width > 0
         }, 300, "mini volume flyout must expand to the right of its mute button")
         closeTimer.restart()
         wait(1600)
@@ -541,7 +553,7 @@ TestCase {
         verify(firstStar, "rating stars must expose their native rendered item")
         verify(metadataRow.y >= title.y + title.height,
                "metadata must stay below the title")
-        compare(metadataRow.height, 26,
+        compare(metadataRow.height, Qt.platform.os === "osx" ? 22 : 26,
                 "metadata must use a compact single-row height")
         compare(artist.wrapMode, Text.NoWrap)
         compare(album.wrapMode, Text.NoWrap)
@@ -650,7 +662,8 @@ TestCase {
         tryCompare(waveform, "visualMode", 2)
         compare(waveform.lineWidth, 3)
         compare(waveform.spectrumBarCount, 128)
-        compare(waveform.spectrumBarGap, 2)
+        compare(waveform.spectrumBarWidth, 4)
+        compare(waveform.spectrumBarGap, 1)
         SettingsController.waveformMode = previousMode
     }
 

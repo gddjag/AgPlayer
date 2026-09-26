@@ -32,6 +32,7 @@ class ImportController final : public QObject {
     Q_PROPERTY(QStringList importedTrackIds READ importedTrackIds
                    NOTIFY importedTrackIdsChanged)
     Q_PROPERTY(int skippedCount READ skippedCount NOTIFY skippedCountChanged)
+    Q_PROPERTY(int filteredCount READ filteredCount NOTIFY skippedCountChanged)
 
 public:
     explicit ImportController(LibraryModel* model, QObject* parent = nullptr);
@@ -45,9 +46,12 @@ public:
     QStringList errors() const;
     QStringList importedTrackIds() const;
     int skippedCount() const noexcept;
+    int filteredCount() const noexcept { return filteredCount_; }
     Q_INVOKABLE void importUrls(const QList<QUrl>& urls);
     Q_INVOKABLE void importPaths(const QStringList& paths);
+    void importResourcePaths(const QStringList& paths);
     Q_INVOKABLE void importFolder(const QUrl& folder);
+    void recoverMissingCovers();
     Q_INVOKABLE void clearErrors();
     void cancel();
 
@@ -57,15 +61,19 @@ signals:
     void errorsChanged();
     void importedTrackIdsChanged();
     void skippedCountChanged();
+    void fileRejected(const QString& path, int result);
     void finished();
+    void coverRecoveryFinished();
 
 private:
+    void importUrlsImpl(const QList<QUrl>& urls, bool filterFormatFailures);
     void finishWithoutImport(const QString& error);
     struct Outcome {
         qsizetype ordinal = 0;
         QString path;
         ProbeResult result;
         bool cachedDuplicate = false;
+        bool filterFormatFailures = false;
     };
     void handleBatch(QList<Outcome> outcomes, int completed, int total);
     void completeImport();
@@ -74,14 +82,18 @@ private:
     ProbeFunction probe_;
     DiscoveryFunction discovery_;
     std::shared_ptr<ImportCallbackState> callbackState_;
+    std::shared_ptr<ImportCallbackState> coverRecoveryState_;
     QFuture<void> future_;
+    QFuture<void> coverRecoveryFuture_;
     double progress_ = 0.0;
     bool busy_ = false;
     QStringList errors_;
     QStringList importedTrackIds_;
     QSet<QString> importedTrackIdSet_;
     int skippedCount_ = 0;
+    int filteredCount_ = 0;
     QList<QUrl> pendingUrls_;
+    bool pendingFilterFormatFailures_ = true;
 };
 
 double readEmbeddedBpmTag(const QString& requestedPath);

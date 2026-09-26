@@ -255,6 +255,7 @@ private slots:
         auto project = makeProject(temporary);
         QVERIFY(project.document.moveEvent(9, 0, 5));
         QVERIFY(project.document.setTrackMuted(5, true));
+        QVERIFY(project.document.setTrackSolo(5, true));
         QVERIFY(project.document.setTrackGain(5, 1.75F));
         QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
         auto loaded = ProjectDocument::load(project.projectPath);
@@ -262,6 +263,7 @@ private slots:
         auto state = loaded.document->timelineSnapshot();
         QCOMPARE(state.tracks.size(), std::size_t{6});
         QVERIFY(state.tracks[5].muted);
+        QVERIFY(state.tracks[5].solo);
         QCOMPARE(state.tracks[5].gain, 1.75F);
         QVERIFY(std::any_of(state.events.begin(), state.events.end(), [](const AudioEvent& e) { return e.trackIndex == 5; }));
 
@@ -458,7 +460,7 @@ private slots:
         QCOMPARE(loaded.message, QStringLiteral("invalid event metadata"));
     }
 
-    void rejectsUnsupportedPerEventTimePitchBeforePersistingOrLoading()
+    void roundTripsPerEventTimePitchAndRejectsOutOfRangeValues()
     {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
@@ -466,29 +468,23 @@ private slots:
         QVERIFY(!project.projectPath.isEmpty());
 
         const AudioEvent original = project.document.timelineSnapshot().events[0];
-        AudioEvent unsupported = original;
-        unsupported.speedRatio = 1.25;
-        AudioDocument unsupportedDocument = AudioDocument::fromEvents(
-            {unsupported});
-        ProjectSaveRequest unsupportedRequest = request(project);
-        unsupportedRequest.document = &unsupportedDocument;
-        const ProjectSaveResult rejectedSave = ProjectDocument::save(
-            project.projectPath, unsupportedRequest);
-        QVERIFY(!rejectedSave.ok());
-        QVERIFY(rejectedSave.message.contains(QStringLiteral("not supported")));
-
+        QVERIFY(project.document.setTrackSpeedRatio(0, 1.25));
+        QVERIFY(project.document.setTrackPitchSemitone(0, 3));
         QVERIFY(ProjectDocument::save(project.projectPath, request(project)).ok());
+        auto loaded = ProjectDocument::load(project.projectPath);
+        QVERIFY2(loaded.ok(), qPrintable(loaded.message));
+        QCOMPARE(loaded.document->timelineSnapshot().events[0].speedRatio, 1.25);
+        QCOMPARE(loaded.document->timelineSnapshot().events[0].pitchSemitone, 3);
         QJsonObject root = readObject(project.projectPath);
         QJsonArray events = root.value(QStringLiteral("events")).toArray();
         QJsonObject event = events[0].toObject();
-        event.insert(QStringLiteral("pitchSemitone"), 3);
+        event.insert(QStringLiteral("pitchSemitone"), 13);
         events[0] = event;
         root.insert(QStringLiteral("events"), events);
         QVERIFY(writeObject(project.projectPath, root));
-        const ProjectLoadResult rejectedLoad = ProjectDocument::load(
-            project.projectPath);
+        const ProjectLoadResult rejectedLoad = ProjectDocument::load(project.projectPath);
         QVERIFY(!rejectedLoad.ok());
-        QVERIFY(rejectedLoad.message.contains(QStringLiteral("not supported")));
+        QVERIFY(rejectedLoad.message.contains(QStringLiteral("invalid")));
     }
 
     void rejectsSchemaMalformedDuplicateInvalidOverlapAndTraversal()

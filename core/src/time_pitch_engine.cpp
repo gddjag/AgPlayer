@@ -118,7 +118,7 @@ public:
 private:
     static bool validRatio(const double ratio)
     {
-        return std::isfinite(ratio) && ratio >= 0.5 && ratio <= 2.0;
+        return std::isfinite(ratio) && ratio >= 0.25 && ratio <= 2.0;
     }
 
     void refreshFormantPreserver()
@@ -241,8 +241,12 @@ std::unique_ptr<ITimePitchEngine> create_preferred_time_pitch_engine(
 
 std::unique_ptr<ITimePitchEngine> create_time_pitch_engine()
 {
+#if defined(AGPLAYER_SOUNDTOUCH_ONLY)
+    return create_soundtouch_time_pitch_engine();
+#else
     return create_preferred_time_pitch_engine(
         create_signalsmith_time_pitch_engine());
+#endif
 }
 
 } // namespace agplayer

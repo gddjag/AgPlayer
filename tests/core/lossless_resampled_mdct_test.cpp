@@ -84,6 +84,33 @@ int main() {
         require(std::abs(whole[i].coherentPeakDb - chunked[i].coherentPeakDb) < 1e-9
                 && whole[i].activeBlocks == chunked[i].activeBlocks,
                 "chunking and antiphase must preserve inverse-rate framing");
+    {
+        agplayer::lossless::ResampledMdctProbe stereo(88200, 2, high.size(), 44100);
+        std::atomic_bool cancel{false};
+        std::vector<double> channels(high.size() * 2);
+        std::uint32_t random = 8171;
+        for (std::size_t i = 0; i < high.size(); ++i) {
+            random = random * 1664525U + 1013904223U;
+            channels[2 * i] = (static_cast<double>(random) / 4294967296.0 - .5) * .2;
+            channels[2 * i + 1] = high[i] * .03;
+        }
+        for (std::size_t start = 0; start < high.size(); start += 997)
+            stereo.consume(channels.data() + 2 * start, std::min<std::size_t>(997, high.size() - start), cancel);
+        stereo.refineStereo(cancel);
+        require(stereo.channelResult(1)[0].activeBlocks == 0,
+                "stereo refinement must wait for resampler drain");
+        stereo.finish(cancel);
+        stereo.refineStereo(cancel);
+        const auto coded = stereo.channelResult(1)[0];
+        const auto clean = stereo.channelResult(0)[0];
+        require(coded.activeBlocks == 4 && coded.coherentPeakDb >= 6.0 && coded.meanPeakZ >= 12.0,
+                "inverse-rate view must recover quiet-channel framing after final flush");
+        require(clean.coherentPeakDb < 6.0 || clean.meanPeakZ < 12.0,
+                "inverse-rate channel evidence must remain independent");
+        stereo.refineStereo(cancel);
+        require(stereo.channelResult(1)[0].activeBlocks == coded.activeBlocks,
+                "inverse-rate refinement must not duplicate anchors");
+    }
     std::vector<double> native(high.size());
     for (std::size_t i = 0; i < native.size(); ++i)
         native[i] = .1 * std::sin(2.0 * pi * 997.0 * static_cast<double>(i) / 88200.0);

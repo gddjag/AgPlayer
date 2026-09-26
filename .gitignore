@@ -12,6 +12,8 @@
 /.artifacts/
 /design-qa/
 /tmp/
+__pycache__/
+*.pyc
 /*-result.txt
 /*-results.txt
 /qml-*.txt
@@ -36,4 +38,5 @@
 /stdout
 /test-result.txt
 /wave.txt
+/$logPath
 /.codex-doc-review/

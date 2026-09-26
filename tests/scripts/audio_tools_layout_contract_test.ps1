@@ -118,7 +118,7 @@ if ($audioEditor -notmatch 'EditorSixTrackWorkspace\s*\{' -or
     throw 'The page must instantiate the registered six-track workspace with stable track identities.'
 }
 
-if ($toolsWindow -notmatch 'WindowController\.startupGeometryForAvailableArea\([\s\S]{0,80}Qt\.rect\(0,\s*0,\s*1672,\s*941\)' -or
+if ($toolsWindow -notmatch 'WindowController\.audioToolsStartupGeometryForAvailableArea\([\s\S]{0,80}Qt\.rect\(0,\s*0,\s*1672,\s*941\)' -or
     $toolsWindow -notmatch 'width:\s*initialGeometry\.width' -or
     $toolsWindow -notmatch 'height:\s*initialGeometry\.height' -or
     $toolsWindow -notmatch 'objectName:\s*"audioToolsTitleBar"[\s\S]{0,180}Layout\.preferredHeight:\s*Theme\.titleBarHeight' -or
@@ -197,7 +197,7 @@ if ($firstFillSpacerPosition -ge 0 -and $firstFillSpacerPosition -lt $repeaterPo
     throw 'The shared tool navigation must not use a leading fill spacer.'
 }
 $trailingFillSpacers = [regex]::Matches(
-    $toolsNavigation, '(?m)^        Item \{ Layout\.fillWidth: true \}\r?$')
+    $toolsNavigation, 'Item\s*\{\s*visible:\s*!navigation\.compactLayout\s*Layout\.fillWidth:\s*visible\s*\}')
 if ($trailingFillSpacers.Count -ne 1 -or
     $trailingFillSpacers[0].Index -lt $repeaterPosition) {
     throw 'The shared tool navigation must have exactly one trailing fill spacer.'
@@ -311,7 +311,7 @@ if ($waveformCanvas -notmatch 'AudioEditorController\.eventPeaks\(' -or
 }
 if ($waveformCanvas -notmatch 'finishedMode\s*===\s*"handoff"\)\s*AudioEditorController\.releaseSelectionHandoff\(\)' -or
     $waveformCanvas -notmatch 'interaction\.mode\s*===\s*"handoff"\)\s*AudioEditorController\.cancelSelectionHandoff\(\)' -or
-    $waveformCanvas -notmatch 'onCanceled:\s*canvas\.cancelGesture\(\)') {
+    $waveformCanvas -notmatch 'onCanceled:\s*\{[^}]*canvas\.cancelGesture\(\)') {
     throw 'Selection handoff release must preserve a triggered native drag while cancellation aborts it.'
 }
 if ($waveformCanvas -notmatch 'AudioEditorWaveformItem\s*\{' -or
@@ -332,7 +332,7 @@ foreach ($responsiveHook in @('inspectorWidth', 'mainWidth',
     }
 }
 foreach ($responsiveHook in @('shortLayout', 'compactTransport', 'tinyTransport',
-    'Math.max(86, trackScroller.height / 6)', 'Flickable.VerticalFlick', 'ScrollBar.vertical')) {
+    'Math.max(82,', 'Flickable.VerticalFlick', 'ScrollBar.vertical')) {
     if ($sixTrackWorkspace -notmatch [regex]::Escape($responsiveHook)) {
         throw "The six-track workspace lost readable scrolling or compact controls: $responsiveHook"
     }

@@ -2,21 +2,21 @@
 
 #include "audio_file_discovery.hpp"
 #include "bpm_analyzer.hpp"
+#include "cover_cache.hpp"
 #include "metadata_probe.hpp"
 #include "metadata_text.hpp"
+#include "proprietary_audio_input.hpp"
 
 #include <QByteArray>
-#include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
 #include <QMetaObject>
-#include <QSaveFile>
 #include <QSet>
-#include <QStandardPaths>
 #include <QThreadPool>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <atomic>
+#include <algorithm>
 #include <condition_variable>
 #include <cmath>
 #include <map>
@@ -62,41 +62,10 @@ QString errorFor(ag_result result)
     return QStringLiteral("unknown error");
 }
 
-QString coverSuffix(const QString& mimeType)
-{
-    if (mimeType.compare(QStringLiteral("image/jpeg"), Qt::CaseInsensitive) == 0) {
-        return QStringLiteral(".jpg");
-    }
-    if (mimeType.compare(QStringLiteral("image/png"), Qt::CaseInsensitive) == 0) {
-        return QStringLiteral(".png");
-    }
-    if (mimeType.compare(QStringLiteral("image/webp"), Qt::CaseInsensitive) == 0) {
-        return QStringLiteral(".webp");
-    }
-    return QStringLiteral(".bin");
-}
-
 QUrl cacheCover(const QByteArray& bytes, const QString& mimeType)
 {
-    if (bytes.isEmpty()) {
-        return kBrandCover;
-    }
-    const QString cacheRoot = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-    const QString coverDirectory = QDir(cacheRoot).filePath(QStringLiteral("covers"));
-    if (cacheRoot.isEmpty() || !QDir().mkpath(coverDirectory)) {
-        return kBrandCover;
-    }
-    const QString digest = QString::fromLatin1(
-        QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
-    const QString coverPath = QDir(coverDirectory).filePath(digest + coverSuffix(mimeType));
-    if (!QFileInfo::exists(coverPath)) {
-        QSaveFile file(coverPath);
-        if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size()
-            || !file.commit()) {
-            return kBrandCover;
-        }
-    }
-    return QUrl::fromLocalFile(coverPath);
+    const QUrl cached = agplayer::qt::cacheEmbeddedCover(bytes, mimeType);
+    return cached.isValid() ? cached : kBrandCover;
 }
 
 QString deduplicationKey(const QString& path)
@@ -160,6 +129,14 @@ ProbeResult probeMetadata(const QString& requestedPath, bool analyzeBpm)
     ag_metadata* metadata = nullptr;
     const ag_result result = ag_metadata_open(utf8Path.constData(), &metadata);
     if (result != AG_OK || metadata == nullptr) {
+        if (agplayer::ProprietaryAudioInput::recognizes_path(
+                utf8Path.toStdString())) {
+            std::string detail;
+            agplayer::ProprietaryAudioInput::open(utf8Path.toStdString(), detail);
+            if (!detail.empty()) {
+                return {result, {}, QString::fromStdString(detail)};
+            }
+        }
         return {result, {}, errorFor(result)};
     }
 
@@ -255,10 +232,13 @@ ImportController::ImportController(LibraryModel* model, ProbeFunction probe,
       model_(model),
       probe_(std::move(probe)),
       discovery_(std::move(discovery)),
-      callbackState_(std::make_shared<ImportCallbackState>())
+      callbackState_(std::make_shared<ImportCallbackState>()),
+      coverRecoveryState_(std::make_shared<ImportCallbackState>())
 {
     callbackState_->controller = this;
     callbackState_->cancelled = std::make_shared<std::atomic_bool>(false);
+    coverRecoveryState_->controller = this;
+    coverRecoveryState_->cancelled = std::make_shared<std::atomic_bool>(false);
 }
 
 ImportController::~ImportController()
@@ -273,8 +253,15 @@ ImportController::~ImportController()
     // this object, so the raw pointer captured by postToController never
     // fires into a destroyed receiver.
     markCancelled(callbackState_, true);
-    std::lock_guard<std::mutex> lock(callbackState_->mutex);
-    callbackState_->controller = nullptr;
+    markCancelled(coverRecoveryState_, true);
+    {
+        std::lock_guard<std::mutex> lock(callbackState_->mutex);
+        callbackState_->controller = nullptr;
+    }
+    {
+        std::lock_guard<std::mutex> lock(coverRecoveryState_->mutex);
+        coverRecoveryState_->controller = nullptr;
+    }
 }
 
 void ImportController::cancel()
@@ -288,12 +275,71 @@ void ImportController::cancel()
     // (containsPath check) and handleResult guards the finished emission on
     // busy_ to avoid double delivery.
     markCancelled(callbackState_, true);
+    markCancelled(coverRecoveryState_, true);
     pendingUrls_.clear();
+    pendingFilterFormatFailures_ = true;
     if (busy_) {
         busy_ = false;
         emit busyChanged();
         emit finished();
     }
+}
+
+void ImportController::recoverMissingCovers()
+{
+    if (coverRecoveryFuture_.isRunning() || model_.isNull()
+        || model_->thread() != thread()) return;
+
+    QList<MetadataProbeClaim> claims;
+    for (const TrackRecord& track : model_->tracks()) {
+        if (!track.available || !track.coverUrl.isLocalFile()
+            || QFileInfo::exists(track.coverUrl.toLocalFile())) continue;
+        const auto claim = model_->beginMetadataRefresh(track.trackId);
+        if (claim) claims.append(*claim);
+    }
+    if (claims.isEmpty()) {
+        emit coverRecoveryFinished();
+        return;
+    }
+
+    markCancelled(coverRecoveryState_, false);
+    const auto state = coverRecoveryState_;
+    coverRecoveryFuture_ = QtConcurrent::run([state, claims = std::move(claims)] {
+        struct Result {
+            MetadataProbeClaim claim;
+            ProbeResult probe;
+        };
+        QList<Result> batch;
+        const auto deliver = [&state, &batch] {
+            if (batch.isEmpty() || isCancelled(state)) return;
+            postToController(state, [state, results = std::move(batch)](
+                                        ImportController* controller) {
+                if (isCancelled(state) || controller->model_.isNull()) return;
+                QList<LibraryMetadataRefresh> refreshed;
+                for (const Result& result : results) {
+                    if (result.probe.result == AG_OK) {
+                        refreshed.append({result.claim, result.probe.track});
+                    } else {
+                        controller->model_->completeMetadataProbe(
+                            result.claim, false, {});
+                    }
+                }
+                controller->model_->completeMetadataRefreshes(refreshed);
+            });
+            batch.clear();
+        };
+        for (const MetadataProbeClaim& claim : claims) {
+            if (isCancelled(state)) break;
+            batch.append({claim, probeMetadata(claim.path, false)});
+            if (batch.size() >= 16) deliver();
+        }
+        deliver();
+        if (!isCancelled(state)) {
+            postToController(state, [state](ImportController* controller) {
+                if (!isCancelled(state)) emit controller->coverRecoveryFinished();
+            });
+        }
+    });
 }
 
 double ImportController::progress() const noexcept
@@ -328,7 +374,23 @@ void ImportController::importFolder(const QUrl& folder)
 
 void ImportController::importUrls(const QList<QUrl>& urls)
 {
+    const bool folderImport = std::any_of(urls.cbegin(), urls.cend(), [](const QUrl& url) {
+        return url.isLocalFile() && QFileInfo(url.toLocalFile()).isDir();
+    });
+    importUrlsImpl(urls, folderImport);
+}
+
+void ImportController::importResourcePaths(const QStringList& paths)
+{
+    QList<QUrl> urls;
+    for (const QString& path : paths) urls.append(QUrl::fromLocalFile(path));
+    importUrlsImpl(urls, true);
+}
+
+void ImportController::importUrlsImpl(const QList<QUrl>& urls, bool filterFormatFailures)
+{
     if (busy_) {
+        pendingFilterFormatFailures_ = pendingFilterFormatFailures_ && filterFormatFailures;
         for (const QUrl& url : urls) {
             if (url.isValid() && !pendingUrls_.contains(url)) {
                 pendingUrls_.append(url);
@@ -343,8 +405,9 @@ void ImportController::importUrls(const QList<QUrl>& urls)
     importedTrackIds_.clear();
     importedTrackIdSet_.clear();
     emit importedTrackIdsChanged();
-    if (skippedCount_ != 0) {
+    if (skippedCount_ != 0 || filteredCount_ != 0) {
         skippedCount_ = 0;
+        filteredCount_ = 0;
         emit skippedCountChanged();
     }
     progress_ = 0.0;
@@ -373,7 +436,7 @@ void ImportController::importUrls(const QList<QUrl>& urls)
         knownTracks.insert(track.path, track);
 #endif
     }
-    future_ = QtConcurrent::run([callbackState, urls, probe, discovery, knownTracks] {
+    future_ = QtConcurrent::run([callbackState, urls, probe, discovery, knownTracks, filterFormatFailures] {
         QStringList discoveredPaths = discovery(urls);
         QSet<QString> seen;
         QStringList paths;
@@ -410,7 +473,7 @@ void ImportController::importUrls(const QList<QUrl>& urls)
         workers.reserve(workerCount);
         for (int worker = 0; worker < workerCount; ++worker) {
             workers.append(QtConcurrent::run(
-                &probePool, [callbackState, pipeline, paths, probe, knownTracks] {
+                &probePool, [callbackState, pipeline, paths, probe, knownTracks, filterFormatFailures] {
                     while (!isCancelled(callbackState)) {
                         const qsizetype index = pipeline->next.fetch_add(1);
                         if (index >= paths.size()) {
@@ -419,6 +482,7 @@ void ImportController::importUrls(const QList<QUrl>& urls)
                         Outcome outcome;
                         outcome.ordinal = index;
                         outcome.path = paths[index];
+                        outcome.filterFormatFailures = filterFormatFailures;
 #ifdef Q_OS_WIN
                         const QString key = outcome.path.toCaseFolded();
 #else
@@ -521,6 +585,10 @@ void ImportController::finishWithoutImport(const QString& error)
 
 void ImportController::clearErrors()
 {
+    if (filteredCount_ != 0) {
+        filteredCount_ = 0;
+        emit skippedCountChanged();
+    }
     if (errors_.isEmpty()) {
         return;
     }
@@ -558,6 +626,15 @@ void ImportController::handleBatch(QList<Outcome> outcomes, int completed, int t
         }
         const QString detail = outcome.result.error.isEmpty()
             ? errorFor(outcome.result.result) : outcome.result.error;
+        emit fileRejected(outcome.path, static_cast<int>(outcome.result.result));
+        if (outcome.filterFormatFailures
+            && (outcome.result.result == AG_UNSUPPORTED_FORMAT
+                || outcome.result.result == AG_DECODE_ERROR)) {
+            ++filteredCount_;
+            ++skippedCount_;
+            emit skippedCountChanged();
+            continue;
+        }
         errors_.append(QStringLiteral("%1: %2").arg(outcome.path, detail));
         errorsChangedInBatch = true;
     }
@@ -626,7 +703,8 @@ void ImportController::completeImport()
     emit finished();
     if (!pendingUrls_.isEmpty()) {
         const QList<QUrl> queued = std::exchange(pendingUrls_, {});
-        QMetaObject::invokeMethod(this, [this, queued] { importUrls(queued); },
+        const bool filter = std::exchange(pendingFilterFormatFailures_, true);
+        QMetaObject::invokeMethod(this, [this, queued, filter] { importUrlsImpl(queued, filter); },
                                   Qt::QueuedConnection);
     }
 }

@@ -135,6 +135,14 @@ void SeparationRuntimeTest::trustedProfilesBindHashesToExactTensorSemantics()
     QVERIFY(hq3.has_value());
     QCOMPARE(hq3->minimumOpset, 13);
 
+    const auto singleDemucs = trustedProfileForHashes({QStringLiteral(
+        "d05c269d0178d2a72ad484b10b11dd370193fc923201c3b27a99f848745db70a")});
+    QVERIFY(singleDemucs.has_value());
+    QCOMPARE(singleDemucs->id, QStringLiteral("htdemucs-fp16"));
+    QCOMPARE(singleDemucs->minimumOpset, 17);
+    QCOMPARE(singleDemucs->inputs.front().shape, (QVector<qint64>{1, 2, 343980}));
+    QCOMPARE(singleDemucs->outputs.front().shape, (QVector<qint64>{1, 4, 2, 343980}));
+
     const auto demucs = trustedProfileForHashes({
         QStringLiteral("b533037176b14b2df31c92a5d5b3d5660d0811b9b360d3db761964768b079961"),
         QStringLiteral("047764dff888cfb87da917013377d4ec7a134f7419cbe486d9c339aa17975ddd"),
@@ -174,6 +182,12 @@ void SeparationRuntimeTest::customDeclarationsReuseOnlyKnownTensorProfiles()
     const QStringList demucsHashes{
         QString(64, QLatin1Char('1')), QString(64, QLatin1Char('2')),
         QString(64, QLatin1Char('3')), QString(64, QLatin1Char('4'))};
+    QVERIFY(customProfileForDeclaration(
+        QStringLiteral("htdemucs-fp16"), {customHash}, {12'345}, {}).ok);
+    QVERIFY(!customProfileForDeclaration(
+        QStringLiteral("htdemucs-fp16"), {customHash}, {12'345}, {QStringLiteral("vocals")}).ok);
+    QVERIFY(!customProfileForDeclaration(
+        QStringLiteral("htdemucs-fp16"), demucsHashes, {100, 101, 102, 103}, {}).ok);
     const auto demucs = customProfileForDeclaration(
         QStringLiteral("htdemucs-ft-fp16"), demucsHashes,
         {100, 101, 102, 103},

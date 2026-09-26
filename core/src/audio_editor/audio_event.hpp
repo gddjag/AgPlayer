@@ -74,8 +74,13 @@ struct AudioEvent final {
     SampleFrame sourceFrame) noexcept
 {
     const auto rate = event.source ? event.source->sample_rate : 0;
-    return sourceToProjectFrames(sourceFrame, rate, event.timelineSampleRate)
+    const auto unscaled = sourceToProjectFrames(sourceFrame, rate, event.timelineSampleRate)
         - sourceToProjectFrames(event.sourceStart, rate, event.timelineSampleRate);
+    if (event.speedRatio == 1.0) return unscaled;
+    const long double scaled = static_cast<long double>(unscaled) / event.speedRatio;
+    return scaled >= static_cast<long double>((std::numeric_limits<SampleFrame>::max)())
+        ? (std::numeric_limits<SampleFrame>::max)()
+        : static_cast<SampleFrame>(std::llround(scaled));
 }
 
 [[nodiscard]] inline SampleFrame sourceOffsetAt(const AudioEvent& event,
@@ -83,9 +88,11 @@ struct AudioEvent final {
 {
     const auto rate = event.source ? event.source->sample_rate : 0;
     const auto start = sourceToProjectFrames(event.sourceStart, rate, event.timelineSampleRate);
-    if (projectOffset > (std::numeric_limits<SampleFrame>::max)() - start)
+    const long double unscaled = static_cast<long double>(projectOffset) * event.speedRatio;
+    if (unscaled >= static_cast<long double>((std::numeric_limits<SampleFrame>::max)() - start))
         return event.sourceEnd - event.sourceStart;
-    return projectToSourceFrames(start + projectOffset, rate, event.timelineSampleRate) - event.sourceStart;
+    return projectToSourceFrames(start + static_cast<SampleFrame>(std::llround(unscaled)),
+        rate, event.timelineSampleRate) - event.sourceStart;
 }
 
 [[nodiscard]] inline bool isSupportedFadeCurve(const FadeCurve curve) noexcept
@@ -179,7 +186,9 @@ struct AudioEvent final {
         || event.sourceStart < 0 || event.sourceEnd <= event.sourceStart
         || event.sourceEnd > event.source->total_frames
         || event.timelineStart < 0 || !std::isfinite(event.gain)
-        || !std::isfinite(event.speedRatio) || event.speedRatio <= 0.0) {
+        || !std::isfinite(event.speedRatio) || event.speedRatio < 0.5
+        || event.speedRatio > 2.0 || event.pitchSemitone < -12
+        || event.pitchSemitone > 12) {
         return false;
     }
 

@@ -29,8 +29,10 @@ public:
     [[nodiscard]] ag_result seek(qint64 positionMs) noexcept;
     [[nodiscard]] ag_result snapshot(ag_playback_snapshot& value) const noexcept;
     void release() noexcept;
+    void setTrackGains(const std::array<float, agplayer::editor::kTrackCount>& gains);
 
 private:
     ag_player* player_{};
     PlaybackController* owner_{};
+    std::shared_ptr<agplayer::editor::EditorPlaybackStream> stream_;
 };

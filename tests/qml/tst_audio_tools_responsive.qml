@@ -20,22 +20,31 @@ TestCase {
         return component
     }
     function inside(item, owner) {
+        var p = item ? item.mapToItem(owner, 0, 0) : null
+        var end = item ? item.mapToItem(owner, item.width, item.height) : null
+        var visible = item && item.visible
+        var clipped = []
+        for (var ancestor = item ? item.parent : null; ancestor && ancestor !== owner;
+             ancestor = ancestor.parent) {
+            if (ancestor.clip)
+                clipped.push({owner: ancestor, point: item.mapToItem(ancestor, 0, 0),
+                              end: item.mapToItem(ancestor, item.width, item.height)})
+        }
         verify(item, "missing control")
-        verify(item.visible, item.objectName + " is hidden")
-        var p = item.mapToItem(owner, 0, 0)
-        verify(p.x >= -1 && p.y >= -1 && p.x + item.width <= owner.width + 1
-               && p.y + item.height <= owner.height + 1,
+        verify(visible, item.objectName + " is hidden")
+        verify(p.x >= -1 && p.y >= -1 && end.x <= owner.width + 1
+               && end.y <= owner.height + 1,
                item.objectName + " outside " + owner.width + "x" + owner.height
                + ": " + p.x + "," + p.y + " " + item.width + "x" + item.height)
-        for (var ancestor = item.parent; ancestor && ancestor !== owner; ancestor = ancestor.parent) {
-            if (!ancestor.clip) continue
-            var local = item.mapToItem(ancestor, 0, 0)
+        for (var clippedItem of clipped) {
+            var local = clippedItem.point
+            var clipOwner = clippedItem.owner
             verify(local.x >= -1 && local.y >= -1
-                   && local.x + item.width <= ancestor.width + 1
-                   && local.y + item.height <= ancestor.height + 1,
-                   item.objectName + " clipped by " + ancestor.objectName
+                   && clippedItem.end.x <= clipOwner.width + 1
+                   && clippedItem.end.y <= clipOwner.height + 1,
+                   item.objectName + " clipped by " + clipOwner.objectName
                    + ": " + local.x + "," + local.y + " " + item.width + "x" + item.height
-                   + " in " + ancestor.width + "x" + ancestor.height)
+                   + " in " + clipOwner.width + "x" + clipOwner.height)
         }
     }
     function revealVertically(item) {
@@ -75,20 +84,45 @@ TestCase {
         verify(page)
         try {
             waitForRendering(page)
-            if (data.name === "metadata" && page.compactLayout) {
+            if (data.name === "metadata" && page.compactLayout
+                    && !page.macStackedLayout) {
                 var tab = findChild(page, "metadataCompactEditorTab")
                 inside(tab, page)
                 mouseClick(tab, tab.width / 2, tab.height / 2)
                 waitForRendering(page)
             }
             snapshot(page, data.tag)
-            inside(findChild(page, data.action), page)
+            var primaryAction = findChild(page, data.action)
+            if (data.name === "metadata" && page.macStackedLayout) {
+                var metadataScroller = findChild(page, "metadataWorkbenchScroller")
+                metadataScroller.contentY = Math.max(0, metadataScroller.contentHeight - metadataScroller.height)
+                var actionInPage = primaryAction.mapToItem(page, 0, 0)
+                var actionInScroller = primaryAction.mapToItem(metadataScroller, 0, 0)
+                verify(primaryAction.visible, "metadata action is hidden")
+                verify(actionInPage.y >= -1
+                       && actionInPage.y + primaryAction.height <= page.height + 1,
+                       "metadata action outside page after scrolling: " + actionInPage.y)
+                verify(actionInScroller.y >= -1
+                       && actionInScroller.y + primaryAction.height <= metadataScroller.height + 1,
+                       "metadata action clipped after scrolling: " + actionInScroller.y)
+            } else {
+                revealVertically(primaryAction)
+                inside(primaryAction, page)
+            }
             if (data.name === "editor") {
+                revealVertically(findChild(page, "editorPlaybackTransport"))
                 inside(findChild(page, "editorPlaybackTransport"), page)
+                revealVertically(findChild(page, "editorRecordingTransport"))
                 inside(findChild(page, "editorRecordingTransport"), page)
                 var inspector = findChild(page, "editorInspector")
-                inside(inspector, page)
-                compare(inspector.x, page.mainWidth)
+                revealVertically(inspector)
+                if (page.macStackedLayout) {
+                    compare(inspector.x, 0)
+                    verify(inspector.y >= findChild(page, "editorMainColumn").height)
+                } else {
+                    inside(inspector, page)
+                    compare(inspector.x, page.mainWidth)
+                }
                 verify(findChild(page, "editorTrackScroller").height >= 86)
                 var exportButton = findChild(page, "editorExportButton")
                 if (data.h === 712) {
@@ -105,7 +139,7 @@ TestCase {
             }
             if (data.name === "filename") {
                 var tabs = findChild(page, "filenameCompactTabs")
-                if (tabs) {
+                if (tabs && tabs.visible) {
                     var settingsTab = findChild(page, "filenameCompactRulesTab")
                     mouseClick(settingsTab, settingsTab.width / 2, settingsTab.height / 2)
                     waitForRendering(page)
@@ -126,7 +160,6 @@ TestCase {
                 var lastField = findChild(page, "metadataValueField_customTag")
                 revealVertically(lastField)
                 inside(lastField, page)
-                inside(findChild(page, data.action), page)
             }
             if (data.name === "lossless") {
                 var taskList = findChild(page, "losslessTaskList")

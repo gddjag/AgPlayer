@@ -272,11 +272,13 @@ private:
 
         InterruptContext interrupt_context{this, queued.serial};
         Decoder decoder;
-        DecoderOpenOptions options{};
+        DecoderOpenOptions options = queued.request.input_options;
         options.output_sample_rate = static_cast<int>(sample_rate_);
         options.output_channels = static_cast<int>(channels_);
         options.interrupt_callback = &interrupted;
         options.interrupt_context = &interrupt_context;
+        if (options.custom_seek && options.custom_seek(options.custom_io_context, 0, SEEK_SET) < 0)
+            return false;
         if (decoder.open(queued.request.media_path, options) != AG_OK) {
             return false;
         }

@@ -5,6 +5,7 @@
 #include "../time_pitch_engine.hpp"
 
 #include <memory>
+#include <array>
 #include <atomic>
 #include <string>
 
@@ -37,6 +38,7 @@ public:
     [[nodiscard]] const agplayer::MediaMetadata& metadata() const noexcept override;
     [[nodiscard]] ag_result read(agplayer::DecodedAudioBlock& block) noexcept override;
     [[nodiscard]] ag_result seek(std::int64_t position_ms) noexcept override;
+    void setTrackGains(const std::array<float, kTrackCount>& gains);
 
 private:
     class Impl;

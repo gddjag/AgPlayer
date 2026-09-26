@@ -66,7 +66,10 @@ private slots:
     void visualModesUseConfiguredProgressAndBaseColors();
     void frequencyModeUpdatesProgressBrightnessWithoutRebuildingNode();
     void spectrumUsesBottomBaselineAndCenterEnvelope();
+    void spectrumDensityUsesLogicalWindowWidth_data();
+    void spectrumDensityUsesLogicalWindowWidth();
     void spectrumUpsamplesSparseInputToDenseBars();
+    void spectrumPreview();
     void spectrumContractUsesFixedBarsWithPeakCaps();
     void spectrumPeakCapsNeverFallInsideTheirBars();
     void spectrumColorIsIndependentOfPlaybackProgress();
@@ -627,6 +630,58 @@ void WaveformItemTest::spectrumUsesBottomBaselineAndCenterEnvelope()
     delete node;
 }
 
+void WaveformItemTest::spectrumDensityUsesLogicalWindowWidth_data()
+{
+    QTest::addColumn<int>("logicalWidth");
+    QTest::addColumn<int>("expectedBars");
+    QTest::newRow("narrow") << 70 << 14;
+    QTest::newRow("mini") << 120 << 24;
+    QTest::newRow("normal") << 600 << 120;
+    QTest::newRow("wide") << 1200 << 240;
+    QTest::newRow("uneven-width") << 603 << 120;
+}
+
+void WaveformItemTest::spectrumDensityUsesLogicalWindowWidth()
+{
+    QFETCH(int, logicalWidth);
+    QFETCH(int, expectedBars);
+    QQuickWindow window;
+    TestableWaveformItem item;
+    item.setParentItem(window.contentItem());
+    item.setWidth(logicalWidth);
+    item.setHeight(96);
+    item.setVisualMode(2);
+    item.setPeaks(peaks({1.0, 1.0, 1.0, 1.0}));
+    const qreal dpr = window.devicePixelRatio();
+    qInfo() << "spectrum logical width" << logicalWidth << "DPR" << dpr;
+    const int strokes = static_cast<int>(std::ceil(4.0 * dpr));
+    QSGNode* node = item.updatePaintNode(nullptr, nullptr);
+    QVERIFY(node);
+    QCOMPARE(static_cast<QSGGeometryNode*>(node)->geometry()->vertexCount(),
+             expectedBars * (strokes + 1) * 2);
+    const auto* data = vertices(node);
+    // Adjacent physical strokes fill one logical bar even on Retina displays.
+    const float first = data[0].x;
+    const float last = data[(strokes - 1) * expectedBars * 2].x;
+    QVERIFY(std::abs(last - first + 1.0 / dpr - 4.0) <= 1.0 / dpr);
+    const float stride = data[2].x - first;
+    const double expectedGap = (logicalWidth - expectedBars * 4.0)
+        / (expectedBars + 1.0);
+    QVERIFY(std::abs(stride - 4.0 - expectedGap) < 0.02);
+    const int capOffset = expectedBars * strokes * 2;
+    const float firstCapLeft = data[capOffset].x;
+    const float firstCapRight = data[capOffset + 1].x;
+    const float secondCapLeft = data[capOffset + 2].x;
+    const float lastCapRight = data[capOffset + (expectedBars - 1) * 2 + 1].x;
+    QVERIFY(std::abs(firstCapRight - firstCapLeft - 4.0) < 0.02);
+    QVERIFY(std::abs(firstCapLeft - expectedGap) < 0.02);
+    QVERIFY(std::abs(secondCapLeft - firstCapRight - expectedGap) < 0.02);
+    QVERIFY(std::abs(logicalWidth - lastCapRight - expectedGap) < 0.02);
+    QVERIFY(data[0].x >= 0.0F);
+    QVERIFY(data[(strokes * expectedBars - 1) * 2].x < logicalWidth);
+    delete node;
+}
+
 void WaveformItemTest::spectrumUpsamplesSparseInputToDenseBars()
 {
     TestableWaveformItem item;
@@ -641,18 +696,49 @@ void WaveformItemTest::spectrumUpsamplesSparseInputToDenseBars()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* geometry = static_cast<QSGGeometryNode*>(node)->geometry();
-    // Width 120 packs 18 responsive bars at 5 px + 2 px gap. Each bar has
-    // five adjacent strokes plus a peak-hold cap: 12 vertices per bar.
-    QCOMPARE(geometry->vertexCount(), 18 * 12);
+    // Width 120 packs 24 bars at 4 logical px + 1 px gap. Each bar has
+    // four adjacent strokes plus a peak-hold cap at DPR 1.
+    QCOMPARE(geometry->vertexCount(), 24 * 10);
     delete node;
+}
+
+void WaveformItemTest::spectrumPreview()
+{
+    const QString output = qEnvironmentVariable("AGPLAYER_SPECTRUM_PREVIEW");
+    if (output.isEmpty()) {
+        QTest::qSkip("Set AGPLAYER_SPECTRUM_PREVIEW to capture the renderer",
+                     __FILE__, __LINE__);
+        return;
+    }
+    QQuickWindow window;
+    window.setColor(QColor(QStringLiteral("#202428")));
+    window.resize(960, 112);
+    TestableWaveformItem item;
+    item.setParentItem(window.contentItem());
+    item.setY(8);
+    item.setWidth(960);
+    item.setHeight(96);
+    item.setVisualMode(2);
+    item.setGradientStartColor(QColor(QStringLiteral("#00bfa9")));
+    item.setGradientMiddleColor(QColor(QStringLiteral("#7c4dff")));
+    item.setGradientEndColor(QColor(QStringLiteral("#e72baa")));
+    QVariantList bins;
+    for (int i = 0; i < 128; ++i)
+        bins.append(0.10 + 0.65 * std::pow(std::sin(i * 0.09), 2)
+                    * (0.45 + 0.55 * std::pow(std::cos(i * 0.18), 2)));
+    item.setPeaks(bins);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    QTest::qWait(100);
+    QVERIFY(window.grabWindow().save(output));
 }
 
 void WaveformItemTest::spectrumContractUsesFixedBarsWithPeakCaps()
 {
     TestableWaveformItem item;
     QCOMPARE(item.spectrumBarCount(), 128);
-    QCOMPARE(item.spectrumBarWidth(), 5.0);
-    QCOMPARE(item.spectrumBarGap(), 2.0);
+    QCOMPARE(item.spectrumBarWidth(), 4.0);
+    QCOMPARE(item.spectrumBarGap(), 1.0);
     QCOMPARE(item.spectrumMaxHeight(), 96.0);
     QCOMPARE(item.spectrumAttackSeconds(), 0.02);
     QCOMPARE(item.spectrumDecaySeconds(), 0.10);
@@ -668,23 +754,25 @@ void WaveformItemTest::spectrumContractUsesFixedBarsWithPeakCaps()
     const auto* data = vertices(node);
     const auto* geometryNode = static_cast<const QSGGeometryNode*>(node);
     // The live spectrum must use the complete waveform canvas.  The fixed
-    // source is resampled into 86 responsive bars at this width.
+    // source is resampled into 120 responsive bars at this logical width.
     QVERIFY(data[0].x >= 0.0F && data[0].x <= 2.0F);
-    const int lastBarVertex = 86 * 2 * 4 + (86 - 1) * 2;
+    const int lastBarVertex = 120 * 2 * 3 + (120 - 1) * 2;
     QVERIFY(data[lastBarVertex].x >= 598.0F && data[lastBarVertex].x <= 600.0F);
     // The faster, taller spectrum should lift the center bar above the former
     // 72 px visual cap while remaining bottom-aligned.
-    const int centerBarVertex = 43 * 2;
+    const int centerBarVertex = 60 * 2;
     QVERIFY(data[centerBarVertex].y <= 23.0F);
     QCOMPARE(data[centerBarVertex + 1].y, 96.0F);
     // A one-pixel horizontal cap must remain visible above each bottom-aligned
     // bar so the live spectrum has the square peak markers from the reference.
-    const int capVertex = 86 * 2 * 5 + 43 * 2;
-    QCOMPARE(geometryNode->geometry()->vertexCount(), 86 * 12);
+    const int capVertex = 120 * 2 * 4 + 60 * 2;
+    QCOMPARE(geometryNode->geometry()->vertexCount(), 120 * 10);
     QCOMPARE(data[capVertex].y, data[centerBarVertex].y);
     QCOMPARE(data[capVertex + 1].y, data[centerBarVertex].y);
     QVERIFY(data[capVertex].x < data[capVertex + 1].x);
     delete node;
+
+
 }
 
 void WaveformItemTest::spectrumPeakCapsNeverFallInsideTheirBars()
@@ -698,8 +786,8 @@ void WaveformItemTest::spectrumPeakCapsNeverFallInsideTheirBars()
     QSGNode* node = item.updatePaintNode(nullptr, nullptr);
     QVERIFY(node != nullptr);
     const auto* data = vertices(node);
-    constexpr int barCount = 10;
-    constexpr int strokeCopies = 5;
+    constexpr int barCount = 14;
+    constexpr int strokeCopies = 4;
     constexpr int lowBar = 0;
     const int barTopVertex = lowBar * 2;
     const int capVertex = barCount * 2 * strokeCopies + lowBar * 2;
@@ -735,8 +823,8 @@ void WaveformItemTest::spectrumColorIsIndependentOfPlaybackProgress()
     // Spectrum colour represents frequency, not playback progress. Seeking must
     // leave both the bar and its peak-hold cap on the configured colour model.
     compareColor(data[0], 0x00, 0x2F, 0xA7, 0xFF);
-    const int barCount = 10;
-    const int capOffset = barCount * 2 * 5;
+    const int barCount = 14;
+    const int capOffset = barCount * 2 * 4;
     compareColor(data[capOffset], 0x00, 0x2F, 0xA7, 0xFF);
     delete node;
 }

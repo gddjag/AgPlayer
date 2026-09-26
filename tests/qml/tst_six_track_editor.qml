@@ -42,8 +42,9 @@ TestCase {
     function inside(item, owner) {
         verify(item && item.visible, "Missing visible control")
         const p = item.mapToItem(owner, 0, 0)
-        verify(p.x >= -1 && p.y >= -1 && p.x + item.width <= owner.width + 1
-            && p.y + item.height <= owner.height + 1,
+        const end = item.mapToItem(owner, item.width, item.height)
+        verify(p.x >= -1 && p.y >= -1 && end.x <= owner.width + 1
+            && end.y <= owner.height + 1,
             item.objectName + " outside page: " + p.x + "," + p.y + " " + item.width + "x" + item.height)
     }
     function createEditorHost() {
@@ -61,6 +62,46 @@ TestCase {
         verify(AudioEditorController.addFiles(sources))
         tryVerify(function() { return !AudioEditorController.busy && AudioEditorController.timelineEventViews.length === count }, 15000)
     }
+    function test_soloAndScopedTempoPitchControls() {
+        importPcm(2)
+        const host = createEditorHost()
+        const root = host.contentItem
+        const solo = visualChild(root, "editorTrackSolo0")
+        const mute = visualChild(root, "editorTrackMute0")
+        const tempoScope = visualChild(root, "inspectorTempoScope")
+        const pitchScope = visualChild(root, "inspectorPitchScope")
+        const speed = visualChild(root, "inspectorSpeedSlider")
+        const pitchPlus = visualChild(root, "inspectorPitchPlus")
+        verify(solo && mute && tempoScope && pitchScope && speed && pitchPlus,
+               "missing " + [!!solo, !!mute, !!tempoScope, !!pitchScope, !!speed, !!pitchPlus].join(","))
+        verify(solo.x > mute.x && solo.x + solo.width <= mute.parent.width)
+        mouseClick(solo)
+        compare(AudioEditorController.tracks[0].solo, true)
+        compare(AudioEditorController.tracks[1].solo, false)
+        tempoScope.currentIndex = 1
+        pitchScope.currentIndex = 1
+        AudioEditorController.selectedTrack = 0
+        verify(AudioEditorController.setTimelineTrackSpeedPercent(0, 125))
+        tryCompare(speed, "value", 1.25)
+        mouseClick(pitchPlus)
+        compare(AudioEditorController.timelineTrackPitchSemitones(0), 1)
+        compare(AudioEditorController.timelineTrackPitchSemitones(1), 0)
+        compare(AudioEditorController.timelineTrackSpeedPercent(0), 125)
+        for (const event of AudioEditorController.timelineEventViews)
+            compare(event.speedRatio, event.trackIndex === 0 ? 1.25 : 1)
+        tempoScope.currentIndex = 0
+        pitchScope.currentIndex = 0
+        verify(AudioEditorController.setTimelineAllSpeedPercent(150))
+        verify(AudioEditorController.setTimelineAllPitch(2))
+        for (const event of AudioEditorController.timelineEventViews) {
+            compare(event.speedRatio, 1.5)
+            compare(event.pitchSemitone, 2)
+        }
+        AudioEditorController.selectEvent(String(AudioEditorController.timelineEventViews[0].id))
+        waitForRendering(root)
+        if (typeof visualFixtureOutput !== "undefined" && visualFixtureOutput.length)
+            grabImage(root).save(visualFixtureOutput + "-scoped-selected.png")
+    }
     function test_realPcmLayout_data() {
         return [{tag: "reference", w: 1672, h: 941, mode: 0}, {tag: "small", w: 1000, h: 700, mode: 0},
             {tag: "minimum", w: 760, h: 420, mode: 0}, {tag: "light", w: 1672, h: 941, mode: 1}]
@@ -77,14 +118,18 @@ TestCase {
         wait(0) // Flush Column/Row positioners before measuring their children.
         const inspector = visualChild(page, "editorInspector")
         verify(inspector.visible)
-        compare(inspector.x, page.mainWidth)
-        verify(inspector.width >= 300)
-        inside(inspector, page)
+        const layoutOwner = page.macStackedLayout
+            ? visualChild(page, "editorMainColumn").parent : page
+        compare(inspector.x, page.macStackedLayout ? 0 : page.mainWidth)
+        if (page.macStackedLayout)
+            verify(inspector.y >= visualChild(page, "editorMainColumn").height)
+        verify(inspector.width >= (page.macDesktopLayout ? 220 : 300))
+        inside(inspector, layoutOwner)
         const device = visualChild(page, "editorInputDevice")
         const meter = visualChild(page, "editorRecordingLevel")
         const recordingGain = visualChild(page, "editorRecordingGain")
-        inside(meter, page)
-        inside(recordingGain, page)
+        inside(meter, layoutOwner)
+        inside(recordingGain, layoutOwner)
         compare(meter.width, device.width)
         verify(meter.mapToItem(page, 0, meter.height).y <= device.mapToItem(page, 0, 0).y)
         compare(device.palette.text, Theme.primaryText)
@@ -104,13 +149,13 @@ TestCase {
         compare(exportButton.background.color, Theme.accent)
         compare(exportButton.contentItem.color, Theme.accentText)
         for (const name of ["editorCommandBar", "editorRecordingTransport", "editorInputDevice", "editorRecordButton", "editorPauseRecordingButton", "editorPlaybackTransport", "editorCurrentTime"])
-            inside(visualChild(page, name), page)
+            inside(visualChild(page, name), layoutOwner)
         const scroller = visualChild(page, "editorTrackScroller")
         verify(scroller.height >= 82)
         const transport = visualChild(page, "editorRecordingTransport")
         verify(transport.y >= scroller.y + scroller.height,
                "Transport must remain below the timeline")
-        inside(scroller, page)
+        inside(scroller, layoutOwner)
         const first = AudioEditorController.timelineEventViews[0]
         const waveform = visualChild(page, "editorWaveformGeometry_" + first.id)
         verify(waveform)
@@ -226,16 +271,17 @@ TestCase {
         verify(AudioEditorController.undo())
         compare(canvas.eventById(String(first.id)).sourceEnd, original.sourceEnd)
     }
-    function test_controlDragPansWithoutMovingClip() {
+    function test_blankDragPansWithoutMovingClip() {
         importPcm(2)
         const host = createEditorHost()
         const canvas = visualChild(host.contentItem, "editorWaveformCanvas")
         const viewport = AudioEditorController.viewport
         viewport.zoomAt(4, 0)
         const original = AudioEditorController.timelineEventViews[0]
-        mousePress(canvas, canvas.width * 0.8, 45, Qt.LeftButton, Qt.ControlModifier)
-        mouseMove(canvas, canvas.width * 0.3, 45, 20)
-        mouseRelease(canvas, canvas.width * 0.3, 45, Qt.LeftButton, Qt.ControlModifier)
+        const blankY = canvas.rowHeight * 2 + 45
+        mousePress(canvas, canvas.width * 0.8, blankY, Qt.LeftButton)
+        mouseMove(canvas, canvas.width * 0.3, blankY, 20)
+        mouseRelease(canvas, canvas.width * 0.3, blankY, Qt.LeftButton)
         verify(viewport.visibleStartFrame > 0)
         compare(canvas.eventById(String(original.id)).timelineStart, original.timelineStart)
         const bar = visualChild(host.contentItem, "editorTimelineScrollBar")
@@ -475,7 +521,7 @@ TestCase {
         for (let i = 0; i < 6; ++i) {
             const header = visualChild(host.contentItem, "editorTrackHeader" + i)
             verify(header, "Missing track " + (i + 1))
-            compare(header.height, 82)
+            compare(header.height, Qt.platform.os === "osx" ? 89 : 82)
         }
         verify(findChild(host, "editorRecordingTransport"))
         verify(findChild(host, "editorInputDevice"))

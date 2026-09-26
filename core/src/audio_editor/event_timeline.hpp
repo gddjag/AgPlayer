@@ -10,10 +10,11 @@ namespace agplayer::editor {
 
 struct TrackState final {
     bool muted{};
+    bool solo{};
     float gain{1.0F};
 };
 inline bool operator==(const TrackState& a, const TrackState& b) noexcept
-{ return a.muted == b.muted && a.gain == b.gain; }
+{ return a.muted == b.muted && a.solo == b.solo && a.gain == b.gain; }
 
 struct TimelineSnapshot final {
     std::vector<AudioEvent> events;

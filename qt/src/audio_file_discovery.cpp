@@ -18,7 +18,23 @@ const QStringList& supportedExtensionList()
         QStringLiteral("m4a"), QStringLiteral("ogg"),
         QStringLiteral("wma"), QStringLiteral("ape"),
         QStringLiteral("opus"), QStringLiteral("aif"),
-        QStringLiteral("aiff")};
+        QStringLiteral("aiff"), QStringLiteral("ncm"),
+        QStringLiteral("kgm"), QStringLiteral("kgma"),
+        QStringLiteral("vpr"), QStringLiteral("kwm"),
+        QStringLiteral("qmc0"), QStringLiteral("qmc2"),
+        QStringLiteral("qmc3"), QStringLiteral("qmc4"),
+        QStringLiteral("qmc6"), QStringLiteral("qmc8"),
+        QStringLiteral("qmcflac"), QStringLiteral("qmcogg"),
+        QStringLiteral("mflac"), QStringLiteral("mflac0"),
+        QStringLiteral("mgg"), QStringLiteral("mgg0"),
+        QStringLiteral("mgg1"), QStringLiteral("mggl"),
+        QStringLiteral("tkm"), QStringLiteral("bkcmp3"),
+        QStringLiteral("bkcm4a"), QStringLiteral("bkcflac"),
+        QStringLiteral("bkcwav"), QStringLiteral("bkcape"),
+        QStringLiteral("bkcogg"), QStringLiteral("bkcwma"),
+        QStringLiteral("mmp4"), QStringLiteral("666c6163"),
+        QStringLiteral("6d7033"), QStringLiteral("6f6767"),
+        QStringLiteral("6d3461"), QStringLiteral("776176")};
     return extensions;
 }
 

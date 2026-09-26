@@ -21,6 +21,35 @@ Item {
     property int favoriteCount: 0
     property int historyCount: 0
     property int recentAddedCount: 0
+    property bool resourceRefreshActive: false
+    property bool resourceRefreshCompleted: false
+    Connections {
+        target: ResourceFolderController
+        function onScanningChanged() {
+            if (ResourceFolderController.scanning) {
+                root.resourceRefreshActive = true
+                root.resourceRefreshCompleted = false
+                resourceRefreshDismiss.stop()
+            }
+        }
+        function onScanFinished() { Qt.callLater(root.finishResourceRefresh) }
+    }
+    Connections {
+        target: ImportController
+        function onFinished() { Qt.callLater(root.finishResourceRefresh) }
+    }
+    function finishResourceRefresh() {
+        if (!resourceRefreshActive || ResourceFolderController.scanning || ImportController.busy)
+            return
+        resourceRefreshActive = false
+        resourceRefreshCompleted = true
+        resourceRefreshDismiss.restart()
+    }
+    Timer {
+        id: resourceRefreshDismiss
+        interval: 4000
+        onTriggered: root.resourceRefreshCompleted = false
+    }
     property int neverPlayedCount: 0
     property string contextPlaylistId: ""
     property string contextResourceFolder: ""
@@ -43,12 +72,35 @@ Item {
     signal importRequested(string playlistId)
     signal importPlaylistRequested()
     signal exportPlaylistRequested(string playlistId)
-    signal resourceUrlsDropped(var urls)
+    signal resourceUrlsDropped(var urls, bool directoriesAdded)
     signal resourceFolderRemoved(string folder)
 
     function submitResourceUrls(urls) {
         resourceDropAccepted = false
-        resourceUrlsDropped(urls)
+        if (!urls || !urls.length)
+            return false
+        var audioUrls = []
+        // All three shells use the same resource submission path. Register
+        // directories before importing; an ordinary library import alone
+        // cannot create a resource root or its watcher/count rows.
+        for (var i = 0; i < urls.length; ++i) {
+            var entry = ResourceFolderController.classifyDropUrl(urls[i])
+            if (entry.kind === ResourceFolderController.Directory) {
+                var alreadyMonitored = ResourceFolderController.monitoredFolders.indexOf(entry.path) >= 0
+                if (ResourceFolderController.addMonitoredFolder(entry.path) || alreadyMonitored)
+                    resourceDropAccepted = true
+            } else if (entry.kind === ResourceFolderController.AudioFile) {
+                audioUrls.push(entry.url)
+            }
+        }
+        var directoriesAdded = resourceDropAccepted
+        if (directoriesAdded)
+            ResourceFolderController.rescan()
+        if (audioUrls.length && !ImportController.busy) {
+            ImportController.importUrls(audioUrls)
+            resourceDropAccepted = true
+        }
+        resourceUrlsDropped(urls, directoriesAdded)
         return resourceDropAccepted
     }
 
@@ -96,9 +148,9 @@ Item {
         return false
     }
 
-    function resourceNodeAt(x, y) {
+    function resourceNodeAt(x, y, sourceItem) {
         var contentPoint = navigationList.contentItem.mapFromItem(
-                    navigationList, x, y)
+                    sourceItem || navigationList, x, y)
         var row = navigationList.indexAt(contentPoint.x, contentPoint.y)
         if (row < 0)
             return null
@@ -111,7 +163,7 @@ Item {
                     modelIndex, LibraryNavigationModel.DepthRole)
         var hasChildren = navigationModel.data(
                     modelIndex, LibraryNavigationModel.HasChildrenRole)
-        var expandLeft = 6 + depth * 12
+        var expandLeft = 2 + depth * 10
         if (hasChildren && contentPoint.x >= expandLeft
                 && contentPoint.x < expandLeft + navigationActionExtent)
             return null
@@ -290,7 +342,32 @@ Item {
         SystemMenuItem {
             objectName: "resourceFolderMenuRescan"
             text: qsTr("重新扫描全部资源文件夹")
-            onTriggered: ResourceFolderController.rescan()
+            enabled: !ResourceFolderController.scanning
+            onTriggered: {
+                ResourceFolderController.rescanAll()
+                resourceScanDialog.open()
+            }
+        }
+    }
+
+    ThemedDialog {
+        id: resourceScanDialog
+        objectName: "resourceScanDialog"
+        parent: root.Window.window ? root.Window.window.contentItem : root
+        anchors.centerIn: parent
+        title: qsTr("扫描资源文件夹")
+        width: Qt.platform.os === "osx"
+               ? Math.min(480, parent ? parent.width - 2 * Theme.spacingLg : 480)
+               : Math.min(440, fittedContentWidth)
+        modal: false
+        standardButtons: Dialog.Close
+        contentItem: Label {
+            objectName: "resourceScanStatus"
+            text: ResourceFolderController.scanning
+                ? qsTr("正在扫描全部资源文件夹及子文件夹，请稍候…")
+                : ResourceFolderController.scanSummary
+            color: Theme.primaryText
+            wrapMode: Text.Wrap
         }
     }
 
@@ -346,16 +423,19 @@ Item {
         // on the stable view so a reset between press and release cannot
         // destroy the handler that owns the gesture.
         TapHandler {
+            // Flickable reparents handlers to contentItem. Map from the actual
+            // parent so scrolling is not added to the hit position a second time.
+            objectName: "resourceNavigationTapHandler"
             property var pressedResourceNode: null
             acceptedButtons: Qt.LeftButton
             onPressedChanged: {
                 if (pressed)
                     pressedResourceNode = root.resourceNodeAt(
-                                point.position.x, point.position.y)
+                                point.position.x, point.position.y, parent)
             }
             onTapped: function(eventPoint) {
                 var releasedNode = root.resourceNodeAt(
-                            eventPoint.position.x, eventPoint.position.y)
+                            eventPoint.position.x, eventPoint.position.y, parent)
                 var pressedNode = pressedResourceNode
                 pressedResourceNode = null
                 if (!pressedNode || !releasedNode
@@ -379,7 +459,7 @@ Item {
             required property string resourceFolder
             required property bool hasChildren
             readonly property int nodeIconVisualSize:
-                nodeType === "library" ? root.navigationIconVisualSize + 2
+                nodeType === "library" ? root.navigationIconVisualSize + 4
                                          : root.navigationIconVisualSize
 
             readonly property bool selected: root.nodeIsSelected(
@@ -419,9 +499,9 @@ Item {
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
                     height: 42
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 4
-                    spacing: 4
+                    anchors.leftMargin: 4
+                    anchors.rightMargin: 0
+                    spacing: 2
                     Image {
                         source: Theme.icon("user-resource-folder")
                         sourceSize.width: root.navigationIconVisualSize
@@ -431,10 +511,14 @@ Item {
                         Layout.preferredHeight: root.navigationIconVisualSize
                     }
                     Text {
-                        text: qsTr("资源文件夹")
+                        objectName: "resourceFolderSectionLabel"
+                        text: root.resourceRefreshActive ? qsTr("资源文件夹 · 刷新中…")
+                              : root.resourceRefreshCompleted ? qsTr("资源文件夹 · 已刷新")
+                              : qsTr("资源文件夹")
                         color: Theme.tagSecondaryText
                         font.family: Theme.fontPrimary
-                        font.pixelSize: Theme.fontSizeCaption
+                        font.pixelSize: Theme.fontSizeBody
+                        elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
                     ToolButton {
@@ -477,9 +561,9 @@ Item {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 6 + nodeRow.depth * 12
-                anchors.rightMargin: 8
-                spacing: 4
+                anchors.leftMargin: 2 + nodeRow.depth * (Qt.platform.os === "osx" ? 10 : 12)
+                anchors.rightMargin: Qt.platform.os === "osx" ? 4 : 6
+                spacing: 2
                 visible: nodeRow.nodeType !== "resourceSection"
                 z: 4
 
@@ -547,9 +631,13 @@ Item {
                     font.pixelSize: Theme.fontSizeBody
                     elide: Text.ElideRight
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                 }
                 Text {
+                    objectName: "navigationNodeCount-" + nodeRow.nodeId
                     text: nodeRow.count
+                    Layout.minimumWidth: implicitWidth
+                    Layout.preferredWidth: implicitWidth
                     color: Theme.tagSecondaryText
                     font.family: Theme.fontPrimary
                     font.pixelSize: Theme.fontSizeCaption
@@ -666,14 +754,16 @@ Item {
     FileDropArea {
         id: resourceDropTarget
         objectName: "resourceFolderDropTarget"
-        anchors.left: navigationList.left
-        anchors.right: navigationList.right
+        // The sidebar padding below the resource heading belongs to this
+        // area too, not to the window-wide ordinary music import fallback.
+        anchors.left: parent.left
+        anchors.right: parent.right
         y: {
             navigationList.contentY
             navigationList.count
             return root.resourceSectionTop()
         }
-        height: Math.max(0, navigationList.y + navigationList.height - y)
+        height: Math.max(0, root.height - y)
         visible: height > 0
         z: -1
         urlsSubmitter: root.submitResourceUrls

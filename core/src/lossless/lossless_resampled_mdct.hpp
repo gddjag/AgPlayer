@@ -15,7 +15,9 @@ public:
     void consume(const double* samples, std::size_t frames, const std::atomic_bool& cancel);
     // Drain the resampler once, including its delayed final samples.
     void finish(const std::atomic_bool& cancel);
+    void refineStereo(const std::atomic_bool& cancel);
     std::array<MdctFrameEvidence, 4> result() const noexcept;
+    std::array<MdctFrameEvidence, 4> channelResult(int channel) const noexcept;
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
