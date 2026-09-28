@@ -6,25 +6,25 @@
   const requestTimeoutMs = 10000;
   const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
   const publishedWindowsRelease = Object.freeze({
-    version: '1.0.9',
-    size: 36691029,
-    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.9/AgPlayer-Setup-1.0.9-x64.exe',
-    r2Url: 'https://download.agplayer.com/releases/v1.0.9/AgPlayer-Setup-1.0.9-x64.exe',
-    sha256: '23BFD1616449506E1727D77ABE13E1A2258AB11886EEF24F67885F61A78C1C3D'
+    version: '1.1.0',
+    size: 36692611,
+    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.1.0/AgPlayer-Setup-1.1.0-x64.exe',
+    r2Url: 'https://download.agplayer.com/releases/v1.1.0/AgPlayer-Setup-1.1.0-x64.exe',
+    sha256: '4D8436E7FCDF0CD6D82552EA51C649746DEFCC0AF8A236696FBC0F6377E6E7EB'
   });
   const publishedMacRelease = Object.freeze({
-    version: '1.0.9',
-    size: 95010781,
-    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.9/AgPlayer-1.0.9-macOS-universal.dmg',
-    r2Url: 'https://download.agplayer.com/releases/v1.0.9/AgPlayer-1.0.9-macOS-universal.dmg',
-    sha256: '85AE4BBEFCAA189544C531817E92787141DEAA8FC4C68F615D584F718E8EF779'
+    version: '1.1.0',
+    size: 95013315,
+    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.1.0/AgPlayer-1.1.0-macOS-universal.dmg',
+    r2Url: 'https://download.agplayer.com/releases/v1.1.0/AgPlayer-1.1.0-macOS-universal.dmg',
+    sha256: '8DAB5E1CB2467727FD98CCA848D73EAD500525F7183FD8F83972B44722941381'
   });
   const publishedAndroidRelease = Object.freeze({
-    version: '1.0.9',
-    size: 239792754,
-    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.0.9/AgPlayer-1.0.9-arm64-release.apk',
-    r2Url: 'https://download.agplayer.com/releases/v1.0.9/AgPlayer-1.0.9-arm64-release.apk',
-    sha256: '4813D65F4F5A3CA197664BFE45A512B8C00D95AF879F44C2669A179A8278ECEC'
+    version: '1.1.0',
+    size: 239826570,
+    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.1.0/AgPlayer-1.1.0-arm64-release.apk',
+    r2Url: 'https://download.agplayer.com/releases/v1.1.0/AgPlayer-1.1.0-arm64-release.apk',
+    sha256: 'FCD8C9F20833AD5E60366F2AA7926166DA0238FBF37A060ED49009D0C176F4D8'
   });
 
   function selectRelease(manifest, platform = 'windows') {
@@ -73,9 +73,9 @@
       list.innerHTML = `<div><dt data-i18n="downloadPage.meta.system">${AG.t('downloadPage.meta.system')}</dt><dd data-i18n="${systemKey}">${systemText}</dd></div><div><dt data-i18n="downloadPage.meta.filename">${AG.t('downloadPage.meta.filename')}</dt><dd data-meta="filename">${filename}</dd></div><div><dt data-i18n="downloadPage.meta.size">${AG.t('downloadPage.meta.size')}</dt><dd data-meta="size">${size}</dd></div>`;
       return list;
     };
-    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.0.9-x64.exe', '35.0 MB'));
-    if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), 'AgPlayer-1.0.9-macOS-universal.dmg', '待发布'));
-    if (!android.querySelector('.platform-meta')) android.querySelector('h2')?.after(details('downloadPage.android.system', AG.t('downloadPage.android.system'), 'AgPlayer-1.0.9-arm64-release.apk', '228.7 MB'));
+    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.1.0-x64.exe', '35.0 MB'));
+    if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), 'AgPlayer-1.1.0-macOS-universal.dmg', '90.6 MB'));
+    if (!android.querySelector('.platform-meta')) android.querySelector('h2')?.after(details('downloadPage.android.system', AG.t('downloadPage.android.system'), 'AgPlayer-1.1.0-arm64-release.apk', '228.7 MB'));
     const platforms = windows.closest('.platforms');
     let checksum = document.querySelector('#windows-checksum');
     if (!checksum) {
