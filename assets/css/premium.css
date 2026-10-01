@@ -170,7 +170,7 @@ body[data-page="download"] .platform>.icon{
 }
 body[data-page="download"] #macos>.icon{background:linear-gradient(145deg,#32224e,#461b39)}
 body[data-page="download"] #android>.icon{background:linear-gradient(145deg,#173d2d,#224b42)}
-body[data-page="download"] #harmonyos>.icon{background:linear-gradient(145deg,#38235d,#56234b)}
+body[data-page="download"] #harmonyos>.icon{background:none;border:0;padding:0}
 body[data-page="download"] .platform h2{display:block;margin:0 0 4px}
 body[data-page="download"] #windows-download-status{display:none}
 body[data-page="download"] .store-description{max-width:31em;margin:auto 0;color:#cbbdd5;line-height:1.9}
