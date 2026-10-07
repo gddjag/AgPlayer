@@ -61,7 +61,7 @@ async function runDownloadScript(response, timers = {}) {
   const androidGithub = fakeElement();
   const androidChecksum = fakeElement();
   const androidChecksumCopy = fakeElement();
-  macChecksum.textContent = '866136BEA30220A88E309796C611EF00D1FCEED3F288483B1B0AF04960C91F04';
+  macChecksum.textContent = '10C83BF0226AA4FE71D56D7CA7EF15B4AA74A26D1BF595EA7782A1D74C8D7672';
   androidChecksum.textContent = '61F81747BEBB23A15E56C620514BBD42F6AD0AF1AB56855F3ADDCC6FCCA6DD1F';
   checksum.setAttribute('hidden', '');
   const documentListeners = new Map();
@@ -155,7 +155,7 @@ test('one verified manifest updates all downloadable platforms and rejects a for
   bad.files[1].r2Url = 'https://example.com/forged.dmg';
   const rejected = await runDownloadScript(streamedResponse(JSON.stringify(bad)));
   assert.equal(rejected.macPrimary.href, 'https://download.agplayer.com/releases/v1.1.1/AgPlayer-1.1.1-macOS-universal.dmg');
-  assert.equal(rejected.checksumValue.textContent, '49AF15932980249E3CB3E92D51E8127564E69C07D2603BCE1D5C51E91A31D865');
+  assert.equal(rejected.checksumValue.textContent, '8E3FE1EC2891435D6AC36FD24827808843374E2FCF5ADCF9C04D7766B3301F94');
 });
 
 test('macOS HTML fallback links the accepted package and official opening guide', async () => {
@@ -169,7 +169,7 @@ test('macOS HTML fallback links the accepted package and official opening guide'
 test('macOS copy uses the displayed checksum for fallback and live metadata', async () => {
   const fallback = await runDownloadScript({ok:false});
   fallback.macChecksumCopy.click();
-  assert.deepEqual(fallback.clipboardWrites, ['866136BEA30220A88E309796C611EF00D1FCEED3F288483B1B0AF04960C91F04']);
+  assert.deepEqual(fallback.clipboardWrites, ['10C83BF0226AA4FE71D56D7CA7EF15B4AA74A26D1BF595EA7782A1D74C8D7672']);
   const live = await runDownloadScript(streamedResponse(JSON.stringify(manifest())));
   live.macChecksumCopy.click();
   assert.deepEqual(live.clipboardWrites, ['B'.repeat(64)]);
@@ -224,7 +224,7 @@ test('published 1.1.1 remains available when the live manifest cannot be read', 
     assert.equal(result.primary.disabled, false);
     assert.equal(result.github.disabled, false);
     assert.equal(result.checksum.hasAttribute('hidden'), false);
-    assert.equal(result.checksumValue.textContent, '49AF15932980249E3CB3E92D51E8127564E69C07D2603BCE1D5C51E91A31D865');
+    assert.equal(result.checksumValue.textContent, '8E3FE1EC2891435D6AC36FD24827808843374E2FCF5ADCF9C04D7766B3301F94');
     result.primary.click();
     result.github.click();
     assert.deepEqual(result.navigations, [

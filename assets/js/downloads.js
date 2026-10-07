@@ -7,17 +7,17 @@
   const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
   const publishedWindowsRelease = Object.freeze({
     version: '1.1.1',
-    size: 37301587,
+    size: 37306799,
     githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.1.1/AgPlayer-Setup-1.1.1-x64.exe',
     r2Url: 'https://download.agplayer.com/releases/v1.1.1/AgPlayer-Setup-1.1.1-x64.exe',
-    sha256: '49AF15932980249E3CB3E92D51E8127564E69C07D2603BCE1D5C51E91A31D865'
+    sha256: '8E3FE1EC2891435D6AC36FD24827808843374E2FCF5ADCF9C04D7766B3301F94'
   });
   const publishedMacRelease = Object.freeze({
     version: '1.1.1',
-    size: 95978078,
+    size: 95977652,
     githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.1.1/AgPlayer-1.1.1-macOS-universal.dmg',
     r2Url: 'https://download.agplayer.com/releases/v1.1.1/AgPlayer-1.1.1-macOS-universal.dmg',
-    sha256: '866136BEA30220A88E309796C611EF00D1FCEED3F288483B1B0AF04960C91F04'
+    sha256: '10C83BF0226AA4FE71D56D7CA7EF15B4AA74A26D1BF595EA7782A1D74C8D7672'
   });
   const publishedAndroidRelease = Object.freeze({
     version: '1.1.1',
