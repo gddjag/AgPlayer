@@ -37,6 +37,10 @@ AgPlayer 是一款以轻量、简洁为设计方向的本地音频播放器，�
 
 ![AgPlayer 单窗口：音乐列表、标签面板与底部整曲波形](assets/images/player-single.png)
 
+### 手机版
+
+![AgPlayer 手机版：音乐库、音频工具、多轨编辑和波形播放界面](assets/images/player-mobile.png)
+
 ## 六大音频工具
 
 从声音处理到文件整理，常用工具集中在一个窗口中。
