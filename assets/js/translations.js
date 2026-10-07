@@ -268,7 +268,7 @@ window.AG_COPY = {
       "android": {
         "name": "Android安卓版",
         "system": "Android 8.0 及以上（ARM64）",
-        "description": "适用于 64 位 Android 8.0 及以上设备。"
+        "description": "适用于 64 位 Android 8.0 及以上设备。官网版支持检查更新和“支持作者”，分离模型已内置。"
       },
       "harmony": {
         "name": "HarmonyOS鸿蒙版",
@@ -639,7 +639,7 @@ window.AG_COPY = {
       "android": {
         "name": "Android",
         "system": "Android 8.0 or later (ARM64)",
-        "description": "For 64-bit Android 8.0 or later devices."
+        "description": "For 64-bit Android 8.0 or later devices. Website edition includes update checks, Support the Author, and bundled separation models."
       },
       "harmony": {
         "name": "HarmonyOS",
