@@ -30,3 +30,4 @@
   document.querySelectorAll('[data-lang]').forEach(button => button.addEventListener('click', () => window.AG.setLanguage(button.dataset.lang)));
   apply();
 })();
+

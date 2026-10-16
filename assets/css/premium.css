@@ -109,7 +109,7 @@ body[data-page="download"] .platform+.platform{border-color:#cbb4e21f}
 .audio-demo .file-picker.button:has(input:focus-visible) { outline:2px solid #d6b5ff; outline-offset:3px; }
 @media(prefers-reduced-motion:reduce){.audio-demo .file-picker.button{transition:none}.audio-demo .file-picker.button:active{transform:none}}
 
-/* Download platforms: four complete cards in a responsive two-column grid. */
+/* Download platforms: complete cards with clear space between them. */
 body[data-page="download"] .platforms{
   gap:clamp(20px,2.4vw,34px);
   align-items:stretch;
@@ -169,11 +169,8 @@ body[data-page="download"] .platform>.icon{
   box-shadow:inset 0 1px 0 #fff0d;
 }
 body[data-page="download"] #macos>.icon{background:linear-gradient(145deg,#32224e,#461b39)}
-body[data-page="download"] #android>.icon{background:linear-gradient(145deg,#173d2d,#224b42)}
-body[data-page="download"] #harmonyos>.icon{background:none;border:0;padding:0}
 body[data-page="download"] .platform h2{display:block;margin:0 0 4px}
 body[data-page="download"] #windows-download-status{display:none}
-body[data-page="download"] .store-description{max-width:31em;margin:auto 0;color:#cbbdd5;line-height:1.9}
 body[data-page="download"] .release-checksum{
   display:block;
   width:min(1040px,100%);
@@ -227,3 +224,9 @@ body[data-page="download"] .checksum-row button{grid-column:3;grid-row:1;min-wid
   body[data-page="download"] .checksum-row button{grid-column:2;grid-row:1}
 }
 
+/* Mobile channels share the existing platform card design. */
+body[data-page="download"] #android>.icon{background:linear-gradient(145deg,#173d2d,#224b42)}
+body[data-page="download"] #harmonyos>.icon{background:none;border:0;padding:0}
+body[data-page="download"] .store-description{max-width:31em;margin:auto 0;color:#cbbdd5;line-height:1.9}
+
+body[data-page="download"] .android-signing-note{margin-top:16px;padding-top:14px;border-top:1px solid #c9a9e52b;color:#e7c58f;font-size:14px;line-height:1.85;text-align:left}

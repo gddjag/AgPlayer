@@ -55,3 +55,4 @@
     document.getElementById('theme-display').setAttribute('aria-labelledby', button.id);
   });
 })();
+

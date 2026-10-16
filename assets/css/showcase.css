@@ -81,3 +81,4 @@
 @media(max-width:600px){.hero-monitor-stage{width:120%;margin-left:-10%}.hero .laptop-description{margin-top:4px}}
 .hero-monitor-art{mask-image:linear-gradient(90deg,transparent,black 12%,black 88%,transparent),linear-gradient(transparent,black 8%,black 88%,transparent);mask-composite:intersect}.hero-monitor-stage::after{display:none}
 @media(min-width:951px){.feature-interface-stage{margin-bottom:115px}}
+

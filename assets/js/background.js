@@ -36,3 +36,4 @@
     document.addEventListener('visibilitychange', sync); reduced.addEventListener('change', sync);
   });
 })();
+

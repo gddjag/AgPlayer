@@ -130,3 +130,4 @@
   const reveal = new IntersectionObserver(entries => entries.forEach(entry => { if (entry.isIntersecting) { entry.target.classList.add('is-seen'); reveal.unobserve(entry.target); } }), { threshold: .08 });
   reveals.forEach(element => { element.classList.add('showcase-reveal'); reveal.observe(element); });
 })();
+

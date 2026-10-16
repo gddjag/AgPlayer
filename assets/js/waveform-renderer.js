@@ -164,3 +164,4 @@
   previews.forEach(item => { observer.observe(item.canvas); new ResizeObserver(() => renderPreview(item, performance.now())).observe(item.canvas); renderPreview(item, performance.now()); });
   document.addEventListener('visibilitychange', sync); reduced.addEventListener('change', sync);
 })();
+

@@ -1,59 +1,20 @@
-<p align="center">
-  <img src="docs/images/agplayer-logo.png" alt="AgPlayer Logo" width="220">
-</p>
+# AgPlayer 官方网站
 
-# AgPlayer
+纯 HTML、CSS、原生 JavaScript；无需 npm、构建步骤或在线字体。
 
-**听见音乐，看见声音。**
+- `index.html`：首页、波形、功能、音频工具、迷你播放器、隐私与下载入口。
+- `download.html`：独立下载页；Windows、macOS 与 Android 官网版从受校验的正式版本清单更新，HarmonyOS 引导到应用市场。
+- `about.html`：独立关于页。
+- `assets/css/site.css`：布局、深色样式和响应式断点。
+- `assets/js/translations.js`：实际使用的中英文文案。
+- `assets/js/audio-demo.js`、`waveform-renderer.js`：浏览器本地播放与音频波形。
 
-AgPlayer 是一款以轻量、简洁为设计方向的本地音频播放器，通过波形展示声音细节，将音乐播放、曲库管理和常用音频工具放在一起。
+直接用静态服务器预览此目录；执行 `node scripts/build-site.mjs` 可生成 Cloudflare Pages 使用的 `public/`，包含页面、资源和 Android 隐私政策。`public/` 为生成目录，不作为源码修改入口。
 
-[访问官网](https://agplayer.com) · [版本发布](https://github.com/gddjag/AgPlayer/releases)
+发布前执行 `node --test scripts/download-manifest.test.mjs scripts/sync-release-r2.test.mjs scripts/site-release.test.mjs`。下载清单来自 `https://download.agplayer.com/updates/latest.json`，须包含同版本的 EXE、Universal DMG 和 ARM64 APK，固定官方 URL、文件大小和 SHA-256 均验证通过后才一起切换。接口不可用时保留最后已发布的 1.1.2；仅修改版本文案不会生成或发布安装包。
 
-## 主要特点
+`.github/workflows/sync-release-r2.yml` 沿用现有发布资产到 R2 的同步流程，仅在正式 GitHub Release 发布或手动指定正式 tag 时运行。先下载核验安装包，再上传并发布更新清单；不会自动清理历史发布。所需凭据使用 GitHub 原有 secrets，不存入网站源码。鸿蒙、华为 APK 与微软商店包由用户自行上传，不放入官网自动更新清单。
 
-- **四种波形显示模式**：纯色波形、频彩波形、RGB 渐变与动态频谱，从振幅和频段等不同角度观察音乐。
-- **多种界面布局**：经典双窗口、专业模式、单窗口和迷你播放器，适应曲库整理、细节查看与日常聆听。
-- **本地音乐管理**：用歌单、标签、收藏与评分整理曲库，按歌曲、艺人、标签、评分和 BPM 搜索筛选。
-- **常用音频工具**：伴奏分离、格式转换、音频编辑、元数据修改、文件名处理和无损鉴别。
+语言先使用浏览器首选语言，支持手动切换并保存在本机；这不等于实际国家/地区识别。后续若需要实际地区，可接入发布平台提供的地区信息。
 
-## 界面预览
-
-### 经典双窗口
-
-简洁轻便，播放器与音乐列表可自由拆分、磁吸组合，兼顾播放控制和曲库浏览。
-
-![AgPlayer 经典双窗口：上方播放器与波形，下方曲库、评分和收藏](assets/images/player-classic.png)
-
-### 专业模式
-
-支持加速播放、BPM 调整与节拍网格，结合大幅滚动波形查看声音细节、把握节奏。
-
-![AgPlayer 专业模式：大幅彩色波形、播放控制、音乐列表和标签面板](assets/images/player-scrolling.png)
-
-### 单窗口
-
-音乐库与整曲波形集中在一个窗口中。一键框选波形，即可将片段拖到桌面或剪辑软件时间线，让选段与剪辑更直接。
-
-![AgPlayer 单窗口：音乐列表、标签面板与底部整曲波形](assets/images/player-single.png)
-
-### 手机版
-
-PC 版核心功能与音频工具延伸到手机，支持音乐管理、音频编辑、伴奏分离、格式转换和元数据管理。
-
-![AgPlayer 手机版：音乐库、音频工具、多轨编辑和波形播放界面](assets/images/player-mobile.png)
-
-## 六大音频工具
-
-从声音处理到文件整理，常用工具集中在一个窗口中。
-
-![AgPlayer 六大音频工具卡片展示](docs/images/audio-tools-showcase.png)
-
-| 工具 | 主要用途 |
-| --- | --- |
-| 人声与伴奏分离 | 分离人声与伴奏，并按所选模型提取鼓组、贝斯等音轨，方便试听与导出。 |
-| 格式转换 | 批量转换常见音频格式，调整采样率、声道等参数，并可保留封面和元数据。 |
-| 音频编辑 | 在波形中选段、分割、裁剪，添加淡入淡出，调整播放速度与音调并导出音频。 |
-| 元数据修改 | 批量整理标题、艺术家、专辑、标签和封面，让音乐信息更完整。 |
-| 文件名处理 | 批量添加或移除前后缀、调整序号，先预览结果，再统一重命名。 |
-| 无损鉴别 | 结合频谱与音频特征分析疑似有损转码、升频等情况，为音源质量提供判断参考。 |
+本地试听不会上传音频。浏览器可解码的格式与桌面版可能不同。四种模式使用真实解码/播放数据；算法来源、版本差异及验收范围见 `docs/development/html-preview-validation.md`。八项音频工具为桌面版功能介绍。
