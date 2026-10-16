@@ -11,7 +11,9 @@
 
 直接用静态服务器预览此目录；执行 `node scripts/build-site.mjs` 可生成 Cloudflare Pages 使用的 `public/`，包含页面、资源和 Android 隐私政策。`public/` 为生成目录，不作为源码修改入口。
 
-发布前执行 `node --test scripts/download-manifest.test.mjs scripts/sync-release-r2.test.mjs scripts/site-release.test.mjs`。下载清单来自 `https://download.agplayer.com/updates/latest.json`，须包含同版本的 EXE、Universal DMG 和 ARM64 APK，固定官方 URL、文件大小和 SHA-256 均验证通过后才一起切换。接口不可用时保留最后已发布的 1.1.2；仅修改版本文案不会生成或发布安装包。
+发布前执行 `node --test scripts/download-manifest.test.mjs scripts/sync-release-r2.test.mjs scripts/site-release.test.mjs`。网页从同源 `/updates/latest.json` 读取下载清单，须包含同版本的 EXE、Universal DMG 和 ARM64 APK，固定官方 GitHub/R2 URL、文件大小和 SHA-256 均验证通过后才一起切换。接口不可用时保留最后已发布的 1.1.2；仅修改版本文案不会生成或发布安装包。
+
+每次发布须将 R2 `https://download.agplayer.com/updates/latest.json` 实际已发布且核验通过的清单原样复制到本目录的 `updates/latest.json`，随官网构建同步部署，并同步三个 fallback 的版本、文件名、大小与 SHA-256。网页使用同源请求避免跨域限制；原生应用仍使用原有 R2 更新地址。
 
 `.github/workflows/sync-release-r2.yml` 沿用现有发布资产到 R2 的同步流程，仅在正式 GitHub Release 发布或手动指定正式 tag 时运行。先下载核验安装包，再上传并发布更新清单；不会自动清理历史发布。所需凭据使用 GitHub 原有 secrets，不存入网站源码。鸿蒙、华为 APK 与微软商店包由用户自行上传，不放入官网自动更新清单。
 

@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const manifestUrl = 'https://download.agplayer.com/updates/latest.json';
+  const manifestUrl = '/updates/latest.json';
   const maxManifestBytes = 65536;
   const requestTimeoutMs = 10000;
   const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;

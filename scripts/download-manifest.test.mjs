@@ -178,7 +178,7 @@ test('macOS copy uses the displayed checksum for fallback and live metadata', as
 test('valid official manifest enables both trusted Windows download routes', async () => {
   const result = await runDownloadScript(streamedResponse(JSON.stringify(manifest()), { chunkSize: 17 }));
   assert.equal(result.calls.length, 1);
-  assert.equal(result.calls[0].url, 'https://download.agplayer.com/updates/latest.json');
+  assert.equal(result.calls[0].url, '/updates/latest.json');
   assert.equal(result.calls[0].options.cache, 'no-store');
   assert.equal(result.calls[0].options.credentials, 'omit');
   assert.equal(result.calls[0].options.headers.Accept, 'application/json');
@@ -241,7 +241,7 @@ test('download page preserves the FAQ and exposes Android plus HarmonyOS cards',
   assert.match(html, /AgPlayer-1\.1\.2-arm64-release\.apk/);
   assert.match(html, /id="harmonyos"/);
   assert.match(html, /HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版/);
-  assert.match(html, /downloads\.js\?v=20261016-release-112/);
+  assert.match(html, /downloads\.js\?v=20261016-release-112-same-origin/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {

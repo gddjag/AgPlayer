@@ -26,3 +26,25 @@ test('Android 1.1.2 signing compatibility is stated briefly in both languages', 
   assert.equal(zh, 'Android 1.1.2 使用新签名，无法覆盖安装旧版 APK。');
   assert.equal(en, 'Android 1.1.2 uses a new signing key and cannot install over an older APK.');
 });
+
+test('same-origin published manifest matches all three exact fallback installers', async () => {
+  const manifest = JSON.parse(await readFile(new URL('updates/latest.json', root), 'utf8'));
+  const source = await readFile(new URL('assets/js/downloads.js', root), 'utf8');
+  const build = await readFile(new URL('scripts/build-site.mjs', root), 'utf8');
+  assert.match(source, /const manifestUrl = '\/updates\/latest\.json'/);
+  assert.match(build, /'updates'/);
+  assert.equal(manifest.version, '1.1.2');
+  for (const platform of ['Windows', 'Mac', 'Android']) {
+    const match = source.match(new RegExp(`const published${platform}Release = Object.freeze\\((\\{[\\s\\S]*?\\})\\);`));
+    assert.ok(match, platform);
+    const fallback = runInNewContext(`(${match[1]})`);
+    const file = manifest.files.find(file => file.r2Url === fallback.r2Url);
+    assert.ok(file, platform);
+    assert.equal(fallback.version, manifest.version);
+    assert.equal(fallback.size, file.size);
+    assert.equal(fallback.sha256, file.sha256.toUpperCase());
+    assert.equal(fallback.githubUrl, file.githubUrl);
+    assert.ok(fallback.githubUrl.endsWith('/' + file.name));
+  }
+  assert.equal(manifest.files.length, 3);
+});
