@@ -48,13 +48,3 @@ jobs:
         run: |
           aws --version
           node scripts/sync-release-r2.mjs upload
-      - name: Remove superseded R2 release packages
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
-          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
-          AWS_EC2_METADATA_DISABLED: 'true'
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
-        run: node scripts/sync-release-r2.mjs prune

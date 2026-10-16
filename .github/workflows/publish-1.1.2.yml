@@ -1,0 +1,78 @@
+name: Publish verified AgPlayer 1.1.2 website installers
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-1.1.2.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-agplayer-1.1.2
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'gddjag/AgPlayer'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify sync logic
+        run: node --test scripts/sync-release-r2.test.mjs
+      - name: Fetch only the three verified public installers
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, subprocess, urllib.parse
+          release = json.loads(pathlib.Path('docs/releases/1.1.2-assets.json').read_text())
+          assert release['version'] == '1.1.2'
+          base = urllib.parse.urlsplit(release['stagingBase'])
+          assert base.scheme == 'https' and base.hostname.endswith('.trycloudflare.com')
+          assert not base.username and not base.password and not base.port and base.path == '' and not base.query and not base.fragment
+          expected = {'AgPlayer-Setup-1.1.2-x64.exe', 'AgPlayer-1.1.2-macOS-universal.dmg', 'AgPlayer-1.1.2-arm64-release.apk'}
+          assert {x['name'] for x in release['files']} == expected and len(release['files']) == 3
+          target = pathlib.Path('release-upload'); target.mkdir(exist_ok=True)
+          for artifact in release['files']:
+              name = artifact['name']; file = target / name
+              subprocess.run(['curl', '--fail', '--silent', '--show-error', '--retry', '3', '--retry-all-errors', '--connect-timeout', '20', '--max-time', '900', release['stagingBase'] + '/' + name, '--output', str(file)], check=True)
+              assert file.stat().st_size == artifact['size'], name + ': size mismatch'
+              with file.open('rb') as content:
+                  digest = hashlib.file_digest(content, 'sha256').hexdigest()
+              assert digest == artifact['sha256'], name + ': SHA-256 mismatch'
+              print(name + ': size and SHA-256 verified')
+          PY
+      - name: Create the complete website release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view v1.1.2 >/dev/null 2>&1; then
+            echo 'Release already exists; refusing to overwrite it.'
+            exit 1
+          fi
+          gh release create v1.1.2 release-upload/* --target "$GITHUB_SHA" --title 'AgPlayer 1.1.2' --notes-file docs/releases/1.1.2.md --draft
+          gh release edit v1.1.2 --draft=false --latest
+      - name: Verify published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v1.1.2
+        run: node scripts/sync-release-r2.mjs download
+      - name: Synchronize verified installers and update metadata to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+          AWS_EC2_METADATA_DISABLED: 'true'
+          RELEASE_TAG: v1.1.2
+        run: |
+          aws --version
+          node scripts/sync-release-r2.mjs upload

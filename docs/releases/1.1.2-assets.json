@@ -1,0 +1,22 @@
+{
+  "version": "1.1.2",
+  "productSourceCommit": "21dc783f9b3c9895a1bf94856e52de173b0d6c37",
+  "stagingBase": "https://cheats-necessity-combination-collectibles.trycloudflare.com",
+  "files": [
+    {
+      "name": "AgPlayer-Setup-1.1.2-x64.exe",
+      "size": 32027584,
+      "sha256": "fb5821b0931bbb56cad83284757ec7a05a14128f949d16b1ac6b582f4365b778"
+    },
+    {
+      "name": "AgPlayer-1.1.2-macOS-universal.dmg",
+      "size": 114609080,
+      "sha256": "912b2c9659cf0e71ebb586155bee61ad15ac66cbb4688510109b89227a0ff993"
+    },
+    {
+      "name": "AgPlayer-1.1.2-arm64-release.apk",
+      "size": 237844183,
+      "sha256": "d1c1739fff87f9d49f9f04a0d5d53ee0c5bed2ab70f1bb596659bb2ee8374777"
+    }
+  ]
+}
