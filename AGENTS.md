@@ -1,5 +1,7 @@
 # Website maintenance
 
+- Keep the public repository root `README.md` as the AgPlayer product introduction with its screenshots. Website implementation, build and release notes belong in `docs/website-maintenance.md`; a website sync must never replace the product README with developer notes. Preserve the README's referenced images when publishing website files.
+
 - Preserve the Baidu analytics script at the end of `index.html` during future updates and deployments.
 - The authorized site ID is `d753c9d11730ddacf686e8ccddce6e11`. Include it exactly once on the homepage.
 - Keep local previews and published source consistent; do not remove or replace the analytics integration without an explicit user request.
