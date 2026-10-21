@@ -9,7 +9,7 @@ const output = join(root, 'public');
 if (dirname(output) !== root) throw new Error('Output must remain inside the repository');
 await rm(output, { recursive: true, force: true });
 await mkdir(output);
-for (const entry of ['index.html', 'download.html', 'about.html', 'support.html', 'assets', 'privacy', 'updates', 'immersive-stage.html', 'CNAME', 'docs/releases', '404.html', 'robots.txt', 'sitemap.xml', 'llms.txt', 'indexnow-key.txt', '_redirects']) {
+for (const entry of ['index.html', 'download.html', 'about.html', 'support.html', 'assets', 'privacy', 'updates', 'immersive-stage.html', 'CNAME', 'docs/releases', '404.html', 'robots.txt', 'sitemap.xml', 'llms.txt', 'indexnow-key.txt', '_redirects', 'baidu_verify_codeva-WXajBvTPGJ.html']) {
   await cp(join(root, entry), join(output, entry), { recursive: true });
 }
 console.log('Static site ready in public/ (website pages, support page, assets and privacy policy).');

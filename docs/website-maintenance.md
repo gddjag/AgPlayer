@@ -23,7 +23,9 @@
 
 ## 搜索与 AI 搜索发现
 
-规范域名为 `https://agplayer.com`；`www` 用 `_redirects` 永久跳转到主域名。Cloudflare Pages 自动把 `.html` 地址跳转为无扩展名地址，站点地图和 canonical 因此使用 `/download`、`/about` 等实际最终地址。保留根目录 `404.html`，防止不存在的地址被 Pages 当成 SPA 首页并返回 200。
+规范域名为 `https://agplayer.com`，通过 canonical 声明；`www` 仍可访问并指向同一 canonical。Pages 的 `_redirects` 不支持按来源域名重定向，若以后配置 www 的 301，须在 Cloudflare 域名级 Redirect Rules 中设置并实测。Cloudflare Pages 自动把 `.html` 地址跳转为无扩展名地址，站点地图和 canonical 因此使用 `/download`、`/about` 等实际最终地址。保留根目录 `404.html`，防止不存在的地址被 Pages 当成 SPA 首页并返回 200。
+
+用户提供的 `baidu_verify_codeva-WXajBvTPGJ.html` 必须原样放在网站根目录并纳入构建；`_redirects` 为其 .html 地址做同源 200 代理，避免验证请求遇到 Pages 默认的去扩展名跳转。首页同时保留百度生成的 `baidu-site-verification` 标签。验证通过后不要删除验证文件或标签。
 
 `robots.txt` 允许搜索与 AI 搜索爬虫访问，并声明 `https://agplayer.com/sitemap.xml`。`sitemap.xml` 只列正式页面，不收录设计稿、原型或安装包。新增正式页面时同步更新。首页、下载页和关于页各自包含标题、简介、canonical 与 JSON-LD；语言切换须保留各页对应的标题和简介。
 
@@ -33,4 +35,4 @@ IndexNow 的公开验证值保存在 `indexnow-key.txt`，提交时使用 `keyLo
 
 百度通过搜索资源平台的站点验证和“普通收录”提交；Google 使用 Search Console 的站点验证、站点地图及 URL 检查；Bing 可在 Webmaster Tools 查看索引状态并提交站点地图。搜狗、360 等使用各自当前有效的站长后台。账号、手机验证、条款接受和密钥只能由已有授权的账号流程完成；百度统计 ID 不是站长验证值。不要将私有提交 token 写进 HTML、Git、`llms.txt` 或公开日志。
 
-发布前运行 `node --test scripts/*.test.mjs`。上线后检查 robots 的正文与类型、站点地图 XML、canonical、随机不存在地址的 404、www 的 301 以及旧版下载和隐私政策地址仍可访问。站长平台的“已接收”、搜索索引和 AI 回答引用是不同状态，分别记录，不承诺收录时限。
+发布前运行 `node --test scripts/*.test.mjs`。上线后检查 robots 的正文与类型、站点地图 XML、canonical、随机不存在地址的 404、百度验证文件的原样 200 响应，以及旧版下载和隐私政策地址仍可访问。站长平台的“已接收”、搜索索引和 AI 回答引用是不同状态，分别记录，不承诺收录时限。
