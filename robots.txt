@@ -1,0 +1,7 @@
+# Public search and AI search crawlers may access the website.
+# This includes Baiduspider, Googlebot, bingbot, OAI-SearchBot,
+# PerplexityBot and Claude-SearchBot; no separate group overrides this rule.
+User-agent: *
+Allow: /
+
+Sitemap: https://agplayer.com/sitemap.xml

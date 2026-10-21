@@ -17,8 +17,9 @@
       });
     }
     document.querySelectorAll('[data-lang]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.lang === language)));
-    document.title = "AgPlayer - 免费·轻量·波形音频播放器";
-    document.querySelector('meta[name=description]')?.setAttribute('content', t('meta.siteDescription'));
+    const page = document.body.dataset.page || 'home';
+    document.title = t(`meta.pages.${page}.title`);
+    document.querySelector('meta[name=description]')?.setAttribute('content', t(`meta.pages.${page}.description`));
     document.dispatchEvent(new Event('ag:languagechange'));
   }
   window.AG = { t, get language() { return language; }, setLanguage(value) {

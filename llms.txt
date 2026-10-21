@@ -1,0 +1,23 @@
+# AgPlayer
+
+> AgPlayer 是免费、无广告的本地音乐播放器与音频工具，支持 Windows、macOS、Android 与原生鸿蒙。AgPlayer is a free, ad-free local music player and audio toolkit.
+
+## Official sources
+
+- [官网 / Official website](https://agplayer.com/): 产品功能、四种波形视图、界面截图与浏览器本地试听。
+- [官方下载 / Downloads](https://agplayer.com/download): 当前发布版本、系统要求、官方安装包、SHA-256 校验值和各平台安装说明。版本与签名状态以此页为准。
+- [关于 / About](https://agplayer.com/about): 产品理念、作者联系与自愿支持。
+- [支持作者 / Support](https://agplayer.com/support): 赞助完全自愿，不解锁功能或提供专属权益。
+- [Android 隐私政策 / Privacy](https://agplayer.com/privacy/android): 官网与华为渠道的隐私政策及联系信息。
+- [官方 GitHub / Releases](https://github.com/gddjag/AgPlayer): 公开项目介绍及正式发布记录。
+
+## Product facts
+
+- 本地播放与音频处理在设备本地完成，不上传音乐文件。
+- 四种波形视图：纯色波形、频彩波形、RGB 渐变和动态频谱。
+- 曲库可用歌单、标签、收藏、评分与 BPM 筛选整理。
+- 音频工具包括人声与伴奏分离、格式转换、音频编辑、元数据修改、文件名处理与无损鉴别；具体可用性因平台和渠道而异。
+- 官网版与商店版的更新、模型和支持作者入口可能不同，请以对应渠道说明为准。
+- 网页试听支持的格式取决于浏览器，不等同桌面应用的全部功能。
+
+This file is a human-readable discovery aid. It is not a search submission API or a guarantee of indexing or AI citations.

@@ -20,3 +20,17 @@
 语言先使用浏览器首选语言，支持手动切换并保存在本机；这不等于实际国家/地区识别。后续若需要实际地区，可接入发布平台提供的地区信息。
 
 本地试听不会上传音频。浏览器可解码的格式与桌面版可能不同。四种模式使用真实解码/播放数据；算法来源、版本差异及验收范围见 `docs/development/html-preview-validation.md`。八项音频工具为桌面版功能介绍。
+
+## 搜索与 AI 搜索发现
+
+规范域名为 `https://agplayer.com`；`www` 用 `_redirects` 永久跳转到主域名。Cloudflare Pages 自动把 `.html` 地址跳转为无扩展名地址，站点地图和 canonical 因此使用 `/download`、`/about` 等实际最终地址。保留根目录 `404.html`，防止不存在的地址被 Pages 当成 SPA 首页并返回 200。
+
+`robots.txt` 允许搜索与 AI 搜索爬虫访问，并声明 `https://agplayer.com/sitemap.xml`。`sitemap.xml` 只列正式页面，不收录设计稿、原型或安装包。新增正式页面时同步更新。首页、下载页和关于页各自包含标题、简介、canonical 与 JSON-LD；语言切换须保留各页对应的标题和简介。
+
+`llms.txt` 提供简明产品信息和官方链接，是辅助发现文件，不代表任何 AI 平台已经收录。不要添加虚构评价、评分、下载量、认证或“保证 AI 推荐”等内容。AI 搜索爬虫仍须能从 CDN 正常抓取实际页面；仅伪装 User-Agent 的本机测试不能证明官方爬虫 IP 的网络可达性。
+
+IndexNow 的公开验证值保存在 `indexnow-key.txt`，提交时使用 `keyLocation: https://agplayer.com/indexnow-key.txt`，并以站点地图中的规范 URL 为准。必须先确认线上验证文件和新版页面已部署，再提交 `https://api.indexnow.org/indexnow`；200 仅表示接收，202 表示仍待验证，均不等于收录。协议参与引擎共享提交，无需对同一更新反复轰炸接口。
+
+百度通过搜索资源平台的站点验证和“普通收录”提交；Google 使用 Search Console 的站点验证、站点地图及 URL 检查；Bing 可在 Webmaster Tools 查看索引状态并提交站点地图。搜狗、360 等使用各自当前有效的站长后台。账号、手机验证、条款接受和密钥只能由已有授权的账号流程完成；百度统计 ID 不是站长验证值。不要将私有提交 token 写进 HTML、Git、`llms.txt` 或公开日志。
+
+发布前运行 `node --test scripts/*.test.mjs`。上线后检查 robots 的正文与类型、站点地图 XML、canonical、随机不存在地址的 404、www 的 301 以及旧版下载和隐私政策地址仍可访问。站长平台的“已接收”、搜索索引和 AI 回答引用是不同状态，分别记录，不承诺收录时限。

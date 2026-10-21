@@ -2,7 +2,21 @@ window.AG_COPY = {
   "zh": {
     "meta": {
       "siteName": "AgPlayer",
-      "siteDescription": "极简、纯净的本地音频播放器，让音乐管理、播放和处理保持简单。"
+      "siteDescription": "极简、纯净的本地音频播放器，让音乐管理、播放和处理保持简单。",
+      "pages": {
+        "home": {
+          "title": "AgPlayer 官网 - 免费本地音乐播放器与音频工具",
+          "description": "AgPlayer 是免费、无广告的本地音乐播放器，支持 Windows、macOS、Android 与原生鸿蒙。提供波形显示、曲库管理、音频编辑、人声伴奏分离和格式转换。"
+        },
+        "download": {
+          "title": "AgPlayer 官方下载 - Windows、macOS、Android 与鸿蒙",
+          "description": "从 AgPlayer 官网下载 Windows、macOS Universal 和 Android 安装包，查看系统要求与 SHA-256 校验值；原生鸿蒙版请在应用市场下载。"
+        },
+        "about": {
+          "title": "关于 AgPlayer - 免费、无广告的本地音频播放器",
+          "description": "了解 AgPlayer：永久免费、无广告、无需账号的本地音乐播放器。音乐播放与音频处理在设备本地完成，并提供作者联系方式与自愿支持入口。"
+        }
+      }
     },
     "navigation": {
       "home": "首页",
@@ -374,7 +388,21 @@ window.AG_COPY = {
   "en": {
     "meta": {
       "siteName": "AgPlayer",
-      "siteDescription": "A clean, focused local audio player that keeps listening, organizing, and editing simple."
+      "siteDescription": "A clean, focused local audio player that keeps listening, organizing, and editing simple.",
+      "pages": {
+        "home": {
+          "title": "AgPlayer — Free Local Music Player & Audio Tools",
+          "description": "AgPlayer is a free, ad-free local music player for Windows, macOS, Android and native HarmonyOS, with waveforms, library management, audio editing, vocal separation and format conversion."
+        },
+        "download": {
+          "title": "Download AgPlayer — Windows, macOS, Android & HarmonyOS",
+          "description": "Download official AgPlayer installers for Windows, universal macOS and Android, with system requirements and SHA-256 checksums. Find native HarmonyOS editions in the app marketplace."
+        },
+        "about": {
+          "title": "About AgPlayer — Free, Ad-free Local Audio Player",
+          "description": "Learn about AgPlayer, a free, ad-free local audio player with no account required. Playback and audio processing stay on your device. Find author contact and voluntary support information."
+        }
+      }
     },
     "navigation": {
       "home": "Home",
