@@ -12,6 +12,13 @@
     r2Url: 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-x64.exe',
     sha256: 'FB5821B0931BBB56CAD83284757EC7A05A14128F949D16B1AC6B582F4365B778'
   });
+  const publishedWindowsArmRelease = Object.freeze({
+    version: '1.1.2',
+    size: 29625556,
+    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe',
+    r2Url: 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe',
+    sha256: '5087BF85ACA07B89AF0521F1B0AFF741C3FD215CEDFC0B271187FD8C2E1AF8E4'
+  });
   const publishedMacRelease = Object.freeze({
     version: '1.1.2',
     size: 114609080,
@@ -27,7 +34,7 @@
     sha256: 'D1C1739FFF87F9D49F9F04A0D5D53EE0C5BED2AB70F1BB596659BB2EE8374777'
   });
 
-  function selectRelease(manifest, platform = 'windows') {
+  function selectRelease(manifest, platform = 'windows', architecture = 'x64') {
     if (!manifest || manifest.schemaVersion !== 1 || typeof manifest.version !== 'string' || !stableVersion.test(manifest.version)) return null;
     const tag = `v${manifest.version}`;
     if (manifest.tag !== tag
@@ -36,14 +43,16 @@
       || manifest.releaseNotesUrl !== `https://github.com/gddjag/AgPlayer/releases/tag/${tag}`
       || !Array.isArray(manifest.files)) return null;
     const names = {
-      windows: `AgPlayer-Setup-${manifest.version}-x64.exe`,
+      windows: `AgPlayer-Setup-${manifest.version}-${architecture}.exe`,
       macos: `AgPlayer-${manifest.version}-macOS-universal.dmg`,
       android: `AgPlayer-${manifest.version}-arm64-release.apk`
     };
     const name = names[platform];
     if (!name) return null;
-    const file = manifest.files.find(item => item?.name === name);
-    if (!file || !Number.isSafeInteger(file.size) || file.size <= 0 || !/^[a-f0-9]{64}$/.test(file.sha256)) return null;
+    const matches = manifest.files.filter(item => item?.name === name);
+    const file = matches[0];
+    const expectedArchitecture = platform === 'windows' ? architecture : platform === 'macos' ? 'universal' : 'arm64';
+    if (!file || matches.length !== 1 || (file.architecture !== undefined && file.architecture !== expectedArchitecture) || !Number.isSafeInteger(file.size) || file.size <= 0 || !/^[a-f0-9]{64}$/.test(file.sha256)) return null;
     const encodedName = encodeURIComponent(name);
     const githubUrl = `https://github.com/gddjag/AgPlayer/releases/download/${tag}/${encodedName}`;
     const r2Url = `https://download.agplayer.com/releases/${tag}/${encodedName}`;
@@ -153,6 +162,17 @@
     const checksumValue = document.querySelector('#windows-sha256');
     const checksumCopy = document.querySelector('#windows-sha256-copy');
     if (!primary || !github || !status || !checksum || !checksumValue || !checksumCopy) return;
+    const architecture = document.querySelector('#windows-architecture');
+    const armOption = document.querySelector('#windows-architecture option[value="arm64"]');
+    const windowsReleases = { x64: publishedWindowsRelease, arm64: publishedWindowsArmRelease };
+    if (architecture) architecture.value = 'x64';
+    const renderArchitectureOption = () => {
+      if (!armOption) return;
+      armOption.disabled = !windowsReleases.arm64;
+      armOption.dataset.i18n = windowsReleases.arm64 ? 'downloadPage.windows.arm64' : 'downloadPage.windows.arm64Pending';
+      armOption.textContent = AG.t(armOption.dataset.i18n);
+    };
+    renderArchitectureOption();
     let activeRelease = publishedWindowsRelease;
     const renderRelease = release => {
       activeRelease = release;
@@ -160,7 +180,7 @@
       enable(github, release.githubUrl);
       const filename = document.querySelector('#windows [data-meta="filename"]');
       const size = document.querySelector('#windows [data-meta="size"]');
-      if (filename) filename.textContent = `AgPlayer-Setup-${release.version}-x64.exe`;
+      if (filename) filename.textContent = release.r2Url.split('/').at(-1);
       if (size && Number.isSafeInteger(release.size)) size.textContent = `${(release.size / 1048576).toFixed(1)} MB`;
       checksumValue.textContent = release.sha256;
       checksum.removeAttribute('hidden');
@@ -171,6 +191,10 @@
     };
     checksumCopy.addEventListener('click', () => {
       void navigator.clipboard?.writeText(activeRelease.sha256).catch(() => {});
+    });
+    architecture?.addEventListener('change', () => {
+      const release = windowsReleases[architecture.value];
+      if (release) renderRelease(release);
     });
     renderRelease(publishedWindowsRelease);
     renderLinkedRelease('macos', publishedMacRelease);
@@ -191,8 +215,17 @@
       const release = selectRelease(manifest);
       const macRelease = selectRelease(manifest, 'macos');
       const androidRelease = selectRelease(manifest, 'android');
+      const armRelease = selectRelease(manifest, 'windows', 'arm64');
+      const hasArmFile = manifest.files?.some(file => file?.name === `AgPlayer-Setup-${manifest.version}-arm64.exe`);
       if (!release || !macRelease || !androidRelease) return;
-      renderRelease(release);
+      const [major, minor, patch] = manifest.version.split('.').map(BigInt);
+      const requiresArm = major > 1n || (major === 1n && (minor > 1n || (minor === 1n && patch > 2n)));
+      // Legacy three-file manifests remain usable; any supplied ARM64 file must validate.
+      if ((requiresArm || hasArmFile) && !armRelease) return;
+      windowsReleases.x64 = release;
+      windowsReleases.arm64 = armRelease;
+      renderArchitectureOption();
+      renderRelease(windowsReleases[architecture?.value] || release);
       renderLinkedRelease('macos', macRelease);
       renderLinkedRelease('android', androidRelease);
     } catch (_) {

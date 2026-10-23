@@ -237,7 +237,7 @@ window.AG_COPY = {
     },
     "closing": {
       "description": "没有账号、没有广告。只有音乐、波形和你的播放体验。",
-      "windows": "Windows 版本 →",
+      "windows": "Windows x64 / ARM64 →",
       "macos": "macOS 版本 →",
       "title": "重新发现你的本地音乐收藏"
     },
@@ -262,6 +262,11 @@ window.AG_COPY = {
         "r2": "下载",
         "description": "正式版本准备中，GitHub 与 R2 下载即将开放。",
         "system": "Windows 10 / 11 64 位系统",
+        "architecture": "选择处理器架构",
+        "x64": "x64（Intel / AMD 64 位）",
+        "arm64": "ARM64（Snapdragon 等）",
+        "arm64Pending": "ARM64（Snapdragon 等）· 待发布",
+        "architectureHelp": "Intel / AMD 电脑选择 x64；Snapdragon 等 Windows ARM 电脑选择 ARM64。",
         "available": "Windows {version} 已发布，可从 R2 或 GitHub 下载。"
       },
       "checksum": {
@@ -623,7 +628,7 @@ window.AG_COPY = {
     },
     "closing": {
       "description": "No accounts. No ads. Just music, waveforms, and your listening experience.",
-      "windows": "Windows version →",
+      "windows": "Windows x64 / ARM64 →",
       "macos": "macOS version →",
       "title": "Rediscover your local music collection."
     },
@@ -648,6 +653,11 @@ window.AG_COPY = {
         "r2": "Download",
         "description": "The official release is being prepared. GitHub and R2 downloads are coming soon.",
         "system": "Windows 10 / 11, 64-bit",
+        "architecture": "Choose processor architecture",
+        "x64": "x64 (Intel / AMD 64-bit)",
+        "arm64": "ARM64 (Snapdragon and others)",
+        "arm64Pending": "ARM64 (Snapdragon) · Coming soon",
+        "architectureHelp": "Choose x64 for Intel / AMD PCs, or ARM64 for Snapdragon and other Windows ARM PCs.",
         "available": "Windows {version} is available from R2 or GitHub."
       },
       "checksum": {

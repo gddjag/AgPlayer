@@ -230,3 +230,8 @@ body[data-page="download"] #harmonyos>.icon{background:none;border:0;padding:0}
 body[data-page="download"] .store-description{max-width:31em;margin:auto 0;color:#cbbdd5;line-height:1.9}
 
 body[data-page="download"] .android-signing-note{margin-top:16px;padding-top:14px;border-top:1px solid #c9a9e52b;color:#e7c58f;font-size:14px;line-height:1.85;text-align:left}
+
+body[data-page="download"] .windows-architecture{display:grid;gap:8px;width:100%;margin:14px 0 0;text-align:left;font-size:13px;color:#d8c9e6}
+body[data-page="download"] .windows-architecture select{box-sizing:border-box;width:100%;min-height:44px;border:1px solid #c9a9e54d;border-radius:10px;background:#17101f;color:#f4edf9;padding:10px;font:inherit}
+body[data-page="download"] .windows-architecture select:focus-visible{outline:2px solid #c39af4;outline-offset:3px}
+body[data-page="download"] .platform .architecture-help{margin:10px 0 18px;font-size:12px;line-height:1.6}

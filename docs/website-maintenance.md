@@ -11,9 +11,9 @@
 
 直接用静态服务器预览此目录；执行 `node scripts/build-site.mjs` 可生成 Cloudflare Pages 使用的 `public/`，包含页面、资源和 Android 隐私政策。`public/` 为生成目录，不作为源码修改入口。
 
-发布前执行 `node --test scripts/download-manifest.test.mjs scripts/sync-release-r2.test.mjs scripts/site-release.test.mjs`。网页从同源 `/updates/latest.json` 读取下载清单，须包含同版本的 EXE、Universal DMG 和 ARM64 APK，固定官方 GitHub/R2 URL、文件大小和 SHA-256 均验证通过后才一起切换。接口不可用时保留最后已发布的 1.1.2；仅修改版本文案不会生成或发布安装包。
+发布前执行 `node --test scripts/download-manifest.test.mjs scripts/sync-release-r2.test.mjs scripts/site-release.test.mjs`。网页从同源 `/updates/latest.json` 读取下载清单，从 1.1.2 起须包含同版本的 Windows x64 EXE、Windows 原生 ARM64 EXE、Universal DMG 和 Android ARM64 APK，固定官方 GitHub/R2 URL、文件大小和 SHA-256 均验证通过后才一起切换。接口不可用时保留最后已发布的 1.1.2；仅修改版本文案不会生成或发布安装包。
 
-每次发布须将 R2 `https://download.agplayer.com/updates/latest.json` 实际已发布且核验通过的清单原样复制到本目录的 `updates/latest.json`，随官网构建同步部署，并同步三个 fallback 的版本、文件名、大小与 SHA-256。网页使用同源请求避免跨域限制；原生应用仍使用原有 R2 更新地址。
+每次发布须将 R2 `https://download.agplayer.com/updates/latest.json` 实际已发布且核验通过的清单原样复制到本目录的 `updates/latest.json`，随官网构建同步部署，并同步所有已发布 fallback 的版本、文件名、大小与 SHA-256。网页使用同源请求避免跨域限制；原生应用仍使用原有 R2 更新地址。
 
 `.github/workflows/sync-release-r2.yml` 沿用现有发布资产到 R2 的同步流程，仅在正式 GitHub Release 发布或手动指定正式 tag 时运行。先下载核验安装包，再上传并发布更新清单；不会自动清理历史发布。所需凭据使用 GitHub 原有 secrets，不存入网站源码。鸿蒙、华为 APK 与微软商店包由用户自行上传，不放入官网自动更新清单。
 
@@ -36,3 +36,11 @@ IndexNow 的公开验证值保存在 `indexnow-key.txt`，提交时使用 `keyLo
 百度通过搜索资源平台的站点验证和“普通收录”提交；Google 使用 Search Console 的站点验证、站点地图及 URL 检查；Bing 可在 Webmaster Tools 查看索引状态并提交站点地图。搜狗、360 等使用各自当前有效的站长后台。账号、手机验证、条款接受和密钥只能由已有授权的账号流程完成；百度统计 ID 不是站长验证值。不要将私有提交 token 写进 HTML、Git、`llms.txt` 或公开日志。
 
 发布前运行 `node --test scripts/*.test.mjs`。上线后检查 robots 的正文与类型、站点地图 XML、canonical、随机不存在地址的 404、百度验证文件的原样 200 响应，以及旧版下载和隐私政策地址仍可访问。站长平台的“已接收”、搜索索引和 AI 回答引用是不同状态，分别记录，不承诺收录时限。
+
+## Windows 双架构下载
+
+下载页在同一 Windows 卡片中明确选择 x64（Intel / AMD 64 位）或 ARM64（Snapdragon 等 Windows ARM 电脑）；文件名、大小、R2 / GitHub 下载和 SHA-256 随选择一起切换。首页 Windows 入口进入此卡片。只有官方精确文件名、GitHub / R2 URL、正数文件大小和 SHA-256 均通过校验的 ARM64 记录才能启用；原有三个 fallback 保持原样，未完成验证前不填充 ARM64 fallback。
+
+既有三文件 1.1.2 清单继续提供 x64、macOS、Android 下载。此次为同一发布补充 `AgPlayer-Setup-1.1.2-arm64.exe`，保留原 tag、原三份安装包及其摘要。新发布同步门禁自 1.1.2 起要求四份包；网页在 1.1.2 之后的版本也仅在四份记录全部通过校验时共同切换。清单继续采用 schemaVersion 1，以精确文件名区分 Windows 架构；可选 architecture 字段如出现须与文件名一致。
+
+当前版本只补充 ARM64 时，不直接使用会重传全部安装包的 `sync-release-r2.mjs upload` 覆盖现有三个对象。先追加并核验 GitHub / R2 的 ARM64 安装包，再保留原三份记录生成四文件清单、更新校验清单与原有更新端点，将实际发布清单原样复制到 `updates/latest.json` 后构建部署官网。所有正式安装包和源码统一追加到项目约定的单一版本备份目录，不另建 `final`、`published` 或 `all-platforms` 目录。

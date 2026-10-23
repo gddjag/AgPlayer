@@ -20,6 +20,13 @@
       "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg"
     },
     {
+      "name": "AgPlayer-Setup-1.1.2-arm64.exe",
+      "size": 29625556,
+      "sha256": "5087bf85aca07b89af0521f1b0aff741c3fd215cedfc0b271187fd8c2e1af8e4",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe"
+    },
+    {
       "name": "AgPlayer-Setup-1.1.2-x64.exe",
       "size": 32027584,
       "sha256": "fb5821b0931bbb56cad83284757ec7a05a14128f949d16b1ac6b582f4365b778",

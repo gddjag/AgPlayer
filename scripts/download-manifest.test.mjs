@@ -24,7 +24,8 @@ function fakeElement() {
     setAttribute: (name, value) => attributes.set(name, value),
     removeAttribute: name => attributes.delete(name),
     hasAttribute: name => attributes.has(name),
-    click: () => listeners.get('click')?.()
+    click: () => listeners.get('click')?.(),
+    change: () => listeners.get('change')?.()
   };
   return element;
 }
@@ -47,6 +48,9 @@ function streamedResponse(body, { ok = true, contentLength = true, chunkSize = b
 
 async function runDownloadScript(response, timers = {}) {
   assert.ok(existsSync(scriptPath), 'download manifest integration script must exist');
+  const architecture = fakeElement();
+  architecture.value = 'x64';
+  const armOption = fakeElement();
   const primary = fakeElement();
   const github = fakeElement();
   const status = fakeElement();
@@ -69,6 +73,8 @@ async function runDownloadScript(response, timers = {}) {
   const navigations = [];
   const clipboardWrites = [];
   const elements = new Map([
+    ['#windows-architecture', architecture],
+    ['#windows-architecture option[value="arm64"]', armOption],
     ['.download-primary', primary],
     ['.download-github', github],
     ['#windows-download-status', status],
@@ -96,7 +102,7 @@ async function runDownloadScript(response, timers = {}) {
     },
     location: { assign: url => navigations.push(url) },
     navigator: { clipboard: { writeText: async text => clipboardWrites.push(text) } },
-    AG: { t: (key, values) => `${key}:${values.version}` },
+    AG: { t: (key, values) => `${key}:${values?.version ?? ""}` },
     AbortController,
     TextDecoder,
     Uint8Array,
@@ -106,7 +112,7 @@ async function runDownloadScript(response, timers = {}) {
   };
   runInNewContext(await readFile(scriptPath, 'utf8'), context, { filename: scriptPath });
   await new Promise(resolve => setTimeout(resolve, 0));
-  return { primary, github, status, checksum, checksumValue, checksumCopy, macPrimary, macGithub, macChecksum, macChecksumCopy, androidPrimary, androidGithub, androidChecksum, androidChecksumCopy, calls, navigations, clipboardWrites, documentListeners };
+  return { architecture, armOption, primary, github, status, checksum, checksumValue, checksumCopy, macPrimary, macGithub, macChecksum, macChecksumCopy, androidPrimary, androidGithub, androidChecksum, androidChecksumCopy, calls, navigations, clipboardWrites, documentListeners };
 }
 
 function manifest(overrides = {}) {
@@ -241,7 +247,7 @@ test('download page preserves the FAQ and exposes Android plus HarmonyOS cards',
   assert.match(html, /AgPlayer-1\.1\.2-arm64-release\.apk/);
   assert.match(html, /id="harmonyos"/);
   assert.match(html, /HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版/);
-  assert.match(html, /downloads\.js\?v=20261016-release-112-same-origin/);
+  assert.match(html, /downloads\.js\?v=20261023-windows-arm64/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
@@ -276,4 +282,69 @@ test('manifest request aborts after the ten second deadline', async () => {
   assert.equal(signal.aborted, true);
   assert.equal(result.primary.disabled, false);
   assert.equal(result.github.disabled, false);
+});
+
+function dualWindowsManifest(version = '1.1.2') {
+  const file = (name, hash) => ({ name, size: 123456, sha256: hash.repeat(64),
+    githubUrl: `https://github.com/gddjag/AgPlayer/releases/download/v${version}/${name}`,
+    r2Url: `https://download.agplayer.com/releases/v${version}/${name}` });
+  return manifest({ version, tag: `v${version}`,
+    releaseNotesUrl: `https://github.com/gddjag/AgPlayer/releases/tag/v${version}`,
+    files: [file(`AgPlayer-Setup-${version}-x64.exe`, 'a'),
+      file(`AgPlayer-Setup-${version}-arm64.exe`, 'd'), macFile(version), androidFile(version)] });
+}
+
+test('Windows architecture selection changes both official routes and copied checksum', async () => {
+  const result = await runDownloadScript(streamedResponse(JSON.stringify(dualWindowsManifest())));
+  assert.equal(result.armOption.disabled, false);
+  result.architecture.value = 'arm64';
+  result.architecture.change();
+  result.primary.click();
+  result.github.click();
+  result.checksumCopy.click();
+  assert.deepEqual(result.navigations, [
+    'https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe',
+    'https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe']);
+  assert.equal(result.checksumValue.textContent, 'D'.repeat(64));
+  assert.deepEqual(result.clipboardWrites, ['D'.repeat(64)]);
+  result.architecture.value = 'x64';
+  result.architecture.change();
+  result.primary.click();
+  assert.equal(result.navigations.at(-1), 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-x64.exe');
+});
+
+test('legacy three-file manifest keeps x64 usable without inventing an ARM64 download', async () => {
+  const live = dualWindowsManifest();
+  live.files.splice(1, 1);
+  const result = await runDownloadScript(streamedResponse(JSON.stringify(live)));
+  assert.equal(result.armOption.disabled, true);
+  assert.equal(result.checksumValue.textContent, 'A'.repeat(64));
+  assert.equal(result.primary.disabled, false);
+});
+
+test('future Windows release requires both architectures before switching any platform', async () => {
+  const live = dualWindowsManifest('1.1.3');
+  live.files.splice(1, 1);
+  const result = await runDownloadScript(streamedResponse(JSON.stringify(live)));
+  assert.equal(result.checksumValue.textContent, 'FB5821B0931BBB56CAD83284757EC7A05A14128F949D16B1AC6B582F4365B778');
+  assert.equal(result.macPrimary.href, 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg');
+});
+
+test('forged ARM64 URLs, sizes, hashes and duplicate filenames reject the complete manifest', async () => {
+  for (const change of [{r2Url: 'https://example.com/arm64.exe'},
+    {githubUrl: 'https://github.com/other/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe'},
+    {size: 0}, {sha256: 'invalid'}, {architecture: 'x64'}, {duplicate: true}]) {
+    const live = dualWindowsManifest();
+    if (change.duplicate) live.files.push({...live.files[1]});
+    else Object.assign(live.files[1], change);
+    const result = await runDownloadScript(streamedResponse(JSON.stringify(live)));
+    // Reject the whole untrusted manifest and retain both verified published fallbacks.
+    assert.equal(result.armOption.disabled, false);
+    assert.equal(result.checksumValue.textContent, 'FB5821B0931BBB56CAD83284757EC7A05A14128F949D16B1AC6B582F4365B778');
+    result.architecture.value = 'arm64';
+    result.architecture.change();
+    result.primary.click();
+    assert.equal(result.navigations.at(-1), 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe');
+    assert.equal(result.checksumValue.textContent, '5087BF85ACA07B89AF0521F1B0AFF741C3FD215CEDFC0B271187FD8C2E1AF8E4');
+  }
 });
