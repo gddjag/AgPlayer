@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "target": "Windows ARM64 Release, dynamic libraries and dynamic CRT",
+  "vcpkgBaseline": "3ddaad9be959816602453ecb05533f8732464ef4",
+  "vcpkgSource": "https://github.com/microsoft/vcpkg/tree/3ddaad9be959816602453ecb05533f8732464ef4",
+  "components": [
+    {
+      "name": "soundtouch",
+      "version": "2.4.0",
+      "portVersion": 2,
+      "license": "LGPL-2.1-only",
+      "source": "https://codeberg.org/soundtouch/soundtouch/src/tag/2.4.0",
+      "archive": "https://codeberg.org/soundtouch/soundtouch/archive/2.4.0.tar.gz",
+      "archiveSha512": "97e4afcce100f210d89c665dd83f4eaa7b0bec88ba35ba1cf29729e9260d143a5c0f89156646c4dddc83030c5f6b8493c6abc1a82bfba52ed6a87929c8e0fdea",
+      "baselinePort": "https://github.com/microsoft/vcpkg/tree/3ddaad9be959816602453ecb05533f8732464ef4/ports/soundtouch"
+    },
+    {
+      "name": "mp3lame",
+      "version": "3.100",
+      "portVersion": 17,
+      "license": "LGPL-2.0-only",
+      "source": "https://sourceforge.net/projects/lame/files/lame/3.100/",
+      "archive": "https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz",
+      "archiveSha512": "0844b9eadb4aacf8000444621451277de365041cc1d97b7f7a589da0b7a23899310afd4e4d81114b9912aa97832621d20588034715573d417b2923948c08634b",
+      "baselinePort": "https://github.com/microsoft/vcpkg/tree/3ddaad9be959816602453ecb05533f8732464ef4/ports/mp3lame"
+    },
+    {
+      "name": "opus",
+      "version": "1.5.2",
+      "portVersion": 1,
+      "license": "BSD-3-Clause",
+      "source": "https://github.com/xiph/opus/tree/v1.5.2",
+      "archive": "https://github.com/xiph/opus/archive/v1.5.2.tar.gz",
+      "archiveSha512": "4ffefd9c035671024f9720c5129bfe395dea04f0d6b730041c2804e89b1db6e4d19633ad1ae58855afc355034233537361e707f26dc53adac916554830038fab",
+      "baselinePort": "https://github.com/microsoft/vcpkg/tree/3ddaad9be959816602453ecb05533f8732464ef4/ports/opus"
+    }
+  ]
+}
