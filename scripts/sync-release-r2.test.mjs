@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -128,9 +128,9 @@ test('upload checks all files before publishing checksum and latest metadata', a
       return '';
     };
     await upload('v1.0.0', directory, run);
-    assert.equal(calls.length, 5);
-    assert.ok(calls[2].includes('s3://agplayer-releases/releases/v1.0.0/SHA256SUMS'));
-    assert.ok(calls[4].includes('s3://agplayer-releases/updates/latest.json'));
+    assert.equal(calls.length, 4);
+    assert.ok(calls[1].includes('s3://agplayer-releases/releases/v1.0.0/SHA256SUMS'));
+    assert.ok(calls[3].includes('s3://agplayer-releases/updates/latest.json'));
     const firstRun = JSON.stringify(calls);
     calls.length = 0;
     await upload('v1.0.0', directory, run);
@@ -321,5 +321,140 @@ test('prune refuses stale metadata or an unverified current package before delet
   } finally {
     delete process.env.AWS_ACCESS_KEY_ID;
     delete process.env.AWS_SECRET_ACCESS_KEY;
+  }
+});
+
+
+test('1.1.2 onward requires native Windows ARM64 as well as x64, macOS and Android', () => {
+  for (const version of ['1.1.2', '1.1.3', '2.0.0']) {
+    const tag = `v${version}`;
+    const release = { tag_name: tag, published_at: 'now' };
+    const assets = [`AgPlayer-Setup-${version}-x64.exe`,
+      `AgPlayer-${version}-macOS-universal.dmg`, `AgPlayer-${version}-arm64-release.apk`,
+      `AgPlayer-Setup-${version}-arm64.exe`]
+      .map((name, index) => ({name, id: index + 1, state: 'uploaded', size: 42}));
+    assert.throws(() => selectAssets(release, assets.slice(0, 3), tag), /ARM64/);
+    assert.equal(selectAssets(release, assets, tag).length, 4);
+    assert.throws(() => selectAssets(release, assets.filter(a => !a.name.endsWith('-x64.exe')), tag), /Synchronized/);
+  }
+});
+
+
+async function withAppendFixture(callback) {
+  const directory = await mkdtemp(join(tmpdir(), 'agplayer-append-test-'));
+  process.env.AWS_ACCESS_KEY_ID = 'test-only';
+  process.env.AWS_SECRET_ACCESS_KEY = 'test-only';
+  try {
+    const names = ['AgPlayer-1.1.2-arm64-release.apk', 'AgPlayer-1.1.2-macOS-universal.dmg',
+      'AgPlayer-Setup-1.1.2-arm64.exe', 'AgPlayer-Setup-1.1.2-x64.exe'];
+    const files = [];
+    for (const name of names) {
+      const bytes = Buffer.from(`local fixture for ${name}`);
+      await writeFile(join(directory, name), bytes);
+      files.push({ name, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') });
+    }
+    const manifest = { tag: 'v1.1.2', publishedAt: '2026-10-16T00:00:00Z',
+      releaseNotesUrl: 'https://github.com/gddjag/AgPlayer/releases/tag/v1.1.2', files };
+    await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest));
+    await writeFile(join(directory, 'SHA256SUMS'), files.map(f => `${f.sha256}  ${f.name}\n`).join(''));
+    const arm = files.find(f => f.name === 'AgPlayer-Setup-1.1.2-arm64.exe');
+    const objects = new Map(files.filter(f => f !== arm).map(f => [f.name,
+      { ContentLength: f.size, Metadata: { sha256: f.sha256 } }]));
+    const writes = [];
+    const heads = [];
+    const run = (_, args) => {
+      if (args[1] === 'head-object') {
+        const name = args[args.indexOf('--key') + 1].split('/').at(-1);
+        heads.push(name);
+        if (!objects.has(name)) throw new Error('An error occurred (404) when calling the HeadObject operation: Not Found');
+        const object = objects.get(name);
+        if (object instanceof Error) throw object;
+        return typeof object === 'string' ? object : JSON.stringify(object);
+      }
+      if (args[1] === 'get-object') throw new Error('NoSuchKey');
+      if (args[1] === 'cp') {
+        const name = args[3].split('/').at(-1);
+        const bytes = readFileSync(args[2]);
+        writes.push({ name, bytes, args });
+        if (name.endsWith('.exe') || name.endsWith('.apk') || name.endsWith('.dmg')) {
+          objects.set(name, { ContentLength: bytes.length,
+            Metadata: { sha256: args[args.indexOf('--metadata') + 1].slice('sha256='.length) } });
+        }
+        return '';
+      }
+      assert.fail(`Unexpected AWS operation: ${args[1]}`);
+    };
+    await callback({ directory, files, arm, objects, writes, heads, run });
+  } finally {
+    delete process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_SECRET_ACCESS_KEY;
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+test('append reuses the three immutable packages and writes only missing ARM64 before promoting all four', async () => {
+  await withAppendFixture(async ({ directory, files, arm, writes, heads, run }) => {
+    await upload('v1.1.2', directory, run);
+    assert.deepEqual(writes.filter(w => /\.(exe|apk|dmg)$/.test(w.name)).map(w => w.name), ['AgPlayer-Setup-1.1.2-arm64.exe']);
+    assert.deepEqual(writes.find(w => w.name === arm.name).bytes, await readFile(join(directory, arm.name)));
+    assert.equal(heads.filter(name => name === arm.name).length, 2);
+    assert.equal(heads.length, 5);
+    assert.deepEqual(writes.map(w => w.name), [arm.name, 'SHA256SUMS', 'latest.json', 'latest.json']);
+    const latest = JSON.parse(writes.at(-1).bytes.toString());
+    assert.equal(latest.files.length, 4);
+    assert.deepEqual(latest.files.map(({name, size, sha256}) => ({name, size, sha256})), files);
+    assert.ok(writes.at(-1).args.includes('s3://agplayer-releases/updates/latest.json'));
+  });
+});
+
+test('existing size, hash or absent metadata conflicts abort before writing any object', async () => {
+  for (const change of [{ ContentLength: 1 }, { Metadata: { sha256: '0'.repeat(64) } }, { Metadata: {} }]) {
+    await withAppendFixture(async ({ directory, objects, writes, run }) => {
+      const name = 'AgPlayer-Setup-1.1.2-x64.exe';
+      objects.set(name, {...objects.get(name), ...change});
+      await assert.rejects(upload('v1.1.2', directory, run), /existing|immutable|conflict/i);
+      assert.equal(writes.length, 0);
+    });
+  }
+});
+
+test('head access errors, transport errors and malformed responses never become missing packages', async () => {
+  for (const response of [new Error('AccessDenied (403)'), new Error('network failed'),
+    new Error('404 credentials file not found'), new Error('NoSuchBucket'), 'invalid NoSuchKey json']) {
+    await withAppendFixture(async ({ directory, objects, writes, run }) => {
+      objects.set('AgPlayer-Setup-1.1.2-arm64.exe', response);
+      await assert.rejects(upload('v1.1.2', directory, run));
+      assert.equal(writes.length, 0);
+    });
+  }
+});
+
+test('explicit NoSuchKey permits upload, but failed post-upload verification cannot promote metadata', async () => {
+  await withAppendFixture(async ({ directory, arm, objects, writes, run }) => {
+    objects.set(arm.name, new Error('An error occurred (NoSuchKey) when calling the HeadObject operation: The specified key does not exist'));
+    const failVerification = (command, args) => {
+      const result = run(command, args);
+      if (args[1] === 'cp' && args[3].endsWith('/' + arm.name)) objects.set(arm.name, {ContentLength: 0, Metadata: {}});
+      return result;
+    };
+    await assert.rejects(upload('v1.1.2', directory, failVerification), /verification failed/i);
+    assert.deepEqual(writes.map(w => w.name), [arm.name]);
+  });
+});
+
+test('current metadata read errors and malformed JSON cannot be treated as an absent latest object', async () => {
+  for (const response of [new Error('404 credentials file not found'), 'invalid NoSuchKey json']) {
+    await withAppendFixture(async ({directory, writes, run}) => {
+      const invalidCurrent = (command, args) => {
+        if (args[1] === 'get-object') {
+          if (response instanceof Error) throw response;
+          writeFileSync(args[args.indexOf('updates/latest.json') + 1], response);
+          return '';
+        }
+        return run(command, args);
+      };
+      await assert.rejects(upload('v1.1.2', directory, invalidCurrent));
+      assert.equal(writes.some(w => w.name === 'latest.json'), false);
+    });
   }
 });

@@ -86,6 +86,10 @@ export function selectAssets(release, assets, tag) {
     const expected = `AgPlayer-${tag.slice(1)}-arm64-release.apk`;
     if (!names.has(expected.toLowerCase())) throw new Error(`Synchronized Android release requires ${expected}`);
   }
+  if (compareVersions(tag.slice(1), '1.1.2') >= 0) {
+    const expected = `AgPlayer-Setup-${tag.slice(1)}-arm64.exe`;
+    if (!names.has(expected.toLowerCase())) throw new Error(`Synchronized Windows ARM64 release requires ${expected}`);
+  }
   return selected.sort((a, b) => a.name.localeCompare(b.name, 'en'));
 }
 
@@ -170,7 +174,27 @@ export async function upload(tag, directory, run = execFileSync) {
   const sums = manifest.files.map(file => `${file.sha256}  ${file.name}\n`).join('');
   if (await readFile(join(directory, 'SHA256SUMS'), 'utf8') !== sums) throw new Error('Checksum file changed after verification');
   const aws = args => run('aws', [...args, '--endpoint-url', endpoint, '--region', 'auto'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const missing = [];
+  // Preflight every immutable installer before creating any new release object.
   for (const file of manifest.files) {
+    const key = `releases/${tag}/${file.name}`;
+    let existing;
+    try {
+      existing = aws(['s3api', 'head-object', '--bucket', bucket, '--key', key]);
+    } catch (error) {
+      const details = `${error.stderr ?? ''} ${error.message ?? ''}`;
+      // AWS HeadObject reports a missing key as 404; other failures stay fatal.
+      if (error.message !== 'NoSuchKey' && String(error.stderr ?? '').trim() !== 'NoSuchKey'
+          && !/\((?:NoSuchKey|404)\) when calling the HeadObject operation:/.test(details)) throw error;
+      missing.push(file);
+      continue;
+    }
+    const head = JSON.parse(existing);
+    if (head.ContentLength !== file.size || head.Metadata?.sha256 !== file.sha256) {
+      throw new Error(`Immutable R2 installer conflicts with existing object: ${file.name}`);
+    }
+  }
+  for (const file of missing) {
     const key = `releases/${tag}/${file.name}`;
     aws(['s3', 'cp', join(directory, file.name), `s3://${bucket}/${key}`, '--only-show-errors', '--content-type', 'application/octet-stream', '--metadata', `sha256=${file.sha256}`]);
     const head = JSON.parse(aws(['s3api', 'head-object', '--bucket', bucket, '--key', key]));
@@ -180,13 +204,18 @@ export async function upload(tag, directory, run = execFileSync) {
   aws(['s3', 'cp', join(directory, 'SHA256SUMS'), `s3://${bucket}/releases/${tag}/SHA256SUMS`, '--only-show-errors', '--content-type', 'text/plain; charset=utf-8', '--cache-control', 'no-cache']);
   const currentPath = join(directory, 'current-latest.json');
   let current;
+  let currentExists = true;
   try {
     aws(['s3api', 'get-object', '--bucket', bucket, '--key', 'updates/latest.json', currentPath]);
-    current = JSON.parse(await readFile(currentPath, 'utf8'));
-    if (current.schemaVersion !== 1 || typeof current.version !== 'string') throw new Error('Invalid current latest metadata');
   } catch (error) {
     const details = `${error.stderr ?? ''} ${error.message ?? ''}`;
-    if (!/NoSuchKey|Not Found|404/i.test(details)) throw error;
+    if (error.message !== 'NoSuchKey' && String(error.stderr ?? '').trim() !== 'NoSuchKey'
+        && !/\((?:NoSuchKey|404)\) when calling the GetObject operation:/.test(details)) throw error;
+    currentExists = false;
+  }
+  if (currentExists) {
+    current = JSON.parse(await readFile(currentPath, 'utf8'));
+    if (current.schemaVersion !== 1 || typeof current.version !== 'string') throw new Error('Invalid current latest metadata');
   }
   if (current && compareVersions(latest.version, current.version) < 0) {
     console.log(`Synced ${manifest.files.length} installer asset(s) for ${tag}; kept newer latest ${current.version}`);
@@ -206,7 +235,7 @@ export async function pruneOldReleases(tag, run = execFileSync) {
   if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY) throw new Error('R2 access key secrets are required');
   const aws = args => run('aws', [...args, '--endpoint-url', endpoint, '--region', 'auto'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   const latest = JSON.parse(aws(['s3', 'cp', `s3://${bucket}/updates/latest.json`, '-', '--only-show-errors']));
-  const expectedFileCount = compareVersions(tag.slice(1), '1.0.9') >= 0 ? 3 : 2;
+  const expectedFileCount = compareVersions(tag.slice(1), '1.1.2') >= 0 ? 4 : compareVersions(tag.slice(1), '1.0.9') >= 0 ? 3 : 2;
   if (latest.schemaVersion !== 1 || latest.tag !== tag || latest.version !== tag.slice(1)
       || !Array.isArray(latest.files) || latest.files.length !== expectedFileCount) {
     throw new Error('R2 latest tag is not the complete requested release');
@@ -235,6 +264,7 @@ export async function pruneOldReleases(tag, run = execFileSync) {
       if (compareVersions(version, latest.version) >= 0) continue;
       const name = match[4];
       if (name === `AgPlayer-Setup-${version}-x64.exe`
+          || name === `AgPlayer-Setup-${version}-arm64.exe`
           || name === `AgPlayer-${version}-macOS-universal.dmg`
           || name === `AgPlayer-${version}-arm64-release.apk`
           || name === 'SHA256SUMS') obsolete.push(key);
