@@ -23,7 +23,7 @@
 
 ## 搜索与 AI 搜索发现
 
-规范域名为 `https://agplayer.com`，通过 canonical 声明；`www` 仍可访问并指向同一 canonical。Pages 的 `_redirects` 不支持按来源域名重定向，若以后配置 www 的 301，须在 Cloudflare 域名级 Redirect Rules 中设置并实测。Cloudflare Pages 自动把 `.html` 地址跳转为无扩展名地址，站点地图和 canonical 因此使用 `/download`、`/about` 等实际最终地址。保留根目录 `404.html`，防止不存在的地址被 Pages 当成 SPA 首页并返回 200。
+规范域名为 `https://agplayer.com`，通过 canonical、站点地图和 Cloudflare 域名级 301 跳转保持一致。2026-10-26 已部署 Single Redirect `AgPlayer canonical www to apex`：匹配 `(http.host eq "www.agplayer.com" and not http.request.uri.path in {"/baidu_verify_codeva-WXajBvTPGJ.html" "/baidu_verify_codeva-WXajBvTPGJ"})`，动态目标为 `concat("https://agplayer.com", http.request.uri.path)`，状态码 301，并保留查询字符串。百度验证文件两种路径豁免跳转，继续在 www 原址返回 200。规则仅匹配 www，不影响 `download.agplayer.com` 的 R2 下载和更新接口。Pages 的 `_redirects` 不支持按来源域名重定向，不要把此规则迁入 `_redirects`。Cloudflare Pages 自动把 `.html` 地址跳转为无扩展名地址，站点地图和 canonical 因此使用 `/download`、`/about` 等实际最终地址。保留根目录 `404.html`，防止不存在的地址被 Pages 当成 SPA 首页并返回 200。
 
 用户提供的 `baidu_verify_codeva-WXajBvTPGJ.html` 必须原样放在网站根目录并纳入构建；`_redirects` 为其 .html 地址做同源 200 代理，避免验证请求遇到 Pages 默认的去扩展名跳转。首页同时保留百度生成的 `baidu-site-verification` 标签。验证通过后不要删除验证文件或标签。
 
