@@ -348,3 +348,21 @@ test('forged ARM64 URLs, sizes, hashes and duplicate filenames reject the comple
     assert.equal(result.checksumValue.textContent, '5087BF85ACA07B89AF0521F1B0AFF741C3FD215CEDFC0B271187FD8C2E1AF8E4');
   }
 });
+
+test('same-version Mac revision uses verified canonical paths with cache-busting queries', async () => {
+  const value = manifest();
+  const mac = value.files[1];
+  mac.revision = '20261027';
+  mac.r2Url += '?revision=20261027';
+  mac.githubUrl += '?revision=20261027';
+  const result = await runDownloadScript(streamedResponse(JSON.stringify(value)));
+  assert.equal(result.macPrimary.href, mac.r2Url);
+  assert.equal(result.macGithub.href, mac.githubUrl);
+  assert.equal(result.macChecksum.textContent, 'B'.repeat(64));
+  for (const revision of ['../20261027', '20261027&host=evil', '', 20261027]) {
+    const bad = structuredClone(value);
+    bad.files[1].revision = revision;
+    const rejected = await runDownloadScript(streamedResponse(JSON.stringify(bad)));
+    assert.notEqual(rejected.macChecksum.textContent, 'B'.repeat(64));
+  }
+});

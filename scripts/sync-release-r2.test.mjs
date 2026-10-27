@@ -458,3 +458,42 @@ test('current metadata read errors and malformed JSON cannot be treated as an ab
     });
   }
 });
+
+test('latest retains an explicit same-version Mac revision without changing other installer URLs', () => {
+  const tag = 'v1.1.2';
+  const files = [
+    {name:'AgPlayer-1.1.2-macOS-universal.dmg',size:10,sha256:'a'.repeat(64),revision:'20261027'},
+    {name:'AgPlayer-Setup-1.1.2-x64.exe',size:10,sha256:'b'.repeat(64)}
+  ];
+  const input = {tag,publishedAt:'2026-10-16T00:00:00Z',releaseNotesUrl:`https://github.com/gddjag/AgPlayer/releases/tag/${tag}`,files};
+  const result = releaseSync.buildLatest(input);
+  assert.equal(result.files[0].revision,'20261027');
+  assert.ok(result.files[0].r2Url.endsWith('.dmg?revision=20261027'));
+  assert.ok(result.files[0].githubUrl.endsWith('.dmg?revision=20261027'));
+  assert.ok(result.files[1].r2Url.endsWith('.exe'));
+  for (const revision of ['../20261027','20261027&x=1','',20261027]) {
+    assert.throws(() => releaseSync.buildLatest({...input,files:[{...files[0],revision}]}), /revision/i);
+  }
+  assert.throws(() => releaseSync.buildLatest({...input,files:[{...files[1],revision:'20261027'}]}), /revision/i);
+});
+
+test('ordinary same-version sync retains a verified Mac revision from current latest', async () => {
+  await withAppendFixture(async ({directory, files, writes, run}) => {
+    const input = JSON.parse(await readFile(join(directory,'manifest.json'),'utf8'));
+    input.files = files.map(file => file.name.endsWith('.dmg') ? {...file,revision:'20261027'} : file);
+    const current = releaseSync.buildLatest(input);
+    const mac = current.files.find(file => file.name.endsWith('.dmg'));
+    delete mac.revision;
+    mac.revision = '20261027'; // Python publisher appends this field after the URLs.
+    const withCurrent = (command,args) => {
+      if (args[1] === 'get-object') {
+        writeFileSync(args[args.indexOf('updates/latest.json')+1],JSON.stringify(current));
+        return '';
+      }
+      return run(command,args);
+    };
+    await upload('v1.1.2',directory,withCurrent);
+    const promoted = JSON.parse(writes.at(-1).bytes);
+    assert.deepEqual(promoted,current);
+  });
+});

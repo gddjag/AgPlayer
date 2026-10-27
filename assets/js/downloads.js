@@ -54,8 +54,10 @@
     const expectedArchitecture = platform === 'windows' ? architecture : platform === 'macos' ? 'universal' : 'arm64';
     if (!file || matches.length !== 1 || (file.architecture !== undefined && file.architecture !== expectedArchitecture) || !Number.isSafeInteger(file.size) || file.size <= 0 || !/^[a-f0-9]{64}$/.test(file.sha256)) return null;
     const encodedName = encodeURIComponent(name);
-    const githubUrl = `https://github.com/gddjag/AgPlayer/releases/download/${tag}/${encodedName}`;
-    const r2Url = `https://download.agplayer.com/releases/${tag}/${encodedName}`;
+    if (file.revision !== undefined && (platform !== 'macos' || typeof file.revision !== 'string' || !/^\d{8}$/.test(file.revision))) return null;
+    const revisionQuery = file.revision === undefined ? '' : `?revision=${file.revision}`;
+    const githubUrl = `https://github.com/gddjag/AgPlayer/releases/download/${tag}/${encodedName}${revisionQuery}`;
+    const r2Url = `https://download.agplayer.com/releases/${tag}/${encodedName}${revisionQuery}`;
     if (file.githubUrl !== githubUrl || file.r2Url !== r2Url) return null;
     return { version: manifest.version, size: file.size, githubUrl, r2Url, sha256: file.sha256.toUpperCase() };
   }

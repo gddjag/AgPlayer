@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
@@ -49,12 +50,18 @@ export function buildLatest(manifest) {
         throw new Error('Invalid latest release file');
       }
       const name = encodeURIComponent(file.name);
+      if (file.revision !== undefined && (file.name !== `AgPlayer-${version}-macOS-universal.dmg`
+          || typeof file.revision !== 'string' || !/^\d{8}$/.test(file.revision))) {
+        throw new Error('Invalid Mac revision');
+      }
+      const revisionQuery = file.revision === undefined ? '' : `?revision=${file.revision}`;
       return {
         name: file.name,
         size: file.size,
         sha256: file.sha256,
-        githubUrl: `${githubBase}/releases/download/${tag}/${name}`,
-        r2Url: `${publicBase}/releases/${tag}/${name}`
+        ...(file.revision === undefined ? {} : { revision: file.revision }),
+        githubUrl: `${githubBase}/releases/download/${tag}/${name}${revisionQuery}`,
+        r2Url: `${publicBase}/releases/${tag}/${name}${revisionQuery}`
       };
     })
   };
@@ -221,6 +228,16 @@ export async function upload(tag, directory, run = execFileSync) {
     console.log(`Synced ${manifest.files.length} installer asset(s) for ${tag}; kept newer latest ${current.version}`);
     return;
   }
+  if (current?.version === latest.version && current.files?.some(file => file.revision !== undefined)) {
+    const verifiedCurrent = buildLatest(current);
+    if (!isDeepStrictEqual(current, verifiedCurrent)) throw new Error('Invalid current revision metadata');
+    for (const file of latest.files) {
+      const previous = verifiedCurrent.files.find(old => old.name === file.name && old.size === file.size && old.sha256 === file.sha256);
+      if (file.revision === undefined && previous?.revision !== undefined) {
+        Object.assign(file, previous);
+      }
+    }
+  }
   const latestPath = join(directory, 'latest.json');
   await writeFile(latestPath, `${JSON.stringify(latest, null, 2)}\n`);
   if (latest.files.some(file => file.name.endsWith('.dmg'))) {
@@ -241,7 +258,7 @@ export async function pruneOldReleases(tag, run = execFileSync) {
     throw new Error('R2 latest tag is not the complete requested release');
   }
   const expected = buildLatest(latest);
-  if (JSON.stringify(latest) !== JSON.stringify(expected)) throw new Error('R2 latest metadata verification failed');
+  if (!isDeepStrictEqual(latest, expected)) throw new Error('R2 latest metadata verification failed');
   selectAssets({ tag_name: tag, published_at: true },
     latest.files.map((file, index) => ({ ...file, id: index + 1, state: 'uploaded' })), tag);
   for (const file of latest.files) {
