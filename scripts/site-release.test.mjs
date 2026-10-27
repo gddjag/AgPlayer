@@ -44,7 +44,9 @@ test('same-origin published manifest matches all four exact fallback installers'
     assert.equal(fallback.size, file.size);
     assert.equal(fallback.sha256, file.sha256.toUpperCase());
     assert.equal(fallback.githubUrl, file.githubUrl);
-    assert.ok(fallback.githubUrl.endsWith('/' + file.name));
+    const url = new URL(fallback.githubUrl);
+    assert.ok(url.pathname.endsWith('/' + file.name));
+    assert.equal(url.search, file.revision === undefined ? '' : `?revision=${file.revision}`);
   }
   assert.equal(manifest.files.length, 4);
 });

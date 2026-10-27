@@ -281,6 +281,7 @@ window.AG_COPY = {
         "status": "暂未提供下载",
         "system": "macOS 13 及以上（Apple / Intel）",
         "description": "通用安装包，同时支持 Intel 与 Apple Silicon。",
+        "revision": "1.1.2 已更新：修复菜单栏崩溃、BPM 缺失及舞台人物动作。已安装 1.1.2 的用户请重新下载覆盖安装。",
         "security": "此版本尚未经过 Apple 公证。首次打开如遇系统提示，请先阅读 Apple 官方教程，并确认文件来自可信来源。",
         "help": "在 Mac 上安全地打开 App（Apple 官方教程）"
       },
@@ -672,6 +673,7 @@ window.AG_COPY = {
         "status": "Not yet available",
         "system": "macOS 13 or later (Apple / Intel)",
         "description": "One universal installer for Intel and Apple Silicon.",
+        "revision": "1.1.2 updated: fixes menu bar crashes, missing BPM and festival character motion. If you already have 1.1.2, download it again and replace the app.",
         "security": "This build is not Apple-notarized. If macOS shows a warning on first launch, read Apple's official guide and verify that the file came from a trusted source.",
         "help": "Safely open apps on Mac (Apple Support)"
       },
