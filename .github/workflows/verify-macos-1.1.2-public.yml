@@ -1,0 +1,57 @@
+name: Verify public macOS 1.1.2 revision downloads
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/verify-macos-1.1.2-public.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download every public installer and compare exact bytes and metadata
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,subprocess,tempfile
+          from pathlib import Path
+          latest=Path('updates/latest.json').read_bytes()
+          manifest=json.loads(latest)
+          assert manifest['version']=='1.1.2' and len(manifest['files'])==4
+          def get(url,destination):
+              subprocess.run(['curl','--fail','--location','--silent','--show-error','--retry','3','--retry-all-errors','--connect-timeout','30','--max-time','600','--output',str(destination),url],check=True)
+          def checksum(path):
+              h=hashlib.sha256()
+              with path.open('rb') as stream:
+                  for raw in iter(lambda:stream.read(1024*1024),b''): h.update(raw)
+              return h.hexdigest()
+          records=[]
+          with tempfile.TemporaryDirectory() as tmp:
+              root=Path(tmp)
+              for name,url in [('r2','https://download.agplayer.com/updates/latest.json'),('site','https://agplayer.com/updates/latest.json'),('mac','https://download.agplayer.com/updates/macos/latest.json')]:
+                  path=root/(name+'.json');get(url,path);assert path.read_bytes()==latest,name
+              for f in manifest['files']:
+                  expected='https://download.agplayer.com/releases/v1.1.2/'+f['name']
+                  if f['name'].endswith('.dmg'): expected+='?revision=20261027'
+                  assert f['r2Url']==expected
+                  path=root/f['name'];get(f['r2Url'],path)
+                  assert path.stat().st_size==f['size'] and checksum(path)==f['sha256'],f['name']
+                  records.append(dict(name=f['name'],size=f['size'],sha256=f['sha256'],verified=True))
+              mac=next(f for f in manifest['files'] if f['name'].endswith('.dmg'))
+              assert mac['sha256']=='5c62f63d62ff41f4a102151397da8b824f8d0c17a3dcbb473367c3ed2ec98f2a'
+              assert mac['githubUrl']=='https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/'+mac['name']+'?revision=20261027'
+              path=root/'github-mac.dmg';get(mac['githubUrl'],path)
+              assert path.stat().st_size==mac['size'] and checksum(path)==mac['sha256']
+              path=root/'original-mac.dmg';get('https://download.agplayer.com/releases/v1.1.2/history/20261016/'+mac['name'],path)
+              assert path.stat().st_size==114609080 and checksum(path)=='912b2c9659cf0e71ebb586155bee61ad15ac66cbb4688510109b89227a0ff993'
+              path=root/'index.html';get('https://agplayer.com/',path)
+              assert path.read_text().count('d753c9d11730ddacf686e8ccddce6e11')==1
+          print('PUBLIC_RELEASE_VERIFIED '+json.dumps(dict(version='1.1.2',files=records,websiteManifestByteIdentical=True,legacyManifestByteIdentical=True,githubMacByteIdentical=True,originalMacArchived=True,analyticsPreserved=True)))
+          PY
