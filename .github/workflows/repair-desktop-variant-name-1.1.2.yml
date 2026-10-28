@@ -1,4 +1,4 @@
-name: Preserve desktop variant Chinese filename
+name: Normalize verified desktop model asset filename
 on:
   push:
     branches: [main]
