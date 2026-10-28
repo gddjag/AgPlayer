@@ -16,17 +16,6 @@ test('release sync never automatically prunes historical installers', async () =
   assert.doesNotMatch(workflow, /sync-release-r2\.mjs prune|aws\s+s3\s+rm|delete-object/);
 });
 
-test('Android 1.1.2 signing compatibility is stated briefly in both languages', async () => {
-  const html = await readFile(new URL('download.html', root), 'utf8');
-  assert.match(html, /id="android"[\s\S]*?data-i18n="downloadPage\.android\.signing"/);
-  const context = { window: {} };
-  runInNewContext(await readFile(new URL('assets/js/translations.js', root), 'utf8'), context);
-  const zh = context.window.AG_COPY.zh.downloadPage.android.signing;
-  const en = context.window.AG_COPY.en.downloadPage.android.signing;
-  assert.equal(zh, 'Android 1.1.2 使用新签名，无法覆盖安装旧版 APK。');
-  assert.equal(en, 'Android 1.1.2 uses a new signing key and cannot install over an older APK.');
-});
-
 test('same-origin published manifest matches all four exact fallback installers', async () => {
   const manifest = JSON.parse(await readFile(new URL('updates/latest.json', root), 'utf8'));
   const source = await readFile(new URL('assets/js/downloads.js', root), 'utf8');

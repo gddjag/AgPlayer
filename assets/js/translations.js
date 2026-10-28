@@ -289,13 +289,12 @@ window.AG_COPY = {
       "android": {
         "name": "Android安卓版",
         "system": "Android 8.0 及以上（ARM64）",
-        "description": "适用于 64 位 Android 8.0 及以上设备。官网版支持检查更新和“支持作者”，分离模型已内置。",
-        "signing": "Android 1.1.2 使用新签名，无法覆盖安装旧版 APK。"
+        "description": "适用于 64 位 Android 8.0 及以上设备。官网版支持检查更新和“支持作者”，分离模型已内置。"
       },
       "harmony": {
         "name": "HarmonyOS鸿蒙版",
         "system": "原生 HarmonyOS PC / 手机",
-        "description": "请前往 HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版。"
+        "description": "请前往 HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版。华为卓易通也可下载安卓版本。"
       },
       "faqTitle": "下载前，了解这些",
       "faq": {
@@ -682,13 +681,12 @@ window.AG_COPY = {
       "android": {
         "name": "Android",
         "system": "Android 8.0 or later (ARM64)",
-        "description": "For 64-bit Android 8.0 or later devices. Website edition includes update checks, Support the Author, and bundled separation models.",
-        "signing": "Android 1.1.2 uses a new signing key and cannot install over an older APK."
+        "description": "For 64-bit Android 8.0 or later devices. Website edition includes update checks, Support the Author, and bundled separation models."
       },
       "harmony": {
         "name": "HarmonyOS",
         "system": "Native HarmonyOS for PC and mobile",
-        "description": "Download the native HarmonyOS PC and mobile editions from the HarmonyOS app marketplace."
+        "description": "Download the native HarmonyOS PC and mobile editions from the HarmonyOS app marketplace. You can also download the Android version for use with Huawei Zhuoyitong."
       },
       "faqTitle": "Before you download",
       "faq": {
