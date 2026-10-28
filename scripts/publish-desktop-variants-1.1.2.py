@@ -69,7 +69,7 @@ def validate_descriptor(descriptor):
             valid = (url.scheme == 'https' and url.username is None and url.password is None
                      and url.netloc == url.hostname and not url.port
                      and not url.query and not url.fragment
-                     and re.fullmatch('[a-z0-9]+(?:-[a-z0-9]+)+\.trycloudflare\.com', url.hostname or '')
+                     and re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)+\.trycloudflare\.com', url.hostname or '')
                      and url.path == '/' + quote(file['name'], safe=''))
         except ValueError:
             valid = False
@@ -184,7 +184,7 @@ class Remote:
 
     def readback_object(self, key, path):
         with self.object(key) as stream, path.open('wb') as output:
-            for block in stream.iter_chunks(1024 * 1024):
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
                 output.write(block)
 
     def put(self, key, body, content_type, metadata=None):

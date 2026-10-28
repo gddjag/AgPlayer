@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -289,6 +290,14 @@ class PublishDesktopVariantsTests(unittest.TestCase):
         remote.put(variants.SUMS_KEY, b'verified checksums', 'text/plain')
         self.assertEqual(calls[0]['IfNoneMatch'], '*')
         self.assertEqual(calls[0]['Key'], variants.SUMS_KEY)
+
+    def test_r2_transport_accepts_standard_readable_http_bodies(self):
+        remote = variants.Remote.__new__(variants.Remote)
+        payload = b'verified installer chunk' * 100000
+        remote.object = lambda key: io.BytesIO(payload)
+        target = Path(self.temporary.name) / 'transport-readback'
+        remote.readback_object('test-object', target)
+        self.assertEqual(target.read_bytes(), payload)
 
     def test_workflow_serializes_release_writes_and_runs_the_dedicated_tests(self):
         workflow = (Path(__file__).parents[1] / '.github/workflows/publish-desktop-variants-1.1.2.yml').read_text()
