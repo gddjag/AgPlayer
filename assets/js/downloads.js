@@ -2,6 +2,69 @@
   'use strict';
 
   const manifestUrl = '/updates/latest.json';
+  const variantsManifestUrl = '/updates/desktop-variants.json';
+  const publishedDesktopVariants = {
+  "schemaVersion": 1,
+  "kind": "desktop-download-variants",
+  "version": "1.1.2",
+  "tag": "v1.1.2",
+  "files": [
+    {
+      "id": "windows-models",
+      "name": "AgPlayer-Setup-1.1.2-x64-arm64（内置伴奏分离模型版本）.exe",
+      "architectures": [
+        "x64",
+        "arm64"
+      ],
+      "bundledModels": true,
+      "size": 281176468,
+      "sha256": "392af905b0a96daf68783901afe28b0c085fe7d055c59e1e135ccc1f938aaade",
+      "sourceCommit": "a351bdb13302e38520d195df5405d40ddac0a23e",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-x64-arm64%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.exe",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-x64-arm64-bundled-models.exe"
+    },
+    {
+      "id": "macos-arm64",
+      "name": "AgPlayer-1.1.2-macOS-arm64.dmg",
+      "architectures": [
+        "arm64"
+      ],
+      "bundledModels": false,
+      "size": 56498670,
+      "sha256": "ebd4ebb314557ac6ac5551069f0a327d5fc6c959af697d8a15000725e12a3b26",
+      "sourceCommit": "a351bdb13302e38520d195df5405d40ddac0a23e",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-arm64.dmg",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-macOS-arm64.dmg"
+    },
+    {
+      "id": "macos-x86_64",
+      "name": "AgPlayer-1.1.2-macOS-x86_64.dmg",
+      "architectures": [
+        "x86_64"
+      ],
+      "bundledModels": false,
+      "size": 63109379,
+      "sha256": "649f361d9acacab4aa14599fd1472b729523c52fcd446dfec7b42de424f60734",
+      "sourceCommit": "a351bdb13302e38520d195df5405d40ddac0a23e",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-x86_64.dmg",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-macOS-x86_64.dmg"
+    },
+    {
+      "id": "macos-models",
+      "name": "AgPlayer-1.1.2-macOS-universal（内置伴奏分离模型版本）.dmg",
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "bundledModels": true,
+      "size": 453804812,
+      "sha256": "40f792bddd77e8955c9cdac4d5f138b5cfc5bd44b843c99a29e2bc4ff8e1575e",
+      "sourceCommit": "a351bdb13302e38520d195df5405d40ddac0a23e",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.dmg",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-macOS-universal-bundled-models.dmg"
+    }
+  ]
+};
   const maxManifestBytes = 65536;
   const requestTimeoutMs = 10000;
   const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -73,6 +136,37 @@
     button.removeAttribute('aria-disabled');
   }
 
+  function selectDesktopVariants(manifest) {
+    if (!manifest || manifest.schemaVersion !== 1 || manifest.kind !== 'desktop-download-variants'
+      || manifest.version !== publishedWindowsRelease.version || manifest.tag !== `v${manifest.version}`
+      || !Array.isArray(manifest.files) || manifest.files.length !== 4) return null;
+    const version = manifest.version;
+    const specs = {
+      'windows-models': [`AgPlayer-Setup-${version}-x64-arm64（内置伴奏分离模型版本）.exe`, ['x64', 'arm64'], true, `AgPlayer-Setup-${version}-x64-arm64-bundled-models.exe`],
+      'macos-arm64': [`AgPlayer-${version}-macOS-arm64.dmg`, ['arm64'], false],
+      'macos-x86_64': [`AgPlayer-${version}-macOS-x86_64.dmg`, ['x86_64'], false],
+      'macos-models': [`AgPlayer-${version}-macOS-universal（内置伴奏分离模型版本）.dmg`, ['arm64', 'x86_64'], true, `AgPlayer-${version}-macOS-universal-bundled-models.dmg`]
+    };
+    const releases = {};
+    for (const file of manifest.files) {
+      const spec = specs[file?.id];
+      if (!spec || releases[file.id] || file.name !== spec[0] || file.bundledModels !== spec[2]
+        || !Array.isArray(file.architectures) || JSON.stringify(file.architectures) !== JSON.stringify(spec[1])
+        || !Number.isSafeInteger(file.size) || file.size <= 0 || !/^[a-f0-9]{64}$/.test(file.sha256)
+        || !/^[a-f0-9]{40}$/.test(file.sourceCommit)) return null;
+      const encoded = encodeURIComponent(file.name);
+      const githubEncoded = encodeURIComponent(spec[3] || file.name);
+      if (file.githubUrl !== `https://github.com/gddjag/AgPlayer/releases/download/${manifest.tag}/${githubEncoded}`
+        || file.r2Url !== `https://download.agplayer.com/releases/${manifest.tag}/${encoded}`) return null;
+      releases[file.id] = { ...file, version, sha256: file.sha256.toUpperCase() };
+    }
+    return releases;
+  }
+
+  function releaseFilename(release) {
+    return decodeURIComponent(release.r2Url.split('?')[0].split('/').at(-1));
+  }
+
   function ensureDownloadDetails() {
     const windows = document.querySelector('#windows');
     const macos = document.querySelector('#macos');
@@ -136,11 +230,11 @@
     if (!primary || !github) return;
     primary.href = release.r2Url;
     github.href = release.githubUrl;
+    github.title = decodeURIComponent(release.githubUrl.split("?")[0].split("/").at(-1));
     const filename = document.querySelector(`#${platform} [data-meta="filename"]`);
     const size = document.querySelector(`#${platform} [data-meta="size"]`);
     const checksum = document.querySelector(`#${platform}-sha256`);
-    const suffix = platform === 'macos' ? 'macOS-universal.dmg' : 'arm64-release.apk';
-    if (filename) filename.textContent = `AgPlayer-${release.version}-${suffix}`;
+    if (filename) filename.textContent = releaseFilename(release);
     if (size) size.textContent = `${(release.size / 1048576).toFixed(1)} MB`;
     if (checksum) checksum.textContent = release.sha256;
   }
@@ -166,7 +260,18 @@
     if (!primary || !github || !status || !checksum || !checksumValue || !checksumCopy) return;
     const architecture = document.querySelector('#windows-architecture');
     const armOption = document.querySelector('#windows-architecture option[value="arm64"]');
+    const bundledOption = document.querySelector('#windows-architecture option[value="bundled"]');
+    const macArchitecture = document.querySelector('#macos-architecture');
+    const macOptions = ['arm64', 'x86_64', 'bundled'].map(value => document.querySelector(`#macos-architecture option[value="${value}"]`));
     const windowsReleases = { x64: publishedWindowsRelease, arm64: publishedWindowsArmRelease };
+    const macReleases = { universal: publishedMacRelease };
+    const renderSelectedMacRelease = () => renderLinkedRelease('macos', macReleases[macArchitecture?.value] || macReleases.universal);
+    macArchitecture?.addEventListener('change', renderSelectedMacRelease);
+    const renderVariantOptions = () => {
+      if (bundledOption) bundledOption.disabled = !windowsReleases.bundled;
+      ['arm64', 'x86_64', 'bundled'].forEach((key, i) => { if (macOptions[i]) macOptions[i].disabled = !macReleases[key]; });
+    };
+    renderVariantOptions();
     if (architecture) architecture.value = 'x64';
     const renderArchitectureOption = () => {
       if (!armOption) return;
@@ -180,9 +285,10 @@
       activeRelease = release;
       enable(primary, release.r2Url);
       enable(github, release.githubUrl);
+      github.title = decodeURIComponent(release.githubUrl.split("?")[0].split("/").at(-1));
       const filename = document.querySelector('#windows [data-meta="filename"]');
       const size = document.querySelector('#windows [data-meta="size"]');
-      if (filename) filename.textContent = release.r2Url.split('/').at(-1);
+      if (filename) filename.textContent = releaseFilename(release);
       if (size && Number.isSafeInteger(release.size)) size.textContent = `${(release.size / 1048576).toFixed(1)} MB`;
       checksumValue.textContent = release.sha256;
       checksum.removeAttribute('hidden');
@@ -201,6 +307,32 @@
     renderRelease(publishedWindowsRelease);
     renderLinkedRelease('macos', publishedMacRelease);
     renderLinkedRelease('android', publishedAndroidRelease);
+    const applyDesktopVariants = manifest => {
+      const variants = selectDesktopVariants(manifest);
+      if (!variants) return;
+      windowsReleases.bundled = variants['windows-models'];
+      Object.assign(macReleases, {arm64: variants['macos-arm64'], x86_64: variants['macos-x86_64'], bundled: variants['macos-models']});
+      renderVariantOptions();
+      renderRelease(windowsReleases[architecture?.value] || windowsReleases.x64);
+      renderSelectedMacRelease();
+    };
+    const loadDesktopVariants = async () => {
+      if (!bundledOption && !macArchitecture) return;
+      applyDesktopVariants(publishedDesktopVariants);
+      const abort = new AbortController();
+      const deadline = setTimeout(() => abort.abort(), requestTimeoutMs);
+      try {
+        const response = await fetch(variantsManifestUrl, {cache:'no-store', credentials:'omit', headers:{Accept:'application/json'}, signal:abort.signal});
+        if (!response.ok) return;
+        const text = await readManifest(response);
+        if (text !== null) applyDesktopVariants(JSON.parse(text));
+      } catch (_) {
+        // Keep the verified variant fallbacks if this independent endpoint is unavailable.
+      } finally {
+        clearTimeout(deadline);
+      }
+    };
+    void loadDesktopVariants();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
     try {
@@ -228,7 +360,8 @@
       windowsReleases.arm64 = armRelease;
       renderArchitectureOption();
       renderRelease(windowsReleases[architecture?.value] || release);
-      renderLinkedRelease('macos', macRelease);
+      macReleases.universal = macRelease;
+      renderSelectedMacRelease();
       renderLinkedRelease('android', androidRelease);
     } catch (_) {
       // Keep the last published downloads when live metadata is unavailable.

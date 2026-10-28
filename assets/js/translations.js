@@ -10,7 +10,7 @@ window.AG_COPY = {
         },
         "download": {
           "title": "AgPlayer 官方下载 - Windows、macOS、Android 与鸿蒙",
-          "description": "从 AgPlayer 官网下载 Windows、macOS Universal 和 Android 安装包，查看系统要求与 SHA-256 校验值；原生鸿蒙版请在应用市场下载。"
+          "description": "从 AgPlayer 官网下载 Windows、macOS 和 Android 安装包，查看系统要求与 SHA-256 校验值；原生鸿蒙版请在应用市场下载。"
         },
         "about": {
           "title": "关于 AgPlayer - 免费、无广告的本地音频播放器",
@@ -262,12 +262,14 @@ window.AG_COPY = {
         "r2": "下载",
         "description": "正式版本准备中，GitHub 与 R2 下载即将开放。",
         "system": "Windows 10 / 11 64 位系统",
-        "architecture": "选择处理器架构",
-        "x64": "x64（Intel / AMD 64 位）",
-        "arm64": "ARM64（Snapdragon 等）",
+        "architecture": "选择版本",
+        "x64": "x64（常规纯净版）",
+        "arm64": "ARM64（常规纯净版）",
         "arm64Pending": "ARM64（Snapdragon 等）· 待发布",
         "architectureHelp": "Intel / AMD 电脑选择 x64；Snapdragon 等 Windows ARM 电脑选择 ARM64。",
-        "available": "Windows {version} 已发布，可从 R2 或 GitHub 下载。"
+        "available": "Windows {version} 已发布，可从 R2 或 GitHub 下载。",
+        "bundled": "x64 / ARM64（内置模型版本）",
+        "modelsNote": "常规纯净版不含伴奏分离模型，可在「音频工具」中按需下载。"
       },
       "checksum": {
         "label": "SHA-256 校验值",
@@ -280,16 +282,23 @@ window.AG_COPY = {
         "name": "macOS",
         "status": "暂未提供下载",
         "system": "macOS 13 及以上（Apple / Intel）",
+        "architecture": "选择版本",
+        "arm64": "Apple M 系列（常规纯净版）",
+        "intel": "Intel（常规纯净版）",
+        "bundled": "Apple / Intel（内置模型版本）",
+        "modelsNote": "常规纯净版不含伴奏分离模型，可在「音频工具」中按需下载。",
         "security": "此版本尚未经过 Apple 公证。首次打开如遇系统提示，请先阅读 Apple 官方教程，并确认文件来自可信来源。",
         "help": "在 Mac 上安全地打开 App（Apple 官方教程）"
       },
       "android": {
         "name": "Android安卓版",
-        "system": "Android 8.0 及以上（ARM64）"
+        "system": "Android 8.0 及以上（ARM64）",
+        "modelsNote": "已内置伴奏分离模型。"
       },
       "harmony": {
         "name": "HarmonyOS鸿蒙版",
         "system": "原生 HarmonyOS PC / 手机",
+        "modelsNote": "已内置伴奏分离模型。",
         "description": "请前往 HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版。华为卓易通也可下载安卓版本。"
       },
       "faqTitle": "下载前，了解这些",
@@ -650,12 +659,14 @@ window.AG_COPY = {
         "r2": "Download",
         "description": "The official release is being prepared. GitHub and R2 downloads are coming soon.",
         "system": "Windows 10 / 11, 64-bit",
-        "architecture": "Choose processor architecture",
-        "x64": "x64 (Intel / AMD 64-bit)",
-        "arm64": "ARM64 (Snapdragon and others)",
+        "architecture": "Choose version",
+        "x64": "x64 · Standard clean edition",
+        "arm64": "ARM64 · Standard clean edition",
         "arm64Pending": "ARM64 (Snapdragon) · Coming soon",
         "architectureHelp": "Choose x64 for Intel / AMD PCs, or ARM64 for Snapdragon and other Windows ARM PCs.",
-        "available": "Windows {version} is available from R2 or GitHub."
+        "available": "Windows {version} is available from R2 or GitHub.",
+        "bundled": "x64 / ARM64 · Models included",
+        "modelsNote": "The standard clean edition does not include separation models. Download them on demand in Audio Tools."
       },
       "checksum": {
         "label": "SHA-256 checksum",
@@ -668,16 +679,23 @@ window.AG_COPY = {
         "name": "macOS",
         "status": "Not yet available",
         "system": "macOS 13 or later (Apple / Intel)",
+        "architecture": "Choose version",
+        "arm64": "Apple M series · Standard",
+        "intel": "Intel · Standard",
+        "bundled": "Apple / Intel · Models included",
+        "modelsNote": "The standard clean edition does not include separation models. Download them on demand in Audio Tools.",
         "security": "This build is not Apple-notarized. If macOS shows a warning on first launch, read Apple's official guide and verify that the file came from a trusted source.",
         "help": "Safely open apps on Mac (Apple Support)"
       },
       "android": {
         "name": "Android",
-        "system": "Android 8.0 or later (ARM64)"
+        "system": "Android 8.0 or later (ARM64)",
+        "modelsNote": "Separation models are included."
       },
       "harmony": {
         "name": "HarmonyOS",
         "system": "Native HarmonyOS for PC and mobile",
+        "modelsNote": "Separation models are included.",
         "description": "Download the native HarmonyOS PC and mobile editions from the HarmonyOS app marketplace. You can also download the Android version for use with Huawei Zhuoyitong."
       },
       "faqTitle": "Before you download",

@@ -46,11 +46,17 @@ function streamedResponse(body, { ok = true, contentLength = true, chunkSize = b
   };
 }
 
-async function runDownloadScript(response, timers = {}) {
+async function runDownloadScript(response, timers = {}, withVariants = false, withPublishedVariants = false) {
   assert.ok(existsSync(scriptPath), 'download manifest integration script must exist');
   const architecture = fakeElement();
   architecture.value = 'x64';
   const armOption = fakeElement();
+  const bundledOption = fakeElement();
+  const macArchitecture = fakeElement();
+  macArchitecture.value = 'arm64';
+  const macOptions = ['arm64', 'x86_64', 'bundled'].map(() => fakeElement());
+  const windowsFilename = fakeElement();
+  const macFilename = fakeElement();
   const primary = fakeElement();
   const github = fakeElement();
   const status = fakeElement();
@@ -90,6 +96,13 @@ async function runDownloadScript(response, timers = {}) {
     ['#android-sha256', androidChecksum],
     ['#android-sha256-copy', androidChecksumCopy]
   ]);
+  if (withVariants) {
+    elements.set('#windows-architecture option[value="bundled"]', bundledOption);
+    elements.set('#macos-architecture', macArchitecture);
+    ['arm64', 'x86_64', 'bundled'].forEach((value, i) => elements.set(`#macos-architecture option[value="${value}"]`, macOptions[i]));
+    elements.set('#windows [data-meta="filename"]', windowsFilename);
+    elements.set('#macos [data-meta="filename"]', macFilename);
+  }
   const context = {
     document: {
       body: { dataset: { page: 'download' } },
@@ -110,9 +123,11 @@ async function runDownloadScript(response, timers = {}) {
     clearTimeout: timers.clearTimeout ?? clearTimeout,
     console
   };
-  runInNewContext(await readFile(scriptPath, 'utf8'), context, { filename: scriptPath });
+  let source = await readFile(scriptPath, 'utf8');
+  if (!withPublishedVariants) source = source.replace(/const publishedDesktopVariants = [\s\S]*?;\n  const maxManifestBytes/, 'const publishedDesktopVariants = null;\n  const maxManifestBytes');
+  runInNewContext(source, context, { filename: scriptPath });
   await new Promise(resolve => setTimeout(resolve, 0));
-  return { architecture, armOption, primary, github, status, checksum, checksumValue, checksumCopy, macPrimary, macGithub, macChecksum, macChecksumCopy, androidPrimary, androidGithub, androidChecksum, androidChecksumCopy, calls, navigations, clipboardWrites, documentListeners };
+  return { architecture, armOption, bundledOption, macArchitecture, macOptions, windowsFilename, macFilename, primary, github, status, checksum, checksumValue, checksumCopy, macPrimary, macGithub, macChecksum, macChecksumCopy, androidPrimary, androidGithub, androidChecksum, androidChecksumCopy, calls, navigations, clipboardWrites, documentListeners };
 }
 
 function manifest(overrides = {}) {
@@ -168,7 +183,7 @@ test('macOS HTML fallback links the accepted package and official opening guide'
   const html = await readFile(downloadPagePath, 'utf8');
   assert.match(html, /href="https:\/\/support\.apple\.com\/zh-cn\/102445"/);
   assert.match(html, /尚未经过 Apple 公证/);
-  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.1\.2\/AgPlayer-1\.1\.2-macOS-universal\.dmg\?revision=20261028"/);
+  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.1\.2\/AgPlayer-1\.1\.2-macOS-arm64\.dmg"/);
   assert.match(html, /id="macos-sha256-copy"[^>]*data-i18n="downloadPage.checksum.copy"/);
 });
 
@@ -247,7 +262,7 @@ test('download page preserves the FAQ and exposes Android plus HarmonyOS cards',
   assert.match(html, /AgPlayer-1\.1\.2-arm64-release\.apk/);
   assert.match(html, /id="harmonyos"/);
   assert.match(html, /HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版/);
-  assert.match(html, /downloads\.js\?v=20261028-desktop-release/);
+  assert.match(html, /downloads\.js\?v=20261028-bundled-models-1/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
@@ -399,4 +414,91 @@ test('Windows desktop revisions preserve architecture selection and exact offici
   android.githubUrl += '?revision=20261028';
   const rejected = await runDownloadScript(streamedResponse(JSON.stringify(androidRevision)));
   assert.notEqual(rejected.androidPrimary.href, android.r2Url);
+});
+
+function desktopVariantsManifest() {
+  const version = '1.1.2';
+  const specs = [
+    ['windows-models', `AgPlayer-Setup-${version}-x64-arm64（内置伴奏分离模型版本）.exe`, ['x64', 'arm64'], true],
+    ['macos-arm64', `AgPlayer-${version}-macOS-arm64.dmg`, ['arm64'], false],
+    ['macos-x86_64', `AgPlayer-${version}-macOS-x86_64.dmg`, ['x86_64'], false],
+    ['macos-models', `AgPlayer-${version}-macOS-universal（内置伴奏分离模型版本）.dmg`, ['arm64', 'x86_64'], true]
+  ];
+  return { schemaVersion: 1, kind: 'desktop-download-variants', version, tag: `v${version}`,
+    files: specs.map(([id, name, architectures, bundledModels], i) => ({id, name, architectures, bundledModels,
+      size: 1000 + i, sha256: String(i + 1).repeat(64), sourceCommit: 'a'.repeat(40),
+      r2Url: `https://download.agplayer.com/releases/v${version}/${encodeURIComponent(name)}`,
+      githubUrl: `https://github.com/gddjag/AgPlayer/releases/download/v${version}/${encodeURIComponent(name.replace("（内置伴奏分离模型版本）", "-bundled-models"))}`})) };
+}
+
+function variantsResponse(variants) {
+  return url => streamedResponse(JSON.stringify(url === '/updates/desktop-variants.json' ? variants : dualWindowsManifest()));
+}
+
+test('desktop variants select Windows combined models and real Mac chip packages with readable filenames', async () => {
+  const variants = desktopVariantsManifest();
+  const result = await runDownloadScript(variantsResponse(variants), {}, true);
+  assert.equal(result.bundledOption.disabled, false);
+  assert.equal(result.macPrimary.href, variants.files[1].r2Url);
+  assert.equal(result.macFilename.textContent, variants.files[1].name);
+  result.architecture.value = 'bundled'; result.architecture.change();
+  assert.equal(result.primary.dataset.downloadUrl, variants.files[0].r2Url);
+  assert.equal(result.github.dataset.downloadUrl, variants.files[0].githubUrl);
+  assert.equal(result.windowsFilename.textContent, variants.files[0].name);
+  assert.equal(result.checksumValue.textContent, '1'.repeat(64));
+  result.macArchitecture.value = 'x86_64'; result.macArchitecture.change();
+  assert.equal(result.macPrimary.href, variants.files[2].r2Url);
+  result.macArchitecture.value = 'bundled'; result.macArchitecture.change();
+  assert.equal(result.macPrimary.href, variants.files[3].r2Url);
+  assert.equal(result.macFilename.textContent, variants.files[3].name);
+  result.macChecksumCopy.click();
+  assert.deepEqual(result.clipboardWrites, ['4'.repeat(64)]);
+  assert.equal(result.calls.filter(call => call.url === '/updates/latest.json').length, 1);
+});
+
+test('forged, incomplete or wrong-architecture variants never enable extra installer choices', async () => {
+  const corruptions = [
+    v => { v.files[0].r2Url = 'https://example.com/fake.exe'; },
+    v => { v.files[0].githubUrl = `https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/${encodeURIComponent(v.files[0].name)}`; },
+    v => { v.files[0].architectures = ['x64']; },
+    v => { v.files[3].bundledModels = false; },
+    v => { v.files[1].name = 'other.dmg'; },
+    v => { v.files[1].size = 0; },
+    v => { v.files[1].sha256 = 'bad'; },
+    v => { v.files[1].sourceCommit = 'main'; },
+    v => { v.files.pop(); },
+    v => { v.files.push(v.files[1]); }
+  ];
+  for (const corrupt of corruptions) {
+    const variants = desktopVariantsManifest(); corrupt(variants);
+    const result = await runDownloadScript(variantsResponse(variants), {}, true);
+    assert.equal(result.bundledOption.disabled, true);
+    assert.equal(result.macOptions.some(option => !option.disabled), false);
+    assert.equal(result.primary.disabled, false);
+  }
+});
+
+test('late base manifest cannot replace a selected Mac model variant', async () => {
+  let finishBase;
+  const baseResponse = new Promise(resolve => { finishBase = resolve; });
+  const variants = desktopVariantsManifest();
+  const result = await runDownloadScript(url => url === '/updates/desktop-variants.json'
+    ? streamedResponse(JSON.stringify(variants)) : baseResponse, {}, true);
+  result.macArchitecture.value = 'bundled'; result.macArchitecture.change();
+  finishBase(streamedResponse(JSON.stringify(dualWindowsManifest())));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(result.macPrimary.href, variants.files[3].r2Url);
+  assert.equal(result.macChecksum.textContent, '4'.repeat(64));
+});
+
+
+test('unavailable or forged live variants retain the exact published model download fallbacks', async () => {
+  const published = JSON.parse(await readFile(join(import.meta.dirname, '..', 'updates', 'desktop-variants.json'), 'utf8'));
+  const result = await runDownloadScript(variantsResponse({schemaVersion:1, files:[]}), {}, true, true);
+  assert.equal(result.bundledOption.disabled, false);
+  assert.equal(result.macPrimary.href, published.files.find(f => f.id === 'macos-arm64').r2Url);
+  result.architecture.value = 'bundled'; result.architecture.change();
+  assert.equal(result.primary.dataset.downloadUrl, published.files.find(f => f.id === 'windows-models').r2Url);
+  result.macArchitecture.value = 'bundled'; result.macArchitecture.change();
+  assert.equal(result.macChecksum.textContent, published.files.find(f => f.id === 'macos-models').sha256.toUpperCase());
 });

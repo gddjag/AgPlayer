@@ -72,7 +72,15 @@ export function selectAssets(release, assets, tag) {
   if (release.tag_name !== tag || release.draft || release.prerelease || !release.published_at) {
     throw new Error('Release must be published, non-draft, and non-prerelease');
   }
-  const selected = assets.filter(asset => /\.(?:exe|dmg|apk)$/i.test(asset.name));
+  // Optional desktop downloads have their own verified manifest. Keep the app
+  // update feed restricted to the existing four canonical installers.
+  const version = tag.slice(1);
+  const variants = new Set([
+    `AgPlayer-Setup-${version}-x64-arm64-bundled-models.exe`,
+    `AgPlayer-${version}-macOS-arm64.dmg`, `AgPlayer-${version}-macOS-x86_64.dmg`,
+    `AgPlayer-${version}-macOS-universal-bundled-models.dmg`
+  ]);
+  const selected = assets.filter(asset => /\.(?:exe|dmg|apk)$/i.test(asset.name) && !variants.has(asset.name));
   if (!selected.length) throw new Error('No installer assets: upload the installers, then rerun with the release tag');
   const names = new Set();
   for (const asset of selected) {

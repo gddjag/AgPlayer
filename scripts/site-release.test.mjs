@@ -39,3 +39,43 @@ test('same-origin published manifest matches all four exact fallback installers'
   }
   assert.equal(manifest.files.length, 4);
 });
+
+test('download cards expose chip/model choices and the requested bilingual model notes', async () => {
+  const html = await readFile(new URL('download.html', root), 'utf8');
+  const context = {window:{}};
+  runInNewContext(await readFile(new URL('assets/js/translations.js', root), 'utf8'),context);
+  assert.match(html, /id="windows-architecture"[^]*?value="bundled"/);
+  assert.match(html, /id="macos-architecture"[^]*?value="arm64"[^]*?value="x86_64"[^]*?value="bundled"/);
+  for (const lang of ['zh','en']) {
+    const page = context.window.AG_COPY[lang].downloadPage;
+    for (const platform of ['windows','macos','android','harmony']) {
+      assert.match(html,new RegExp(`data-i18n="downloadPage\\.${platform}\\.modelsNote"`));
+      assert.equal(typeof page[platform].modelsNote,'string');
+      assert.ok(page[platform].modelsNote.length>8);
+    }
+  }
+  assert.equal(context.window.AG_COPY.zh.downloadPage.windows.modelsNote,'常规纯净版不含伴奏分离模型，可在「音频工具」中按需下载。');
+  assert.equal(context.window.AG_COPY.zh.downloadPage.android.modelsNote,'已内置伴奏分离模型。');
+  assert.doesNotMatch(html,/downloadPage\.(windows|macos)\.revision/);
+});
+
+
+test('published desktop variants have an exact embedded fallback and Apple chip HTML default', async () => {
+  const variants = JSON.parse(await readFile(new URL('updates/desktop-variants.json', root), 'utf8'));
+  const source = await readFile(new URL('assets/js/downloads.js', root), 'utf8');
+  const match = source.match(/const publishedDesktopVariants = ([\s\S]*?);\n  const maxManifestBytes/);
+  assert.ok(match);
+  assert.deepEqual(JSON.parse(match[1]), variants);
+  assert.equal(variants.files.length, 4);
+  const arm = variants.files.find(f => f.id === 'macos-arm64');
+  const html = await readFile(new URL('download.html', root), 'utf8');
+  assert.ok(html.includes(`href="${arm.r2Url}"`));
+  assert.ok(html.includes(arm.sha256.toUpperCase()));
+  assert.equal(variants.files.filter(f => f.bundledModels).length, 2);
+  for (const f of variants.files) {
+    assert.equal(f.sourceCommit, 'a351bdb13302e38520d195df5405d40ddac0a23e');
+    assert.ok(f.size > 50_000_000);
+    if (f.bundledModels) assert.ok(f.name.includes('（内置伴奏分离模型版本）'));
+    assert.equal(decodeURIComponent(new URL(f.r2Url).pathname.split('/').at(-1)), f.name);
+  }
+});

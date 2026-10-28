@@ -503,3 +503,15 @@ test('ordinary same-version sync retains verified desktop revisions from current
     assert.deepEqual(promoted,current);
   });
 });
+
+test('canonical app updates exclude exact optional desktop variants while retaining four base installers', () => {
+  const version = '1.1.2', tag = `v${version}`;
+  const names = [`AgPlayer-Setup-${version}-x64.exe`, `AgPlayer-Setup-${version}-arm64.exe`,
+    `AgPlayer-${version}-macOS-universal.dmg`, `AgPlayer-${version}-arm64-release.apk`,
+    `AgPlayer-Setup-${version}-x64-arm64-bundled-models.exe`,
+    `AgPlayer-${version}-macOS-arm64.dmg`, `AgPlayer-${version}-macOS-x86_64.dmg`,
+    `AgPlayer-${version}-macOS-universal-bundled-models.dmg`];
+  const assets = names.map((name, i) => ({name, id:i + 1, state:'uploaded', size:42}));
+  assert.deepEqual(selectAssets({tag_name:tag, published_at:'now'}, assets, tag).map(x => x.name).sort(), names.slice(0, 4).sort());
+  assert.throws(() => selectAssets({tag_name:tag, published_at:'now'}, assets.concat({name:'未知模型.exe',id:99,state:'uploaded',size:42}),tag), /installer names/);
+});
