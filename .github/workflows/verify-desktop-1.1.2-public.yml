@@ -1,0 +1,29 @@
+name: Verify public desktop 1.1.2 revision 20261028
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/verify-desktop-1.1.2-public.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.repository == 'gddjag/AgPlayer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/verify-desktop-1.1.2-public.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-desktop-1.1.2-verification
+          path: public-desktop-verification.json
+          if-no-files-found: error

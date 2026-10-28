@@ -65,7 +65,7 @@ async function runDownloadScript(response, timers = {}) {
   const androidGithub = fakeElement();
   const androidChecksum = fakeElement();
   const androidChecksumCopy = fakeElement();
-  macChecksum.textContent = '5C62F63D62FF41F4A102151397DA8B824F8D0C17A3DCBB473367C3ED2EC98F2A';
+  macChecksum.textContent = 'F4CA11BDD3A599E43B3E78478063B79748BED1715A1379BCB6580005D581B94F';
   androidChecksum.textContent = 'D1C1739FFF87F9D49F9F04A0D5D53EE0C5BED2AB70F1BB596659BB2EE8374777';
   checksum.setAttribute('hidden', '');
   const documentListeners = new Map();
@@ -160,22 +160,22 @@ test('one verified manifest updates all downloadable platforms and rejects a for
   const bad = manifest();
   bad.files[1].r2Url = 'https://example.com/forged.dmg';
   const rejected = await runDownloadScript(streamedResponse(JSON.stringify(bad)));
-  assert.equal(rejected.macPrimary.href, 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg?revision=20261027');
-  assert.equal(rejected.checksumValue.textContent, 'FB5821B0931BBB56CAD83284757EC7A05A14128F949D16B1AC6B582F4365B778');
+  assert.equal(rejected.macPrimary.href, 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg?revision=20261028');
+  assert.equal(rejected.checksumValue.textContent, '390D69FB32D3C6177E3BBB925B8A174ABBEFC0A494A39BAC560114DF9C32820C');
 });
 
 test('macOS HTML fallback links the accepted package and official opening guide', async () => {
   const html = await readFile(downloadPagePath, 'utf8');
   assert.match(html, /href="https:\/\/support\.apple\.com\/zh-cn\/102445"/);
   assert.match(html, /尚未经过 Apple 公证/);
-  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.1\.2\/AgPlayer-1\.1\.2-macOS-universal\.dmg\?revision=20261027"/);
+  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.1\.2\/AgPlayer-1\.1\.2-macOS-universal\.dmg\?revision=20261028"/);
   assert.match(html, /id="macos-sha256-copy"[^>]*data-i18n="downloadPage.checksum.copy"/);
 });
 
 test('macOS copy uses the displayed checksum for fallback and live metadata', async () => {
   const fallback = await runDownloadScript({ok:false});
   fallback.macChecksumCopy.click();
-  assert.deepEqual(fallback.clipboardWrites, ['5C62F63D62FF41F4A102151397DA8B824F8D0C17A3DCBB473367C3ED2EC98F2A']);
+  assert.deepEqual(fallback.clipboardWrites, ['F4CA11BDD3A599E43B3E78478063B79748BED1715A1379BCB6580005D581B94F']);
   const live = await runDownloadScript(streamedResponse(JSON.stringify(manifest())));
   live.macChecksumCopy.click();
   assert.deepEqual(live.clipboardWrites, ['B'.repeat(64)]);
@@ -230,12 +230,12 @@ test('published 1.1.2 remains available when the live manifest cannot be read', 
     assert.equal(result.primary.disabled, false);
     assert.equal(result.github.disabled, false);
     assert.equal(result.checksum.hasAttribute('hidden'), false);
-    assert.equal(result.checksumValue.textContent, 'FB5821B0931BBB56CAD83284757EC7A05A14128F949D16B1AC6B582F4365B778');
+    assert.equal(result.checksumValue.textContent, '390D69FB32D3C6177E3BBB925B8A174ABBEFC0A494A39BAC560114DF9C32820C');
     result.primary.click();
     result.github.click();
     assert.deepEqual(result.navigations, [
-      'https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-x64.exe',
-      'https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-x64.exe'
+      'https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-x64.exe?revision=20261028',
+      'https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-x64.exe?revision=20261028'
     ]);
   }
 });
@@ -247,7 +247,7 @@ test('download page preserves the FAQ and exposes Android plus HarmonyOS cards',
   assert.match(html, /AgPlayer-1\.1\.2-arm64-release\.apk/);
   assert.match(html, /id="harmonyos"/);
   assert.match(html, /HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版/);
-  assert.match(html, /downloads\.js\?v=20261028-desktop-fixes/);
+  assert.match(html, /downloads\.js\?v=20261028-desktop-release/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
@@ -326,8 +326,8 @@ test('future Windows release requires both architectures before switching any pl
   const live = dualWindowsManifest('1.1.3');
   live.files.splice(1, 1);
   const result = await runDownloadScript(streamedResponse(JSON.stringify(live)));
-  assert.equal(result.checksumValue.textContent, 'FB5821B0931BBB56CAD83284757EC7A05A14128F949D16B1AC6B582F4365B778');
-  assert.equal(result.macPrimary.href, 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg?revision=20261027');
+  assert.equal(result.checksumValue.textContent, '390D69FB32D3C6177E3BBB925B8A174ABBEFC0A494A39BAC560114DF9C32820C');
+  assert.equal(result.macPrimary.href, 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg?revision=20261028');
 });
 
 test('forged ARM64 URLs, sizes, hashes and duplicate filenames reject the complete manifest', async () => {
@@ -340,12 +340,12 @@ test('forged ARM64 URLs, sizes, hashes and duplicate filenames reject the comple
     const result = await runDownloadScript(streamedResponse(JSON.stringify(live)));
     // Reject the whole untrusted manifest and retain both verified published fallbacks.
     assert.equal(result.armOption.disabled, false);
-    assert.equal(result.checksumValue.textContent, 'FB5821B0931BBB56CAD83284757EC7A05A14128F949D16B1AC6B582F4365B778');
+    assert.equal(result.checksumValue.textContent, '390D69FB32D3C6177E3BBB925B8A174ABBEFC0A494A39BAC560114DF9C32820C');
     result.architecture.value = 'arm64';
     result.architecture.change();
     result.primary.click();
-    assert.equal(result.navigations.at(-1), 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe');
-    assert.equal(result.checksumValue.textContent, '5087BF85ACA07B89AF0521F1B0AFF741C3FD215CEDFC0B271187FD8C2E1AF8E4');
+    assert.equal(result.navigations.at(-1), 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe?revision=20261028');
+    assert.equal(result.checksumValue.textContent, '4EAAD3326064BAB5C7D4EF069A81B47F8185431CF3BA11DB0141061995FC03BB');
   }
 });
 
