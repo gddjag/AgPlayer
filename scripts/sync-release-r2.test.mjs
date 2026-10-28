@@ -474,17 +474,23 @@ test('latest retains an explicit same-version Mac revision without changing othe
   for (const revision of ['../20261027','20261027&x=1','',20261027]) {
     assert.throws(() => releaseSync.buildLatest({...input,files:[{...files[0],revision}]}), /revision/i);
   }
-  assert.throws(() => releaseSync.buildLatest({...input,files:[{...files[1],revision:'20261027'}]}), /revision/i);
+  for (const architecture of ['x64', 'arm64']) {
+    const result = releaseSync.buildLatest({...input, files:[{...files[1], name:`AgPlayer-Setup-1.1.2-${architecture}.exe`, revision:'20261028'}]});
+    assert.ok(result.files[0].r2Url.endsWith(`-${architecture}.exe?revision=20261028`));
+  }
+  for (const name of ['AgPlayer-1.1.2-arm64-release.apk', 'unknown.exe', 'AgPlayer-Setup-1.1.3-x64.exe']) {
+    assert.throws(() => releaseSync.buildLatest({...input,files:[{...files[1],name,revision:'20261028'}]}), /revision/i);
+  }
 });
 
-test('ordinary same-version sync retains a verified Mac revision from current latest', async () => {
+test('ordinary same-version sync retains verified desktop revisions from current latest', async () => {
   await withAppendFixture(async ({directory, files, writes, run}) => {
     const input = JSON.parse(await readFile(join(directory,'manifest.json'),'utf8'));
-    input.files = files.map(file => file.name.endsWith('.dmg') ? {...file,revision:'20261027'} : file);
+    input.files = files.map(file => /\.(dmg|exe)$/.test(file.name) ? {...file,revision:'20261028'} : file);
     const current = releaseSync.buildLatest(input);
     const mac = current.files.find(file => file.name.endsWith('.dmg'));
     delete mac.revision;
-    mac.revision = '20261027'; // Python publisher appends this field after the URLs.
+    mac.revision = '20261028'; // Python publisher appends this field after the URLs.
     const withCurrent = (command,args) => {
       if (args[1] === 'get-object') {
         writeFileSync(args[args.indexOf('updates/latest.json')+1],JSON.stringify(current));

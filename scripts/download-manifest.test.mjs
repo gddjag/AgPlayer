@@ -247,7 +247,7 @@ test('download page preserves the FAQ and exposes Android plus HarmonyOS cards',
   assert.match(html, /AgPlayer-1\.1\.2-arm64-release\.apk/);
   assert.match(html, /id="harmonyos"/);
   assert.match(html, /HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版/);
-  assert.match(html, /downloads\.js\?v=20261027-macos-fixes/);
+  assert.match(html, /downloads\.js\?v=20261028-desktop-fixes/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
@@ -365,4 +365,38 @@ test('same-version Mac revision uses verified canonical paths with cache-busting
     const rejected = await runDownloadScript(streamedResponse(JSON.stringify(bad)));
     assert.notEqual(rejected.macChecksum.textContent, 'B'.repeat(64));
   }
+});
+
+test('Windows desktop revisions preserve architecture selection and exact official URLs', async () => {
+  const value = manifest();
+  const x64 = value.files[0];
+  const arm64 = { ...x64, name: x64.name.replace('-x64.exe', '-arm64.exe'), sha256: 'd'.repeat(64) };
+  arm64.githubUrl = x64.githubUrl.replace('-x64.exe', '-arm64.exe');
+  arm64.r2Url = x64.r2Url.replace('-x64.exe', '-arm64.exe');
+  value.files.push(arm64);
+  for (const file of [x64, arm64]) {
+    file.revision = '20261028';
+    file.r2Url += '?revision=20261028';
+    file.githubUrl += '?revision=20261028';
+  }
+  const result = await runDownloadScript(streamedResponse(JSON.stringify(value)));
+  assert.equal(result.primary.dataset.downloadUrl, x64.r2Url);
+  result.architecture.value = 'arm64';
+  result.architecture.change();
+  assert.equal(result.primary.dataset.downloadUrl, arm64.r2Url);
+  assert.equal(result.github.dataset.downloadUrl, arm64.githubUrl);
+  assert.equal(result.checksumValue.textContent, 'D'.repeat(64));
+  for (const change of [{ revision: '../20261028' }, { revision: 20261028 }, { r2Url: x64.r2Url + '&host=evil' }]) {
+    const bad = structuredClone(value);
+    Object.assign(bad.files[0], change);
+    const rejected = await runDownloadScript(streamedResponse(JSON.stringify(bad)));
+    assert.notEqual(rejected.primary.dataset.downloadUrl, x64.r2Url);
+  }
+  const androidRevision = structuredClone(value);
+  const android = androidRevision.files[2];
+  android.revision = '20261028';
+  android.r2Url += '?revision=20261028';
+  android.githubUrl += '?revision=20261028';
+  const rejected = await runDownloadScript(streamedResponse(JSON.stringify(androidRevision)));
+  assert.notEqual(rejected.androidPrimary.href, android.r2Url);
 });

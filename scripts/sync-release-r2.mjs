@@ -50,9 +50,10 @@ export function buildLatest(manifest) {
         throw new Error('Invalid latest release file');
       }
       const name = encodeURIComponent(file.name);
-      if (file.revision !== undefined && (file.name !== `AgPlayer-${version}-macOS-universal.dmg`
+      if (file.revision !== undefined && (![ `AgPlayer-${version}-macOS-universal.dmg`,
+          `AgPlayer-Setup-${version}-x64.exe`, `AgPlayer-Setup-${version}-arm64.exe` ].includes(file.name)
           || typeof file.revision !== 'string' || !/^\d{8}$/.test(file.revision))) {
-        throw new Error('Invalid Mac revision');
+        throw new Error('Invalid desktop revision');
       }
       const revisionQuery = file.revision === undefined ? '' : `?revision=${file.revision}`;
       return {
