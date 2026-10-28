@@ -1,0 +1,104 @@
+{
+  "releaseId": 414882152,
+  "tag": "v1.1.2",
+  "target": "24df8985e064cda64feee3c78e0754a2492e0617",
+  "userAuthorized": "2026-10-29 删除旧包；仅删除四个历史资产，本地完整备份已按 SHA-256 复核。",
+  "assets": [
+    {
+      "id": 647102603,
+      "name": "AgPlayer-1.1.2-arm64-release.apk",
+      "size": 237844183,
+      "digest": "sha256:d1c1739fff87f9d49f9f04a0d5d53ee0c5bed2ab70f1bb596659bb2ee8374777",
+      "state": "uploaded",
+      "remove": false
+    },
+    {
+      "id": 685824476,
+      "name": "AgPlayer-1.1.2-macOS-arm64.dmg",
+      "size": 56498670,
+      "digest": "sha256:ebd4ebb314557ac6ac5551069f0a327d5fc6c959af697d8a15000725e12a3b26",
+      "state": "uploaded",
+      "remove": false
+    },
+    {
+      "id": 685825713,
+      "name": "AgPlayer-1.1.2-macOS-universal-bundled-models.dmg",
+      "size": 453804812,
+      "digest": "sha256:40f792bddd77e8955c9cdac4d5f138b5cfc5bd44b843c99a29e2bc4ff8e1575e",
+      "state": "uploaded",
+      "remove": false
+    },
+    {
+      "id": 684098555,
+      "name": "AgPlayer-1.1.2-macOS-universal.dmg",
+      "size": 115237077,
+      "digest": "sha256:f4ca11bdd3a599e43b3e78478063b79748bed1715a1379bcb6580005d581b94f",
+      "state": "uploaded",
+      "remove": false
+    },
+    {
+      "id": 682104549,
+      "name": "AgPlayer-1.1.2-macOS-universal.dmg.before-desktop-20261028",
+      "size": 114988426,
+      "digest": "sha256:5c62f63d62ff41f4a102151397da8b824f8d0c17a3dcbb473367c3ed2ec98f2a",
+      "state": "uploaded",
+      "remove": true
+    },
+    {
+      "id": 647102605,
+      "name": "AgPlayer-1.1.2-macOS-universal.dmg.original-20261016",
+      "size": 114609080,
+      "digest": "sha256:912b2c9659cf0e71ebb586155bee61ad15ac66cbb4688510109b89227a0ff993",
+      "state": "uploaded",
+      "remove": true
+    },
+    {
+      "id": 685825035,
+      "name": "AgPlayer-1.1.2-macOS-x86_64.dmg",
+      "size": 63109379,
+      "digest": "sha256:649f361d9acacab4aa14599fd1472b729523c52fcd446dfec7b42de424f60734",
+      "state": "uploaded",
+      "remove": false
+    },
+    {
+      "id": 684099469,
+      "name": "AgPlayer-Setup-1.1.2-arm64.exe",
+      "size": 29635362,
+      "digest": "sha256:4eaad3326064bab5c7d4ef069a81b47f8185431cf3ba11db0141061995fc03bb",
+      "state": "uploaded",
+      "remove": false
+    },
+    {
+      "id": 670522430,
+      "name": "AgPlayer-Setup-1.1.2-arm64.exe.before-desktop-20261028",
+      "size": 29625556,
+      "digest": "sha256:5087bf85aca07b89af0521f1b0aff741c3fd215cedfc0b271187fd8c2e1af8e4",
+      "state": "uploaded",
+      "remove": true
+    },
+    {
+      "id": 685766331,
+      "name": "AgPlayer-Setup-1.1.2-x64-arm64-bundled-models.exe",
+      "size": 281176468,
+      "digest": "sha256:392af905b0a96daf68783901afe28b0c085fe7d055c59e1e135ccc1f938aaade",
+      "state": "uploaded",
+      "remove": false
+    },
+    {
+      "id": 684099740,
+      "name": "AgPlayer-Setup-1.1.2-x64.exe",
+      "size": 33111791,
+      "digest": "sha256:390d69fb32d3c6177e3bbb925b8a174abbefc0a494a39bac560114df9c32820c",
+      "state": "uploaded",
+      "remove": false
+    },
+    {
+      "id": 647102604,
+      "name": "AgPlayer-Setup-1.1.2-x64.exe.before-desktop-20261028",
+      "size": 32027584,
+      "digest": "sha256:fb5821b0931bbb56cad83284757ec7a05a14128f949d16b1ac6b582f4365b778",
+      "state": "uploaded",
+      "remove": true
+    }
+  ]
+}

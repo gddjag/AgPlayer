@@ -53,7 +53,7 @@ async function runDownloadScript(response, timers = {}, withVariants = false, wi
   const armOption = fakeElement();
   const bundledOption = fakeElement();
   const macArchitecture = fakeElement();
-  macArchitecture.value = 'arm64';
+  macArchitecture.value = '';
   const macOptions = ['arm64', 'x86_64', 'bundled'].map(() => fakeElement());
   const windowsFilename = fakeElement();
   const macFilename = fakeElement();
@@ -262,7 +262,7 @@ test('download page preserves the FAQ and exposes Android plus HarmonyOS cards',
   assert.match(html, /AgPlayer-1\.1\.2-arm64-release\.apk/);
   assert.match(html, /id="harmonyos"/);
   assert.match(html, /HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版/);
-  assert.match(html, /downloads\.js\?v=20261028-bundled-models-1/);
+  assert.match(html, /downloads\.js\?v=20261029-macos-selection-2/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
@@ -439,6 +439,7 @@ test('desktop variants select Windows combined models and real Mac chip packages
   const variants = desktopVariantsManifest();
   const result = await runDownloadScript(variantsResponse(variants), {}, true);
   assert.equal(result.bundledOption.disabled, false);
+  assert.equal(result.macArchitecture.value, 'arm64');
   assert.equal(result.macPrimary.href, variants.files[1].r2Url);
   assert.equal(result.macFilename.textContent, variants.files[1].name);
   result.architecture.value = 'bundled'; result.architecture.change();
@@ -501,4 +502,19 @@ test('unavailable or forged live variants retain the exact published model downl
   assert.equal(result.primary.dataset.downloadUrl, published.files.find(f => f.id === 'windows-models').r2Url);
   result.macArchitecture.value = 'bundled'; result.macArchitecture.change();
   assert.equal(result.macChecksum.textContent, published.files.find(f => f.id === 'macos-models').sha256.toUpperCase());
+});
+
+
+test('live variant refresh preserves a selected Intel or bundled Mac download', async () => {
+  const published = JSON.parse(await readFile(join(import.meta.dirname, '..', 'updates', 'desktop-variants.json'), 'utf8'));
+  for (const value of ['x86_64', 'bundled']) {
+    let finishVariants;
+    const pending = new Promise(resolve => { finishVariants = resolve; });
+    const result = await runDownloadScript(url => url === '/updates/desktop-variants.json' ? pending : streamedResponse(JSON.stringify(dualWindowsManifest())), {}, true, true);
+    result.macArchitecture.value = value; result.macArchitecture.change();
+    finishVariants(streamedResponse(JSON.stringify(published)));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(result.macArchitecture.value, value);
+    assert.equal(result.macFilename.textContent, published.files.find(f => f.id === (value === 'bundled' ? 'macos-models' : 'macos-x86_64')).name);
+  }
 });

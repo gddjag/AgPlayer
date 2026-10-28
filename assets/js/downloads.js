@@ -313,6 +313,7 @@
       windowsReleases.bundled = variants['windows-models'];
       Object.assign(macReleases, {arm64: variants['macos-arm64'], x86_64: variants['macos-x86_64'], bundled: variants['macos-models']});
       renderVariantOptions();
+      if (macArchitecture && !macReleases[macArchitecture.value]) macArchitecture.value = 'arm64';
       renderRelease(windowsReleases[architecture?.value] || windowsReleases.x64);
       renderSelectedMacRelease();
     };

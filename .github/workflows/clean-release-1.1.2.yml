@@ -1,0 +1,30 @@
+name: Remove four obsolete 1.1.2 installers
+on:
+  push:
+    branches: [main]
+    paths: ['docs/releases/1.1.2-remove-obsolete-assets-20261029.json']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: r2-release-latest
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    if: github.repository == 'gddjag/AgPlayer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s scripts -p test_clean_release_112.py
+      - name: Remove only four SHA-pinned historical assets with verified local backups
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/clean_release_112.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: obsolete-assets-cleanup-receipt
+          path: obsolete-assets-cleanup-receipt.json
+          if-no-files-found: error
