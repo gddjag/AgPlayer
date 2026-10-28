@@ -1,0 +1,28 @@
+name: Preserve desktop variant Chinese filename
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/repair-desktop-variant-name-1.1.2.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: r2-release-latest
+  cancel-in-progress: false
+jobs:
+  repair:
+    if: github.repository == 'gddjag/AgPlayer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Rename only the exact verified new asset and inspect the server result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/repair-desktop-variant-name-1.1.2.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-variant-name-repair
+          path: variant-name-repair.json
