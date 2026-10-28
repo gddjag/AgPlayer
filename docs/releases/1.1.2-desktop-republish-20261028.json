@@ -1,0 +1,27 @@
+{
+  "version": "1.1.2",
+  "revision": "20261028",
+  "files": [
+    {
+      "name": "AgPlayer-1.1.2-macOS-universal.dmg",
+      "size": 115237077,
+      "sha256": "f4ca11bdd3a599e43b3e78478063b79748bed1715a1379bcb6580005d581b94f",
+      "sourceCommit": "33a93c0052c80c73f934c7e28f5a2b00dd301066",
+      "stagingUrl": "https://cheese-mai-bra-slightly.trycloudflare.com/AgPlayer-1.1.2-macOS-universal.dmg"
+    },
+    {
+      "name": "AgPlayer-Setup-1.1.2-x64.exe",
+      "size": 33111791,
+      "sha256": "390d69fb32d3c6177e3bbb925b8a174abbefc0a494a39bac560114df9c32820c",
+      "sourceCommit": "33a93c0052c80c73f934c7e28f5a2b00dd301066",
+      "stagingUrl": "https://cheese-mai-bra-slightly.trycloudflare.com/AgPlayer-Setup-1.1.2-x64.exe"
+    },
+    {
+      "name": "AgPlayer-Setup-1.1.2-arm64.exe",
+      "size": 29635362,
+      "sha256": "4eaad3326064bab5c7d4ef069a81b47f8185431cf3ba11db0141061995fc03bb",
+      "sourceCommit": "33a93c0052c80c73f934c7e28f5a2b00dd301066",
+      "stagingUrl": "https://cheese-mai-bra-slightly.trycloudflare.com/AgPlayer-Setup-1.1.2-arm64.exe"
+    }
+  ]
+}

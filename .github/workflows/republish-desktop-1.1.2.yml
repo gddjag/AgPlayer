@@ -1,0 +1,45 @@
+name: Publish verified desktop 1.1.2 revision 20261028
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/releases/1.1.2-desktop-republish-20261028.json']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: r2-release-latest
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'gddjag/AgPlayer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s scripts -p test_republish_desktop_112.py
+      - run: pip install boto3 requests
+      - name: Verify all installers, preserve desktop history, replace three packages, then promote manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+          AWS_EC2_METADATA_DISABLED: 'true'
+        run: python scripts/republish-desktop-1.1.2.py | tee desktop-publication-receipt.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-publication-receipt-20261028
+          path: desktop-publication-receipt.json
+          if-no-files-found: error
