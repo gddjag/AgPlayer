@@ -267,8 +267,7 @@ window.AG_COPY = {
         "arm64": "ARM64（Snapdragon 等）",
         "arm64Pending": "ARM64（Snapdragon 等）· 待发布",
         "architectureHelp": "Intel / AMD 电脑选择 x64；Snapdragon 等 Windows ARM 电脑选择 ARM64。",
-        "available": "Windows {version} 已发布，可从 R2 或 GitHub 下载。",
-        "revision": "1.1.2 已更新：修复专业模式 BPM 显示，减少大曲库及沉浸视觉卡顿。已安装 1.1.2 的用户请重新下载覆盖安装。"
+        "available": "Windows {version} 已发布，可从 R2 或 GitHub 下载。"
       },
       "checksum": {
         "label": "SHA-256 校验值",
@@ -281,15 +280,12 @@ window.AG_COPY = {
         "name": "macOS",
         "status": "暂未提供下载",
         "system": "macOS 13 及以上（Apple / Intel）",
-        "description": "通用安装包，同时支持 Intel 与 Apple Silicon。",
-        "revision": "1.1.2 已更新：修复菜单栏崩溃和专业模式 BPM 显示，改善舞台人物动作及沉浸视觉流畅度。已安装 1.1.2 的用户请重新下载覆盖安装。",
         "security": "此版本尚未经过 Apple 公证。首次打开如遇系统提示，请先阅读 Apple 官方教程，并确认文件来自可信来源。",
         "help": "在 Mac 上安全地打开 App（Apple 官方教程）"
       },
       "android": {
         "name": "Android安卓版",
-        "system": "Android 8.0 及以上（ARM64）",
-        "description": "适用于 64 位 Android 8.0 及以上设备。官网版支持检查更新和“支持作者”，分离模型已内置。"
+        "system": "Android 8.0 及以上（ARM64）"
       },
       "harmony": {
         "name": "HarmonyOS鸿蒙版",
@@ -659,8 +655,7 @@ window.AG_COPY = {
         "arm64": "ARM64 (Snapdragon and others)",
         "arm64Pending": "ARM64 (Snapdragon) · Coming soon",
         "architectureHelp": "Choose x64 for Intel / AMD PCs, or ARM64 for Snapdragon and other Windows ARM PCs.",
-        "available": "Windows {version} is available from R2 or GitHub.",
-        "revision": "1.1.2 updated: fixes professional-mode BPM display and reduces stalls in large libraries and immersive visuals. If you already have 1.1.2, download it again and reinstall."
+        "available": "Windows {version} is available from R2 or GitHub."
       },
       "checksum": {
         "label": "SHA-256 checksum",
@@ -673,15 +668,12 @@ window.AG_COPY = {
         "name": "macOS",
         "status": "Not yet available",
         "system": "macOS 13 or later (Apple / Intel)",
-        "description": "One universal installer for Intel and Apple Silicon.",
-        "revision": "1.1.2 updated: fixes menu bar crashes and professional-mode BPM display, and improves festival motion and immersive performance. If you already have 1.1.2, download it again and replace the app.",
         "security": "This build is not Apple-notarized. If macOS shows a warning on first launch, read Apple's official guide and verify that the file came from a trusted source.",
         "help": "Safely open apps on Mac (Apple Support)"
       },
       "android": {
         "name": "Android",
-        "system": "Android 8.0 or later (ARM64)",
-        "description": "For 64-bit Android 8.0 or later devices. Website edition includes update checks, Support the Author, and bundled separation models."
+        "system": "Android 8.0 or later (ARM64)"
       },
       "harmony": {
         "name": "HarmonyOS",

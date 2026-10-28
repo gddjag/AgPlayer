@@ -2,6 +2,8 @@
 
 纯 HTML、CSS、原生 JavaScript；无需 npm、构建步骤或在线字体。
 
+2026-10-28 用户确认：官网不展示最新功能、修复摘要、版本更新说明或同版本重新安装提示。后续发版只同步必要的下载元数据与链接，不往下载卡片追加更新内容；保持此次移除的 Windows/macOS 更新摘要、macOS 通用包说明和 Android 功能说明不再出现。
+
 - `index.html`：首页、波形、功能、音频工具、迷你播放器、隐私与下载入口。
 - `download.html`：独立下载页；Windows、macOS 与 Android 官网版从受校验的正式版本清单更新，HarmonyOS 引导到应用市场。
 - `about.html`：独立关于页。

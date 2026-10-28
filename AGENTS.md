@@ -6,6 +6,8 @@
 - The authorized site ID is `d753c9d11730ddacf686e8ccddce6e11`. Include it exactly once on the homepage.
 - Keep local previews and published source consistent; do not remove or replace the analytics integration without an explicit user request.
 
+- 2026-10-28 用户要求：官网页面不展示每次发布的最新功能、修复摘要、版本更新说明或同版本重新安装提示。下载卡片保留系统要求、架构、文件信息、下载入口、校验值和必要的渠道或安全说明；不要在后续发版时重新加入此次删除的 Windows/macOS 更新摘要、macOS 通用包说明及 Android 功能说明。
+
 # Synchronized releases
 
 - Publish verified Windows x64 and native ARM64, Universal macOS, and ARM64 Android website installers under the same version and release tag. Promote the shared download manifest only after all four matching installers are available and their sizes and SHA-256 checksums are verified.
