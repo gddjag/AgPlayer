@@ -57,13 +57,13 @@ class FakeRemote:
         self.events.append(('upload', name))
         self.next_id += 1
         if name == self.fail_upload:
-            self.assets.append(dict(id=self.next_id, name=name, state='starter', size=0, digest=None))
+            self.assets.append(dict(id=self.next_id, name=variants.GITHUB_NAMES[name], label=name, state='starter', size=0, digest=None))
             raise OSError('interrupted upload')
         raw = path.read_bytes()
-        self.assets.append(dict(id=self.next_id, name=name, state='uploaded', size=len(raw), digest='sha256:' + digest(raw)))
+        self.assets.append(dict(id=self.next_id, name=variants.GITHUB_NAMES[name], label=name, state='uploaded', size=len(raw), digest='sha256:' + digest(raw)))
 
     def readback_asset(self, asset, path):
-        name = asset['name']
+        name = next((name for name, github in variants.GITHUB_NAMES.items() if github == asset['name']), asset['name'])
         self.events.append(('github-readback', name))
         raw = (self.old_bytes | self.new_bytes)[name]
         path.write_bytes(b'corrupt github' if name == self.corrupt_github else raw)
@@ -148,7 +148,7 @@ class PublishDesktopVariantsTests(unittest.TestCase):
         for file in public['files']:
             self.assertNotIn('stagingUrl', file)
             self.assertTrue(file['r2Url'].endswith(quote(file['name'], safe='')))
-            self.assertTrue(file['githubUrl'].endswith(quote(file['name'], safe='')))
+            self.assertTrue(file['githubUrl'].endswith(quote(variants.GITHUB_NAMES[file['name']], safe='')))
 
     def test_completed_run_resumes_without_staging_or_writes(self):
         variants.publish(self.descriptor, self.remote)
@@ -218,7 +218,7 @@ class PublishDesktopVariantsTests(unittest.TestCase):
 
     def test_same_name_unknown_github_or_r2_is_never_overwritten(self):
         name = next(iter(self.new))
-        self.remote.assets.append(dict(id=123, name=name, state='uploaded', size=2, digest='sha256:unknown'))
+        self.remote.assets.append(dict(id=123, name=variants.GITHUB_NAMES[name], state='uploaded', size=2, digest='sha256:unknown'))
         with self.assertRaises(ValueError):
             variants.publish(self.descriptor, self.remote)
         self.assertFalse(self.writes())
@@ -240,7 +240,7 @@ class PublishDesktopVariantsTests(unittest.TestCase):
             self.assertEqual(next(a['id'] for a in self.remote.assets if a['name'] == name), variants.BASE_IDS[name])
 
     def test_nonzero_starter_is_not_deletable(self):
-        self.remote.assets.append(dict(id=123, name=next(iter(self.new)), state='starter', size=1, digest=None))
+        self.remote.assets.append(dict(id=123, name=variants.GITHUB_NAMES[next(iter(self.new))], state='starter', size=1, digest=None))
         with self.assertRaises(ValueError):
             variants.publish(self.descriptor, self.remote)
         self.assertFalse(self.writes())
@@ -278,6 +278,61 @@ class PublishDesktopVariantsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             variants.publish(self.descriptor, self.remote)
         self.assertFalse(self.writes())
+
+    def test_model_mirrors_have_fixed_ascii_names_and_full_chinese_labels(self):
+        variants.publish(self.descriptor, self.remote)
+        for id in ('windows-models', 'macos-models'):
+            original = variants.SPECS[id][0]
+            github = variants.GITHUB_NAMES[original]
+            self.assertTrue(github.isascii())
+            self.assertIn('-bundled-models.', github)
+            asset = next(a for a in self.remote.assets if a['name'] == github)
+            self.assertIn(original, asset['label'])
+            self.assertEqual(self.remote.r2[variants.PREFIX + original], self.new[original])
+            self.assertNotIn(variants.PREFIX + github, self.remote.r2)
+        canonical = 'AgPlayer-1.1.2-macOS-universal.dmg'
+        self.assertEqual(next(a['id'] for a in self.remote.assets if a['name'] == canonical), variants.BASE_IDS[canonical])
+        self.assertEqual(self.remote.r2[variants.PREFIX + canonical], self.old[canonical])
+
+    def test_repaired_first_ascii_model_upload_resumes_without_reupload(self):
+        original = variants.SPECS['windows-models'][0]
+        self.remote.assets.append(dict(id=685766331, name=variants.GITHUB_NAMES[original], label=original,
+            state='uploaded', size=len(self.new[original]), digest='sha256:' + digest(self.new[original])))
+        variants.publish(self.descriptor, self.remote)
+        self.assertNotIn(('upload', original), self.remote.events)
+        self.assertNotIn(('staging', original), self.remote.events)
+        self.assertEqual(next(a['id'] for a in self.remote.assets if a['name'] == variants.GITHUB_NAMES[original]), 685766331)
+        self.remote.expired = True
+        self.remote.events.clear()
+        variants.publish(self.descriptor, self.remote)
+        self.assertFalse(self.writes())
+
+    def test_missing_or_wrong_model_label_rejects_before_any_write(self):
+        for id in ('windows-models', 'macos-models'):
+            name = variants.SPECS[id][0]
+            remote = copy.deepcopy(self.remote)
+            remote.assets.append(dict(id=123, name=variants.GITHUB_NAMES[name], label='unverified model',
+                state='uploaded', size=len(self.new[name]), digest='sha256:' + digest(self.new[name])))
+            with self.subTest(id=id), self.assertRaises(ValueError):
+                variants.publish(self.descriptor, remote)
+            self.assertFalse(any(e[0] in {'put', 'upload', 'delete'} for e in remote.events))
+
+    def test_real_remote_upload_uses_only_known_ascii_names_and_original_labels(self):
+        remote = variants.Remote.__new__(variants.Remote)
+        remote.headers = {}
+        calls = []
+        response = type('Response', (), {'raise_for_status': lambda self: None})()
+        remote.requests = type('Requests', (), {'post': lambda self, *args, **kwargs: calls.append(kwargs) or response})()
+        path = Path(self.temporary.name) / 'verified-installer'
+        path.write_bytes(b'verified')
+        for original, github in variants.GITHUB_NAMES.items():
+            remote.upload(path, original)
+            self.assertEqual(calls[-1]['params'], {'name': github, 'label': original})
+            self.assertTrue(calls[-1]['params']['name'].isascii())
+        for forbidden in ['unknown.exe', 'AgPlayer-1.1.2-macOS-universal.dmg', 'AgPlayer-Setup-1.1.2-x64-arm64.exe']:
+            with self.subTest(name=forbidden), self.assertRaises(ValueError):
+                remote.upload(path, forbidden)
+        self.assertEqual(len(calls), 4)
 
     def test_real_remote_put_is_create_only_and_cannot_touch_canonical_keys(self):
         remote = variants.Remote.__new__(variants.Remote)

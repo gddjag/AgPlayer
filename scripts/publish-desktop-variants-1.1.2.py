@@ -29,6 +29,10 @@ SPECS = {
     'macos-x86_64': ('AgPlayer-1.1.2-macOS-x86_64.dmg', ['x86_64'], False),
     'macos-models': ('AgPlayer-1.1.2-macOS-universal（内置伴奏分离模型版本）.dmg', ['arm64', 'x86_64'], True),
 }
+# GitHub sanitizes non-ASCII asset names. R2 and local artifacts keep the exact Chinese names.
+GITHUB_NAMES = {spec[0]: spec[0] for spec in SPECS.values()}
+GITHUB_NAMES[SPECS['windows-models'][0]] = 'AgPlayer-Setup-1.1.2-x64-arm64-bundled-models.exe'
+GITHUB_NAMES[SPECS['macos-models'][0]] = 'AgPlayer-1.1.2-macOS-universal-bundled-models.dmg'
 BASE_IDS = {'AgPlayer-1.1.2-arm64-release.apk': 647102603,
             'AgPlayer-1.1.2-macOS-universal.dmg': 684098555,
             'AgPlayer-Setup-1.1.2-arm64.exe': 684099469,
@@ -86,7 +90,7 @@ def public_manifest(descriptor):
         public = {key: value for key, value in file.items() if key != 'stagingUrl'}
         encoded = quote(file['name'], safe='')
         public.update(r2Url='https://download.agplayer.com/' + PREFIX + encoded,
-                      githubUrl='https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/' + encoded)
+                      githubUrl='https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/' + quote(GITHUB_NAMES[file['name']], safe=''))
         files.append(public)
     return dict(schemaVersion=1, kind='desktop-download-variants', version=VERSION, tag='v1.1.2', files=files)
 
@@ -141,8 +145,10 @@ class Remote:
         return None if response.status_code == 204 else response.json()
 
     def upload(self, path, name):
+        if name not in GITHUB_NAMES:
+            raise ValueError('Unknown GitHub variant upload name')
         with path.open('rb') as stream:
-            response = self.requests.post(UPLOAD_API + f'/releases/{RELEASE_ID}/assets', params={'name': name},
+            response = self.requests.post(UPLOAD_API + f'/releases/{RELEASE_ID}/assets', params={'name': GITHUB_NAMES[name], 'label': name},
                 headers=self.headers | {'Content-Type': 'application/octet-stream', 'Content-Length': str(path.stat().st_size)},
                 data=stream, timeout=(30, 900), allow_redirects=False)
         response.raise_for_status()
@@ -227,19 +233,22 @@ def publish(descriptor, remote):
                 or len({a['name'] for a in assets}) != len(assets)):
             raise ValueError('Unexpected asset pagination or duplicate identity')
         by_name = {a['name']: a for a in assets}
+        resolved = dict(by_name)
         for file in baseline['files']:
             asset = by_name.get(file['name'], {})
             if (asset.get('id') != BASE_IDS[file['name']] or asset.get('state') != 'uploaded'
                     or asset.get('size') != file['size'] or asset.get('digest') != 'sha256:' + file['sha256']):
                 raise ValueError('Published base asset changed: ' + file['name'])
         history = {a['id']: {key: a.get(key) for key in ('name', 'size', 'state', 'digest')}
-                   for a in assets if a['name'] not in new_files}
+                   for a in assets if a['name'] not in GITHUB_NAMES.values()}
         if preserved_assets is not None and history != preserved_assets:
             raise ValueError('Historical assets changed during publication')
         preserved_assets = history
         states = {}
         for name, file in new_files.items():
-            asset = by_name.get(name)
+            asset = by_name.get(GITHUB_NAMES[name])
+            if asset is not None:
+                resolved[name] = asset
             if asset is None:
                 states[name] = 'missing'
             elif type(asset.get('id')) is not int or asset['id'] <= 0 or asset['id'] in preserved_assets:
@@ -247,11 +256,12 @@ def publish(descriptor, remote):
             elif asset.get('state') == 'starter' and asset.get('size') == 0 and asset.get('digest') is None:
                 states[name] = 'starter'
             elif (asset.get('state') == 'uploaded' and asset.get('size') == file['size']
-                    and asset.get('digest') == 'sha256:' + file['sha256']):
+                    and asset.get('digest') == 'sha256:' + file['sha256']
+                    and (not file['bundledModels'] or name in (asset.get('label') or ''))):
                 states[name] = 'uploaded'
             else:
                 raise ValueError('Unknown same-name GitHub asset conflict: ' + name)
-        return by_name, states
+        return resolved, states
 
     def optional_get(key):
         try:
