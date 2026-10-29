@@ -1,0 +1,71 @@
+{
+  "releaseId": 414882152,
+  "tag": "v1.1.2",
+  "targetCommit": "24df8985e064cda64feee3c78e0754a2492e0617",
+  "assets": [
+    {
+      "id": 647102603,
+      "name": "AgPlayer-1.1.2-arm64-release.apk",
+      "label": "",
+      "size": 237844183,
+      "digest": "sha256:d1c1739fff87f9d49f9f04a0d5d53ee0c5bed2ab70f1bb596659bb2ee8374777",
+      "state": "uploaded"
+    },
+    {
+      "id": 685824476,
+      "name": "AgPlayer-1.1.2-macOS-arm64.dmg",
+      "label": "AgPlayer-1.1.2-macOS-arm64.dmg",
+      "size": 56498670,
+      "digest": "sha256:ebd4ebb314557ac6ac5551069f0a327d5fc6c959af697d8a15000725e12a3b26",
+      "state": "uploaded"
+    },
+    {
+      "id": 685825713,
+      "name": "AgPlayer-1.1.2-macOS-universal-bundled-models.dmg",
+      "label": "AgPlayer-1.1.2-macOS-universal（内置伴奏分离模型版本）.dmg",
+      "size": 453804812,
+      "digest": "sha256:40f792bddd77e8955c9cdac4d5f138b5cfc5bd44b843c99a29e2bc4ff8e1575e",
+      "state": "uploaded"
+    },
+    {
+      "id": 684098555,
+      "name": "AgPlayer-1.1.2-macOS-universal.dmg",
+      "label": "",
+      "size": 115237077,
+      "digest": "sha256:f4ca11bdd3a599e43b3e78478063b79748bed1715a1379bcb6580005d581b94f",
+      "state": "uploaded"
+    },
+    {
+      "id": 685825035,
+      "name": "AgPlayer-1.1.2-macOS-x86_64.dmg",
+      "label": "AgPlayer-1.1.2-macOS-x86_64.dmg",
+      "size": 63109379,
+      "digest": "sha256:649f361d9acacab4aa14599fd1472b729523c52fcd446dfec7b42de424f60734",
+      "state": "uploaded"
+    },
+    {
+      "id": 684099469,
+      "name": "AgPlayer-Setup-1.1.2-arm64.exe",
+      "label": "",
+      "size": 29635362,
+      "digest": "sha256:4eaad3326064bab5c7d4ef069a81b47f8185431cf3ba11db0141061995fc03bb",
+      "state": "uploaded"
+    },
+    {
+      "id": 685766331,
+      "name": "AgPlayer-Setup-1.1.2-x64-arm64-bundled-models.exe",
+      "label": "AgPlayer-Setup-1.1.2-x64-arm64（内置伴奏分离模型版本）.exe",
+      "size": 281176468,
+      "digest": "sha256:392af905b0a96daf68783901afe28b0c085fe7d055c59e1e135ccc1f938aaade",
+      "state": "uploaded"
+    },
+    {
+      "id": 684099740,
+      "name": "AgPlayer-Setup-1.1.2-x64.exe",
+      "label": "",
+      "size": 33111791,
+      "digest": "sha256:390d69fb32d3c6177e3bbb925b8a174abbefc0a494a39bac560114df9c32820c",
+      "state": "uploaded"
+    }
+  ]
+}

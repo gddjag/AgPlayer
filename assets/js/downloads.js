@@ -156,8 +156,11 @@
         || !/^[a-f0-9]{40}$/.test(file.sourceCommit)) return null;
       const encoded = encodeURIComponent(file.name);
       const githubEncoded = encodeURIComponent(spec[3] || file.name);
-      if (file.githubUrl !== `https://github.com/gddjag/AgPlayer/releases/download/${manifest.tag}/${githubEncoded}`
-        || file.r2Url !== `https://download.agplayer.com/releases/${manifest.tag}/${encoded}`) return null;
+      if (file.revision !== undefined && (!file.id.startsWith('macos-')
+        || typeof file.revision !== 'string' || !/^\d{8}$/.test(file.revision))) return null;
+      const revisionQuery = file.revision === undefined ? '' : `?revision=${file.revision}`;
+      if (file.githubUrl !== `https://github.com/gddjag/AgPlayer/releases/download/${manifest.tag}/${githubEncoded}${revisionQuery}`
+        || file.r2Url !== `https://download.agplayer.com/releases/${manifest.tag}/${encoded}${revisionQuery}`) return null;
       releases[file.id] = { ...file, version, sha256: file.sha256.toUpperCase() };
     }
     return releases;

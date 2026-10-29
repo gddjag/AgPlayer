@@ -262,7 +262,7 @@ test('download page preserves the FAQ and exposes Android plus HarmonyOS cards',
   assert.match(html, /AgPlayer-1\.1\.2-arm64-release\.apk/);
   assert.match(html, /id="harmonyos"/);
   assert.match(html, /HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版/);
-  assert.match(html, /downloads\.js\?v=20261029-macos-selection-2/);
+  assert.match(html, /downloads\.js\?v=20261030-macos-demucs-1/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
@@ -516,5 +516,31 @@ test('live variant refresh preserves a selected Intel or bundled Mac download', 
     await new Promise(resolve => setTimeout(resolve, 0));
     assert.equal(result.macArchitecture.value, value);
     assert.equal(result.macFilename.textContent, published.files.find(f => f.id === (value === 'bundled' ? 'macos-models' : 'macos-x86_64')).name);
+  }
+});
+
+test('same-version Mac variants use only exact dated revision URLs and keep user selection', async () => {
+  const variants = desktopVariantsManifest();
+  for (const file of variants.files.filter(file => file.id.startsWith('macos-'))) {
+    file.revision = '20261029';
+    file.r2Url += '?revision=20261029';
+    file.githubUrl += '?revision=20261029';
+  }
+  const result = await runDownloadScript(variantsResponse(variants), {}, true);
+  assert.equal(result.macArchitecture.value, 'arm64');
+  assert.equal(result.macPrimary.href, variants.files[1].r2Url);
+  result.macArchitecture.value = 'bundled'; result.macArchitecture.change();
+  assert.equal(result.macPrimary.href, variants.files[3].r2Url);
+  assert.equal(result.macGithub.href, variants.files[3].githubUrl);
+  for (const corrupt of [
+    v => {v.files[1].revision = 'latest';},
+    v => {v.files[1].revision = 20261029;},
+    v => {v.files[1].r2Url += '&mirror=evil';},
+    v => {v.files[1].githubUrl = v.files[1].githubUrl.replace('20261029','20261028');},
+    v => {v.files[0].revision = '20261029';v.files[0].r2Url += '?revision=20261029';v.files[0].githubUrl += '?revision=20261029';}
+  ]) {
+    const invalid = structuredClone(variants); corrupt(invalid);
+    const rejected = await runDownloadScript(variantsResponse(invalid), {}, true);
+    assert.equal(rejected.macOptions.some(option => !option.disabled), false);
   }
 });

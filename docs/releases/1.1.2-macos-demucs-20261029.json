@@ -1,0 +1,57 @@
+{
+  "version": "1.1.2",
+  "revision": "20261029",
+  "sourceCommit": "ed00b162b0a3b49164475fb5a01d638bd8e5b508",
+  "files": [
+    {
+      "id": "macos-arm64",
+      "name": "AgPlayer-1.1.2-macOS-arm64.dmg",
+      "architectures": [
+        "arm64"
+      ],
+      "bundledModels": false,
+      "size": 56579629,
+      "sha256": "1cf29455d44a6d3e71af652280af0ff9297d403e8f9b617f57a877f34e93d768",
+      "sourceCommit": "ed00b162b0a3b49164475fb5a01d638bd8e5b508",
+      "stagingUrl": "https://addressed-sorts-surgical-volvo.trycloudflare.com/AgPlayer-1.1.2-macOS-arm64.dmg"
+    },
+    {
+      "id": "macos-x86_64",
+      "name": "AgPlayer-1.1.2-macOS-x86_64.dmg",
+      "architectures": [
+        "x86_64"
+      ],
+      "bundledModels": false,
+      "size": 63085423,
+      "sha256": "11d0e3d38731516df83ef2a401eeac71126d91d8e8df46e52e7eaf607d4a2091",
+      "sourceCommit": "ed00b162b0a3b49164475fb5a01d638bd8e5b508",
+      "stagingUrl": "https://addressed-sorts-surgical-volvo.trycloudflare.com/AgPlayer-1.1.2-macOS-x86_64.dmg"
+    },
+    {
+      "id": "macos-models",
+      "name": "AgPlayer-1.1.2-macOS-universal（内置伴奏分离模型版本）.dmg",
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "bundledModels": true,
+      "size": 453754933,
+      "sha256": "e8b19778d78bc4338838acc0a2a3e27a96b99121ba47fe3f93f2c4a8d58299c3",
+      "sourceCommit": "ed00b162b0a3b49164475fb5a01d638bd8e5b508",
+      "stagingUrl": "https://addressed-sorts-surgical-volvo.trycloudflare.com/AgPlayer-1.1.2-macOS-universal%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.dmg"
+    },
+    {
+      "id": "macos-universal",
+      "name": "AgPlayer-1.1.2-macOS-universal.dmg",
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "bundledModels": false,
+      "size": 115186427,
+      "sha256": "4ecbd7fe88b92779fdc8f2d3277ae2aa0137ea09c44312d2155a975ba38a48c8",
+      "sourceCommit": "ed00b162b0a3b49164475fb5a01d638bd8e5b508",
+      "stagingUrl": "https://addressed-sorts-surgical-volvo.trycloudflare.com/AgPlayer-1.1.2-macOS-universal.dmg"
+    }
+  ]
+}
