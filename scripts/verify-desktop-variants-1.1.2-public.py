@@ -40,7 +40,8 @@ def main():
                          'https://download.agplayer.com/updates/macos/latest.json']:
             fetch(endpoint, temp / 'manifest')
             assert (temp / 'manifest').read_bytes() == canonical_raw, endpoint
-        for file in variants['files']:
+        compatibility_mac = next(f for f in json.loads(canonical_raw)['files'] if f['name'] == 'AgPlayer-1.1.2-macOS-universal.dmg')
+        for file in [*variants['files'], compatibility_mac]:
             for route in ('r2Url', 'githubUrl'):
                 fetch(file[route], temp / 'installer')
                 assert (temp / 'installer').stat().st_size == file['size'], (file['name'], route)
@@ -49,7 +50,7 @@ def main():
                     for block in iter(lambda: stream.read(1024 * 1024), b''):
                         digest.update(block)
                 assert digest.hexdigest() == file['sha256'], (file['name'], route)
-            records.append({key: file[key] for key in ('id', 'name', 'size', 'sha256')})
+            records.append({key: file[key] for key in ('name', 'size', 'sha256')})
             print('Verified both public routes:', file['name'], flush=True)
         for relative in ('download.html', 'assets/js/downloads.js', 'assets/js/translations.js', 'assets/css/premium.css'):
             fetch('https://agplayer.com/' + relative, temp / 'source')
@@ -57,7 +58,7 @@ def main():
         fetch('https://agplayer.com/', temp / 'index.html')
         assert (temp / 'index.html').read_text().count('d753c9d11730ddacf686e8ccddce6e11') == 1
     receipt = dict(version='1.1.2', files=records, allFourPublicGitHubAndR2ByteIdentical=True,
-                   canonicalFeedsUnchanged=True, variantsManifestsByteIdentical=True,
+                   canonicalFeedsMatchCheckedSource=True, macosCompatibilityPackageVerified=True, variantsManifestsByteIdentical=True,
                    websiteSourceByteIdentical=True, analyticsPreserved=True)
     Path('public-desktop-variants-verification.json').write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + '\n')
     print('PUBLIC_DESKTOP_VARIANTS_VERIFIED ' + json.dumps(receipt, ensure_ascii=False))

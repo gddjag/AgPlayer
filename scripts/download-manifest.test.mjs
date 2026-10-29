@@ -71,7 +71,7 @@ async function runDownloadScript(response, timers = {}, withVariants = false, wi
   const androidGithub = fakeElement();
   const androidChecksum = fakeElement();
   const androidChecksumCopy = fakeElement();
-  macChecksum.textContent = 'F4CA11BDD3A599E43B3E78478063B79748BED1715A1379BCB6580005D581B94F';
+  macChecksum.textContent = '4ECBD7FE88B92779FDC8F2D3277AE2AA0137EA09C44312D2155A975BA38A48C8';
   androidChecksum.textContent = 'D1C1739FFF87F9D49F9F04A0D5D53EE0C5BED2AB70F1BB596659BB2EE8374777';
   checksum.setAttribute('hidden', '');
   const documentListeners = new Map();
@@ -175,7 +175,7 @@ test('one verified manifest updates all downloadable platforms and rejects a for
   const bad = manifest();
   bad.files[1].r2Url = 'https://example.com/forged.dmg';
   const rejected = await runDownloadScript(streamedResponse(JSON.stringify(bad)));
-  assert.equal(rejected.macPrimary.href, 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg?revision=20261028');
+  assert.equal(rejected.macPrimary.href, 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg?revision=20261029');
   assert.equal(rejected.checksumValue.textContent, '390D69FB32D3C6177E3BBB925B8A174ABBEFC0A494A39BAC560114DF9C32820C');
 });
 
@@ -183,14 +183,14 @@ test('macOS HTML fallback links the accepted package and official opening guide'
   const html = await readFile(downloadPagePath, 'utf8');
   assert.match(html, /href="https:\/\/support\.apple\.com\/zh-cn\/102445"/);
   assert.match(html, /尚未经过 Apple 公证/);
-  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.1\.2\/AgPlayer-1\.1\.2-macOS-arm64\.dmg"/);
+  assert.match(html, /href="https:\/\/download\.agplayer\.com\/releases\/v1\.1\.2\/AgPlayer-1\.1\.2-macOS-arm64\.dmg\?revision=20261029"/);
   assert.match(html, /id="macos-sha256-copy"[^>]*data-i18n="downloadPage.checksum.copy"/);
 });
 
 test('macOS copy uses the displayed checksum for fallback and live metadata', async () => {
   const fallback = await runDownloadScript({ok:false});
   fallback.macChecksumCopy.click();
-  assert.deepEqual(fallback.clipboardWrites, ['F4CA11BDD3A599E43B3E78478063B79748BED1715A1379BCB6580005D581B94F']);
+  assert.deepEqual(fallback.clipboardWrites, ['4ECBD7FE88B92779FDC8F2D3277AE2AA0137EA09C44312D2155A975BA38A48C8']);
   const live = await runDownloadScript(streamedResponse(JSON.stringify(manifest())));
   live.macChecksumCopy.click();
   assert.deepEqual(live.clipboardWrites, ['B'.repeat(64)]);
@@ -262,7 +262,7 @@ test('download page preserves the FAQ and exposes Android plus HarmonyOS cards',
   assert.match(html, /AgPlayer-1\.1\.2-arm64-release\.apk/);
   assert.match(html, /id="harmonyos"/);
   assert.match(html, /HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版/);
-  assert.match(html, /downloads\.js\?v=20261030-macos-demucs-1/);
+  assert.match(html, /downloads\.js\?v=20261030-macos-demucs-2/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
@@ -342,7 +342,7 @@ test('future Windows release requires both architectures before switching any pl
   live.files.splice(1, 1);
   const result = await runDownloadScript(streamedResponse(JSON.stringify(live)));
   assert.equal(result.checksumValue.textContent, '390D69FB32D3C6177E3BBB925B8A174ABBEFC0A494A39BAC560114DF9C32820C');
-  assert.equal(result.macPrimary.href, 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg?revision=20261028');
+  assert.equal(result.macPrimary.href, 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg?revision=20261029');
 });
 
 test('forged ARM64 URLs, sizes, hashes and duplicate filenames reject the complete manifest', async () => {
