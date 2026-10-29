@@ -17,11 +17,12 @@
         "arm64"
       ],
       "bundledModels": true,
-      "size": 281176468,
-      "sha256": "392af905b0a96daf68783901afe28b0c085fe7d055c59e1e135ccc1f938aaade",
-      "sourceCommit": "a351bdb13302e38520d195df5405d40ddac0a23e",
-      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-x64-arm64%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.exe",
-      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-x64-arm64-bundled-models.exe"
+      "size": 281525567,
+      "sha256": "7ef287776d7acffd62e481c0911446be9f25ab0ec4d4ac34be7acdcb3e149082",
+      "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-x64-arm64%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.exe?revision=20261030",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-x64-arm64-bundled-models.exe?revision=20261030",
+      "revision": "20261030"
     },
     {
       "id": "macos-arm64",
@@ -30,12 +31,12 @@
         "arm64"
       ],
       "bundledModels": false,
-      "size": 56579629,
-      "sha256": "1cf29455d44a6d3e71af652280af0ff9297d403e8f9b617f57a877f34e93d768",
-      "sourceCommit": "ed00b162b0a3b49164475fb5a01d638bd8e5b508",
-      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-arm64.dmg?revision=20261029",
-      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-macOS-arm64.dmg?revision=20261029",
-      "revision": "20261029"
+      "size": 56557172,
+      "sha256": "951e73bed102d704f331610fc05fd8c81f6d966ac77080e9ecc8c7da9089fc42",
+      "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-arm64.dmg?revision=20261030",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-macOS-arm64.dmg?revision=20261030",
+      "revision": "20261030"
     },
     {
       "id": "macos-x86_64",
@@ -44,12 +45,12 @@
         "x86_64"
       ],
       "bundledModels": false,
-      "size": 63085423,
-      "sha256": "11d0e3d38731516df83ef2a401eeac71126d91d8e8df46e52e7eaf607d4a2091",
-      "sourceCommit": "ed00b162b0a3b49164475fb5a01d638bd8e5b508",
-      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-x86_64.dmg?revision=20261029",
-      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-macOS-x86_64.dmg?revision=20261029",
-      "revision": "20261029"
+      "size": 63079520,
+      "sha256": "dfa1ced3b225cb0d335eaa1b01f0601a2eab03c88766841c16bd63f9147da148",
+      "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-x86_64.dmg?revision=20261030",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-macOS-x86_64.dmg?revision=20261030",
+      "revision": "20261030"
     },
     {
       "id": "macos-models",
@@ -59,12 +60,12 @@
         "x86_64"
       ],
       "bundledModels": true,
-      "size": 453754933,
-      "sha256": "e8b19778d78bc4338838acc0a2a3e27a96b99121ba47fe3f93f2c4a8d58299c3",
-      "sourceCommit": "ed00b162b0a3b49164475fb5a01d638bd8e5b508",
-      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.dmg?revision=20261029",
-      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-macOS-universal-bundled-models.dmg?revision=20261029",
-      "revision": "20261029"
+      "size": 454225131,
+      "sha256": "9b09870171b862da685a7607c792c9c9ddc32e858e03fb94a9a0b05e79c3f046",
+      "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.dmg?revision=20261030",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-macOS-universal-bundled-models.dmg?revision=20261030",
+      "revision": "20261030"
     }
   ]
 };
@@ -72,33 +73,33 @@
   const requestTimeoutMs = 10000;
   const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
   const publishedWindowsRelease = Object.freeze({
-    version: '1.1.2',
-    size: 33111791,
-    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-x64.exe?revision=20261028',
-    r2Url: 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-x64.exe?revision=20261028',
-    sha256: '390D69FB32D3C6177E3BBB925B8A174ABBEFC0A494A39BAC560114DF9C32820C'
-  });
+  "version": "1.1.2",
+  "size": 33116530,
+  "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-x64.exe?revision=20261030",
+  "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-x64.exe?revision=20261030",
+  "sha256": "6A508E91AD9218589B1113EDB10314105B4852B8B38474A40A1D8DCA44A63DE2"
+});
   const publishedWindowsArmRelease = Object.freeze({
-    version: '1.1.2',
-    size: 29635362,
-    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe?revision=20261028',
-    r2Url: 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe?revision=20261028',
-    sha256: '4EAAD3326064BAB5C7D4EF069A81B47F8185431CF3BA11DB0141061995FC03BB'
-  });
+  "version": "1.1.2",
+  "size": 29643696,
+  "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe?revision=20261030",
+  "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-Setup-1.1.2-arm64.exe?revision=20261030",
+  "sha256": "6FB68552D90CA806AA2E40F52B34A58AAF0D94C868313F2C7C8FD28444D2BA44"
+});
   const publishedMacRelease = Object.freeze({
   "version": "1.1.2",
-  "size": 115186427,
-  "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg?revision=20261029",
-  "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg?revision=20261029",
-  "sha256": "4ECBD7FE88B92779FDC8F2D3277AE2AA0137EA09C44312D2155A975BA38A48C8"
+  "size": 115221623,
+  "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg?revision=20261030",
+  "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-macOS-universal.dmg?revision=20261030",
+  "sha256": "54FD7E5CA2317F41F9EB24039CFD562DFB7F21FDA11E736110152F1792DF5F58"
 });
   const publishedAndroidRelease = Object.freeze({
-    version: '1.1.2',
-    size: 237844183,
-    githubUrl: 'https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-arm64-release.apk',
-    r2Url: 'https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-arm64-release.apk',
-    sha256: 'D1C1739FFF87F9D49F9F04A0D5D53EE0C5BED2AB70F1BB596659BB2EE8374777'
-  });
+  "version": "1.1.2",
+  "size": 237844783,
+  "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.2/AgPlayer-1.1.2-arm64-release.apk",
+  "r2Url": "https://download.agplayer.com/releases/v1.1.2/AgPlayer-1.1.2-arm64-release.apk",
+  "sha256": "E0BB91145396ADDBFDEB1CE73C4303EE808EF017E34EAEB9F04129C8066B53A7"
+});
 
   function selectRelease(manifest, platform = 'windows', architecture = 'x64') {
     if (!manifest || manifest.schemaVersion !== 1 || typeof manifest.version !== 'string' || !stableVersion.test(manifest.version)) return null;

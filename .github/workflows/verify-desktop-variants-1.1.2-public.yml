@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Verify current Mac revisions, desktop choices, and legacy Mac updater compatibility
+      - name: Verify all eight website update packages and both public download routes
         run: python scripts/verify-desktop-variants-1.1.2-public.py
       - uses: actions/upload-artifact@v4
         with:

@@ -73,8 +73,7 @@ test('published desktop variants have an exact embedded fallback and Apple chip 
   assert.ok(html.includes(arm.sha256.toUpperCase()));
   assert.equal(variants.files.filter(f => f.bundledModels).length, 2);
   for (const f of variants.files) {
-    assert.equal(f.sourceCommit, f.id.startsWith('macos-')
-      ? 'ed00b162b0a3b49164475fb5a01d638bd8e5b508' : 'a351bdb13302e38520d195df5405d40ddac0a23e');
+    assert.equal(f.sourceCommit, 'd7d523ee00172da05289667f102f0ad8d35f07c1');
     assert.ok(f.size > 50_000_000);
     if (f.bundledModels) assert.ok(f.name.includes('（内置伴奏分离模型版本）'));
     assert.equal(decodeURIComponent(new URL(f.r2Url).pathname.split('/').at(-1)), f.name);

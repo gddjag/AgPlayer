@@ -40,8 +40,9 @@ def main():
                          'https://download.agplayer.com/updates/macos/latest.json']:
             fetch(endpoint, temp / 'manifest')
             assert (temp / 'manifest').read_bytes() == canonical_raw, endpoint
-        compatibility_mac = next(f for f in json.loads(canonical_raw)['files'] if f['name'] == 'AgPlayer-1.1.2-macOS-universal.dmg')
-        for file in [*variants['files'], compatibility_mac]:
+        files = [*json.loads(canonical_raw)['files'], *variants['files']]
+        assert len(files) == 8 and len({f['name'] for f in files}) == 8
+        for file in files:
             for route in ('r2Url', 'githubUrl'):
                 fetch(file[route], temp / 'installer')
                 assert (temp / 'installer').stat().st_size == file['size'], (file['name'], route)
@@ -58,6 +59,7 @@ def main():
         fetch('https://agplayer.com/', temp / 'index.html')
         assert (temp / 'index.html').read_text().count('d753c9d11730ddacf686e8ccddce6e11') == 1
     receipt = dict(version='1.1.2', files=records, allFourPublicGitHubAndR2ByteIdentical=True,
+                   allEightPublicGitHubAndR2ByteIdentical=True,
                    canonicalFeedsMatchCheckedSource=True, macosCompatibilityPackageVerified=True, variantsManifestsByteIdentical=True,
                    websiteSourceByteIdentical=True, analyticsPreserved=True)
     Path('public-desktop-variants-verification.json').write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + '\n')
