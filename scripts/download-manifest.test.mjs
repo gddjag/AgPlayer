@@ -262,7 +262,7 @@ test('download page preserves the FAQ and exposes Android plus HarmonyOS cards',
   assert.match(html, /AgPlayer-1\.1\.2-arm64-release\.apk/);
   assert.match(html, /id="harmonyos"/);
   assert.match(html, /HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版/);
-  assert.match(html, /downloads\.js\?v=20261030-macos-demucs-2/);
+  assert.match(html, /downloads\.js\?v=20261030-website-updates-1/);
 });
 
 test('chunked manifest cancels the stream as soon as it exceeds 64 KiB', async () => {
@@ -537,10 +537,23 @@ test('same-version Mac variants use only exact dated revision URLs and keep user
     v => {v.files[1].revision = 20261029;},
     v => {v.files[1].r2Url += '&mirror=evil';},
     v => {v.files[1].githubUrl = v.files[1].githubUrl.replace('20261029','20261028');},
-    v => {v.files[0].revision = '20261029';v.files[0].r2Url += '?revision=20261029';v.files[0].githubUrl += '?revision=20261029';}
+    v => {v.files[0].revision = '20261029';v.files[0].r2Url += '?revision=20261030';v.files[0].githubUrl += '?revision=20261029';}
   ]) {
     const invalid = structuredClone(variants); corrupt(invalid);
     const rejected = await runDownloadScript(variantsResponse(invalid), {}, true);
     assert.equal(rejected.macOptions.some(option => !option.disabled), false);
   }
+});
+
+test('all desktop choices accept exact same-version revision URLs', async () => {
+  const variants = desktopVariantsManifest();
+  for (const file of variants.files) {
+    file.revision = '20261030';
+    file.r2Url += '?revision=20261030';
+    file.githubUrl += '?revision=20261030';
+  }
+  const result = await runDownloadScript(variantsResponse(variants), {}, true);
+  result.architecture.value = 'bundled'; result.architecture.change();
+  assert.equal(result.primary.dataset.downloadUrl, variants.files[0].r2Url);
+  assert.equal(result.macPrimary.href, variants.files[1].r2Url);
 });

@@ -1,0 +1,47 @@
+name: Publish verified website 1.1.2 update revision 20261030
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/releases/1.1.2-website-updates-20261030.json']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: r2-release-latest
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'gddjag/AgPlayer' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s scripts -p 'test_*.py'
+      - run: pip install boto3 requests
+      - name: Preserve all eight old installers, verify both mirrors, and promote website metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+          AWS_EC2_METADATA_DISABLED: 'true'
+        run: |
+          set -o pipefail
+          python scripts/republish-website-updates-1.1.2.py | tee website-updates-publication-receipt.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: website-updates-publication-receipt-20261030
+          path: website-updates-publication-receipt.json
+          if-no-files-found: error

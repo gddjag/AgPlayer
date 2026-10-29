@@ -1,0 +1,106 @@
+{
+  "version": "1.1.2",
+  "revision": "20261030",
+  "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+  "files": [
+    {
+      "id": "windows-x64",
+      "name": "AgPlayer-Setup-1.1.2-x64.exe",
+      "architectures": [
+        "x64"
+      ],
+      "bundledModels": false,
+      "size": 33116530,
+      "sha256": "6a508e91ad9218589b1113edb10314105b4852b8b38474a40a1d8dca44a63de2",
+      "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+      "stagingUrl": "https://ingredients-binary-tract-condo.trycloudflare.com/AgPlayer-Setup-1.1.2-x64.exe"
+    },
+    {
+      "id": "windows-arm64",
+      "name": "AgPlayer-Setup-1.1.2-arm64.exe",
+      "architectures": [
+        "arm64"
+      ],
+      "bundledModels": false,
+      "size": 29643696,
+      "sha256": "6fb68552d90ca806aa2e40f52b34a58aaf0d94c868313f2c7c8fd28444d2ba44",
+      "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+      "stagingUrl": "https://ingredients-binary-tract-condo.trycloudflare.com/AgPlayer-Setup-1.1.2-arm64.exe"
+    },
+    {
+      "id": "windows-models",
+      "name": "AgPlayer-Setup-1.1.2-x64-arm64（内置伴奏分离模型版本）.exe",
+      "architectures": [
+        "x64",
+        "arm64"
+      ],
+      "bundledModels": true,
+      "size": 281525567,
+      "sha256": "7ef287776d7acffd62e481c0911446be9f25ab0ec4d4ac34be7acdcb3e149082",
+      "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+      "stagingUrl": "https://ingredients-binary-tract-condo.trycloudflare.com/AgPlayer-Setup-1.1.2-x64-arm64%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.exe"
+    },
+    {
+      "id": "macos-arm64",
+      "name": "AgPlayer-1.1.2-macOS-arm64.dmg",
+      "architectures": [
+        "arm64"
+      ],
+      "bundledModels": false,
+      "size": 56557172,
+      "sha256": "951e73bed102d704f331610fc05fd8c81f6d966ac77080e9ecc8c7da9089fc42",
+      "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+      "stagingUrl": "https://ingredients-binary-tract-condo.trycloudflare.com/AgPlayer-1.1.2-macOS-arm64.dmg"
+    },
+    {
+      "id": "macos-x86_64",
+      "name": "AgPlayer-1.1.2-macOS-x86_64.dmg",
+      "architectures": [
+        "x86_64"
+      ],
+      "bundledModels": false,
+      "size": 63079520,
+      "sha256": "dfa1ced3b225cb0d335eaa1b01f0601a2eab03c88766841c16bd63f9147da148",
+      "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+      "stagingUrl": "https://ingredients-binary-tract-condo.trycloudflare.com/AgPlayer-1.1.2-macOS-x86_64.dmg"
+    },
+    {
+      "id": "macos-models",
+      "name": "AgPlayer-1.1.2-macOS-universal（内置伴奏分离模型版本）.dmg",
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "bundledModels": true,
+      "size": 454225131,
+      "sha256": "9b09870171b862da685a7607c792c9c9ddc32e858e03fb94a9a0b05e79c3f046",
+      "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+      "stagingUrl": "https://ingredients-binary-tract-condo.trycloudflare.com/AgPlayer-1.1.2-macOS-universal%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.dmg"
+    },
+    {
+      "id": "macos-universal",
+      "name": "AgPlayer-1.1.2-macOS-universal.dmg",
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "bundledModels": false,
+      "size": 115221623,
+      "sha256": "54fd7e5ca2317f41f9eb24039cfd562dfb7f21fda11e736110152f1792df5f58",
+      "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+      "stagingUrl": "https://ingredients-binary-tract-condo.trycloudflare.com/AgPlayer-1.1.2-macOS-universal.dmg"
+    },
+    {
+      "id": "android-arm64",
+      "name": "AgPlayer-1.1.2-arm64-release.apk",
+      "architectures": [
+        "arm64"
+      ],
+      "bundledModels": true,
+      "size": 237844783,
+      "sha256": "e0bb91145396addbfdeb1ce73c4303ee808ef017e34eaeb9f04129c8066b53a7",
+      "sourceCommit": "d7d523ee00172da05289667f102f0ad8d35f07c1",
+      "stagingUrl": "https://ingredients-binary-tract-condo.trycloudflare.com/AgPlayer-1.1.2-arm64-release.apk"
+    }
+  ]
+}
