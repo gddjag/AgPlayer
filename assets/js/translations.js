@@ -269,6 +269,13 @@ window.AG_COPY = {
         "architectureHelp": "Intel / AMD 电脑选择 x64；Snapdragon 等 Windows ARM 电脑选择 ARM64。",
         "available": "Windows {version} 已发布，可从 R2 或 GitHub 下载。",
         "bundled": "x64 / ARM64（内置模型版本）",
+        "downloadHelpTitle": "Windows 下载提示与处理方法",
+        "downloadHelpIntro": "官网 Windows 安装包暂未使用受信任的代码签名证书。Edge 可能提示“通常不会下载”或“不常下载”，这也与文件的下载信誉有关。",
+        "downloadHelpSource": "请确认文件来自本页的官网下载链接或官方 GitHub 镜像。",
+        "downloadHelpKeep": "确认来源后，在 Edge 下载列表点击文件右侧的「…」→「保留」；若继续出现确认，选择「显示更多／显示详细信息」→「仍然保留」（名称可能随浏览器版本略有不同）。",
+        "downloadHelpVerify": "打开文件前，请核对本页对应安装包的 SHA-256 校验值；不一致请勿运行。",
+        "downloadHelpCaution": "以上仅适用于“不常下载”等信誉提示。若明确提示病毒或恶意软件，请停止操作并联系作者。无需关闭 SmartScreen 或杀毒软件。",
+        "downloadHelpLink": "Microsoft Edge 下载帮助（微软官方）",
         "modelsNote": "常规纯净版不含伴奏分离模型，可在「音频工具」中按需下载。"
       },
       "checksum": {
@@ -666,6 +673,13 @@ window.AG_COPY = {
         "architectureHelp": "Choose x64 for Intel / AMD PCs, or ARM64 for Snapdragon and other Windows ARM PCs.",
         "available": "Windows {version} is available from R2 or GitHub.",
         "bundled": "x64 / ARM64 · Models included",
+        "downloadHelpTitle": "Windows download warnings and what to do",
+        "downloadHelpIntro": "The website Windows installers do not currently have a trusted code-signing certificate. Edge may show a “not commonly downloaded” warning, which also depends on the file’s download reputation.",
+        "downloadHelpSource": "Confirm that the file comes from a website download link on this page or the official GitHub mirror.",
+        "downloadHelpKeep": "Once you trust the source, open the file’s “…” menu in Edge Downloads and choose Keep. If prompted again, choose Show more / More details, then Keep anyway (labels may vary by browser version).",
+        "downloadHelpVerify": "Before opening the file, compare its SHA-256 hash with the value for the selected installer on this page. Do not run it if they differ.",
+        "downloadHelpCaution": "These steps apply only to reputation warnings such as “not commonly downloaded”. If malware or a virus is explicitly reported, stop and contact the author. There is no need to turn off SmartScreen or antivirus protection.",
+        "downloadHelpLink": "Microsoft Edge download help (official)",
         "modelsNote": "The standard clean edition does not include separation models. Download them on demand in Audio Tools."
       },
       "checksum": {
