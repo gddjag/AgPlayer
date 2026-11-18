@@ -37,16 +37,38 @@
     for (const layer of Object.values(result)) { let max = 0; for (const value of layer) max = Math.max(max, value); if (max > 0) for (let i = 0; i < layer.length; i++) layer[i] /= max; }
     return result;
   }
+  const densityRedraws = new Set();
+  let density = 0, resolutionQuery;
+  function checkDensity() {
+    const next = window.devicePixelRatio || 1;
+    if (next === density) return;
+    density = next;
+    resolutionQuery?.removeEventListener('change', checkDensity);
+    resolutionQuery = matchMedia(`(resolution: ${density}dppx)`);
+    resolutionQuery.addEventListener('change', checkDensity);
+    densityRedraws.forEach(redraw => redraw());
+  }
+  checkDensity();
+  window.addEventListener('resize', checkDensity);
+  function observeSize(canvas, redraw) {
+    new ResizeObserver(redraw).observe(canvas);
+    densityRedraws.add(redraw);
+  }
   function surface(canvas) {
-    const width = canvas.clientWidth, height = canvas.clientHeight, dpr = Math.min(devicePixelRatio || 1, 2);
-    if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) { canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); }
-    const context = canvas.getContext('2d'); context.setTransform(dpr, 0, 0, dpr, 0, 0); context.clearRect(0, 0, width, height);
+    const { width, height } = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const pixelWidth = Math.round(width * dpr), pixelHeight = Math.round(height * dpr);
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+    const context = canvas.getContext('2d');
+    if (width && height) context.setTransform(pixelWidth / width, 0, 0, pixelHeight / height, 0, 0);
+    context.clearRect(0, 0, width, height);
     return { context, width, height };
   }
   function gradient(context, width) { const color = context.createLinearGradient(0, 0, width, 0); color.addColorStop(0, '#00d4ff'); color.addColorStop(.5, '#7b2ff7'); color.addColorStop(1, '#e62e9b'); return color; }
   function wave(canvas, data, mode, progress = 0) {
     const { context: c, width: w, height: h } = surface(canvas);
-    if (!data || !w) return;
+    if (!data || !w || !h) return;
     const n = Math.min(data.mix.length, Math.max(1, Math.ceil(w)));
     function layer(values, color, alpha = 1, minimum = .5) {
       c.beginPath(); c.strokeStyle = color; c.globalAlpha = alpha; c.lineWidth = 1;
@@ -100,7 +122,8 @@
     }
     draw(canvas) {
       const { context: c, width: w, height: h } = surface(canvas);
-      const n = Math.max(1, Math.min(1024, Math.ceil(w * Math.min(devicePixelRatio || 1, 2) / 7))), step = w / n;
+      if (!w || !h) return;
+      const n = Math.max(1, Math.min(1024, Math.ceil(w / 7))), step = w / n;
       c.fillStyle = gradient(c, w);
       for (let i = 0; i < n; i++) {
         const position = i * 127 / Math.max(1, n - 1), lo = Math.floor(position), hi = Math.min(127, lo + 1), fraction = position - lo;
@@ -113,7 +136,7 @@
       }
     }
   }
-  window.AgWaveform = { analyze, wave, Spectrum };
+  window.AgWaveform = { analyze, wave, Spectrum, observeSize };
   // Animated style illustrations, isolated from the selected track's real audio data.
   const demo = Object.fromEntries(bands.map(key => [key, new Float32Array(320)]));
   function animateEnvelope(phase) {
@@ -132,11 +155,59 @@
     }
   }
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  const previews = [...document.querySelectorAll('.wave-preview')].map(canvas => ({ canvas, visible: false, spectrum: new Spectrum() }));
+  const previews = [...document.querySelectorAll('.wave-preview, .wave-swatch[data-wave-preview]')].map(canvas => {
+    const swatch = canvas.hasAttribute('data-wave-preview');
+    const mode = swatch ? canvas.dataset.wavePreview : canvas.dataset.preview;
+    return { canvas, swatch, mode, animated: !swatch || mode === 'spectrum', visible: false, spectrum: mode === 'spectrum' ? new Spectrum() : null };
+  });
+  if (!previews.length) return;
+  // All four legend views use the same silent example, separate from the file picker.
+  const sampleRate = 16000;
+  let exampleSamples, exampleWave;
+  function prepareExample() {
+    const notes = [110, 131, 165, 147, 98, 123.5, 147, 196];
+    const accents = [1, .22, .38, .15, .72, .32, .18, .54];
+    const phrases = [[0,.26],[.06,.54],[.14,.66],[.22,.41],[.29,.52],[.36,.24],[.41,.29],[.49,.75],[.57,.59],[.67,.92],[.73,.78],[.79,.43],[.86,.54],[.94,.68],[1,.26]];
+    const duration = 6.4, beat = .32, turn = 2 * Math.PI;
+    exampleSamples = new Float32Array(Math.round(sampleRate * duration));
+    let seed = 17, phrase = 0, bassPhase = 0, melodyPhase = 0;
+    for (let i = 0; i < exampleSamples.length; i++) {
+      const time = i / sampleRate, position = time / duration;
+      if (position >= phrases[phrase + 1][0]) phrase++;
+      const [start, from] = phrases[phrase], [end, to] = phrases[phrase + 1];
+      const blend = (position - start) / (end - start);
+      const level = from + (to - from) * blend * blend * (3 - 2 * blend);
+      const step = Math.floor(time / beat), t = time - step * beat, note = notes[Math.floor(step / 2) % notes.length];
+      bassPhase += turn * note / sampleRate;
+      melodyPhase += turn * note * (step % 3 === 0 ? 3 : 4) / sampleRate;
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      const bass = .42 * Math.sin(bassPhase) + .16 * Math.sin(2 * bassPhase);
+      const melody = (.25 + .15 * Math.sin(time * 3.7)) * (Math.sin(melodyPhase) + .45 * Math.sin(1.5 * melodyPhase));
+      const shimmer = (.10 + .08 * Math.cos(time * 5.2)) * Math.sin(7 * melodyPhase + .7 * Math.sin(melodyPhase));
+      const kick = accents[step % accents.length] * Math.exp(-18 * t) * Math.sin(turn * (48 * t + 1.7 * (1 - Math.exp(-35 * t))));
+      const hat = (seed / 2147483648 - 1) * (.05 + .25 * Math.exp(-38 * (t % (beat / 2))));
+      exampleSamples[i] = level * (bass + melody + shimmer + .52 * kick + hat);
+    }
+    analyze({ sampleRate, length: exampleSamples.length, numberOfChannels: 1, getChannelData: () => exampleSamples }, () => false)
+      .then(result => { exampleWave = result; sync(); });
+  }
   let frame = 0, last = 0;
   function renderPreview(item, now) {
+    if (item.swatch) {
+      if (!exampleSamples) prepareExample();
+      if (!exampleWave) return;
+      if (item.mode === 'spectrum') {
+        const position = reduced.matches ? .025 : now / 1000;
+        const start = Math.floor(position * sampleRate) % (exampleSamples.length - 511);
+        item.spectrum.update(exampleSamples.subarray(start, start + 512), .05);
+        item.spectrum.draw(item.canvas);
+      } else {
+        wave(item.canvas, exampleWave, item.mode, item.mode === 'solid' ? .48 : 1);
+      }
+      return;
+    }
     const phase = reduced.matches ? 0 : now / 1000;
-    if (item.canvas.dataset.preview === 'spectrum') {
+    if (item.mode === 'spectrum') {
       for (let i = 0; i < 128; i++) {
         const value = .08 + .8 * Math.abs(Math.sin(i * .13 + phase * 1.7)) * Math.sin(Math.PI * i / 127);
         item.spectrum.shown[i] = value;
@@ -146,22 +217,26 @@
     } else {
       animateEnvelope(phase * 1.55);
       // Fully colored demonstration: moving geometry, no progress cursor.
-      wave(item.canvas, demo, item.canvas.dataset.preview, 1);
+      wave(item.canvas, demo, item.mode, 1);
     }
   }
   function tick(now) {
     frame = 0;
-    if (document.hidden || reduced.matches || !previews.some(item => item.visible)) return;
-    if (now - last >= 50) { last = now; previews.filter(item => item.visible).forEach(item => renderPreview(item, now)); }
+    if (document.hidden || reduced.matches || !previews.some(item => item.visible && item.animated)) return;
+    if (now - last >= 50) { last = now; previews.filter(item => item.visible && item.animated).forEach(item => renderPreview(item, now)); }
     frame = requestAnimationFrame(tick);
   }
   function sync() {
     cancelAnimationFrame(frame); frame = 0;
+    if (document.hidden) return;
     previews.filter(item => item.visible).forEach(item => renderPreview(item, performance.now()));
-    if (!document.hidden && !reduced.matches && previews.some(item => item.visible)) frame = requestAnimationFrame(tick);
+    if (!reduced.matches && previews.some(item => item.visible && item.animated)) frame = requestAnimationFrame(tick);
   }
   const observer = new IntersectionObserver(entries => { for (const entry of entries) previews.find(item => item.canvas === entry.target).visible = entry.isIntersecting; sync(); });
-  previews.forEach(item => { observer.observe(item.canvas); new ResizeObserver(() => renderPreview(item, performance.now())).observe(item.canvas); renderPreview(item, performance.now()); });
+  previews.forEach(item => {
+    observer.observe(item.canvas);
+    observeSize(item.canvas, () => { if (item.visible && !document.hidden) renderPreview(item, performance.now()); });
+  });
   document.addEventListener('visibilitychange', sync); reduced.addEventListener('change', sync);
 })();
 

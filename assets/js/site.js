@@ -13,8 +13,8 @@
   nav.addEventListener('click', event => { if (event.target.closest('a')) menu(false); });
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') { menu(false); toggle.focus(); } });
   document.addEventListener('click', event => { if (!header.contains(event.target)) menu(false); });
-  matchMedia('(min-width: 951px)').addEventListener('change', event => { if (event.matches) menu(false); });
-  const sections = ['home', 'waveforms', 'features', 'tools'].map(id => document.getElementById(id)).filter(Boolean);
+  matchMedia('(max-width: 950px)').addEventListener('change', event => { if (!event.matches) menu(false); });
+  const sections = ['demo', 'features', 'tools', 'listen', 'download', 'faq'].map(id => document.getElementById(id)).filter(Boolean);
   let pending = false;
   function updateScroll() {
     pending = false;
@@ -26,7 +26,13 @@
       if (link.dataset.nav === current) link.setAttribute('aria-current', 'location'); else link.removeAttribute('aria-current');
     });
   }
-  addEventListener('scroll', () => { if (!pending) { pending = true; requestAnimationFrame(updateScroll); } }, { passive: true });
+  function scheduleUpdate() {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(updateScroll);
+  }
+  addEventListener('scroll', scheduleUpdate, { passive: true });
+  addEventListener('resize', scheduleUpdate);
   updateScroll();
   // Native anchors retain browser history, direct links, and reduced-motion behavior.
   window.agTabs = (buttons, callback) => {

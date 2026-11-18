@@ -51,6 +51,13 @@ header .brand{display:none!important}header{justify-content:flex-end!important}#
 .bandhint{font-size:10px;line-height:1.8;color:#9babbd}.bandhint strong{font-weight:500;color:#e2e9f5}
 @media(max-width:650px){#player{width:calc(100vw - 24px)!important}.wavewrap,#wave{height:38px}#telemetry{bottom:165px;width:170px}#metrics{display:none}#viewbar button{font-size:10px;padding:6px 7px}}
 @media(max-height:560px){#telemetry,#hint{display:none}.wavewrap,#wave{height:31px}#player{bottom:9px}}
+@media (max-height: 340px) {
+  header { height: 44px; padding-block: 4px; }
+  #viewbar { top: 46px; }
+  #panel { top: 46px; max-height: calc(100dvh - 54px); }
+  #playlistV3 { bottom: 58px; max-height: calc(100dvh - 68px); }
+  .errorbox { max-height: 94dvh; overflow: auto; padding: 16px; }
+}
 </style>
 </head>
 <body>

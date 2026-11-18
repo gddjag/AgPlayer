@@ -170,6 +170,15 @@
     return decodeURIComponent(release.r2Url.split('?')[0].split('/').at(-1));
   }
 
+  function showArchitectureLabel(select) {
+    const label = select?.nextElementSibling;
+    const option = select?.selectedOptions?.[0];
+    if (!label?.classList.contains('architecture-current') || !option) return;
+    label.textContent = option.textContent;
+    label.dataset.i18n = option.dataset.i18n;
+    label.hidden = false;
+  }
+
   function ensureDownloadDetails() {
     const windows = document.querySelector('#windows');
     const macos = document.querySelector('#macos');
@@ -181,9 +190,9 @@
       list.innerHTML = `<div><dt data-i18n="downloadPage.meta.system">${AG.t('downloadPage.meta.system')}</dt><dd data-i18n="${systemKey}">${systemText}</dd></div><div><dt data-i18n="downloadPage.meta.filename">${AG.t('downloadPage.meta.filename')}</dt><dd data-meta="filename">${filename}</dd></div><div><dt data-i18n="downloadPage.meta.size">${AG.t('downloadPage.meta.size')}</dt><dd data-meta="size">${size}</dd></div>`;
       return list;
     };
-    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.1.4-x64.exe', '37.3 MB'));
-    if (!macos.querySelector('.platform-meta')) macos.querySelector('h2')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), 'AgPlayer-1.1.4-macOS-universal.dmg', '110.8 MB'));
-    if (!android.querySelector('.platform-meta')) android.querySelector('h2')?.after(details('downloadPage.android.system', AG.t('downloadPage.android.system'), 'AgPlayer-1.1.4-arm64-release.apk', '227.0 MB'));
+    if (!windows.querySelector('.platform-meta')) windows.querySelector('h2, h3')?.after(details('downloadPage.windows.system', AG.t('downloadPage.windows.system'), 'AgPlayer-Setup-1.1.4-x64.exe', '37.3 MB'));
+    if (!macos.querySelector('.platform-meta')) macos.querySelector('h2, h3')?.after(details('downloadPage.macos.system', AG.t('downloadPage.macos.system'), 'AgPlayer-1.1.4-macOS-universal.dmg', '110.8 MB'));
+    if (!android.querySelector('.platform-meta')) android.querySelector('h2, h3')?.after(details('downloadPage.android.system', AG.t('downloadPage.android.system'), 'AgPlayer-1.1.4-arm64-release.apk', '227.0 MB'));
     const platforms = windows.closest('.platforms');
     let checksum = document.querySelector('#windows-checksum');
     if (!checksum) {
@@ -268,7 +277,10 @@
     const macOptions = ['arm64', 'x86_64', 'bundled'].map(value => document.querySelector(`#macos-architecture option[value="${value}"]`));
     const windowsReleases = { x64: publishedWindowsRelease, arm64: publishedWindowsArmRelease };
     const macReleases = { universal: publishedMacRelease };
-    const renderSelectedMacRelease = () => renderLinkedRelease('macos', macReleases[macArchitecture?.value] || macReleases.universal);
+    const renderSelectedMacRelease = () => {
+      showArchitectureLabel(macArchitecture);
+      renderLinkedRelease('macos', macReleases[macArchitecture?.value] || macReleases.universal);
+    };
     macArchitecture?.addEventListener('change', renderSelectedMacRelease);
     const renderVariantOptions = () => {
       if (bundledOption) bundledOption.disabled = !windowsReleases.bundled;
@@ -285,6 +297,7 @@
     renderArchitectureOption();
     let activeRelease = publishedWindowsRelease;
     const renderRelease = release => {
+      showArchitectureLabel(architecture);
       activeRelease = release;
       enable(primary, release.r2Url);
       enable(github, release.githubUrl);
@@ -374,5 +387,5 @@
     }
   }
 
-  if (document.body?.dataset.page === 'download') void hydrateDownloads();
+  if (document.body?.dataset.page === 'download' || document.querySelector('#download .download-primary')) void hydrateDownloads();
 })();

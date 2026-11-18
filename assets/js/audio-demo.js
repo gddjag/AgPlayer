@@ -53,12 +53,12 @@
     placeholder.removeAttribute('data-i18n');
     placeholder.hidden = !!data;
     play.setAttribute('aria-label', AG.t(`audioDemo.${active ? 'pause' : state === 'ended' ? 'replay' : 'play'}`));
-    play.querySelector('use').setAttribute('href', `#ag-icon-${active ? 'pause' : 'play'}`);
+    play.querySelector('use')?.setAttribute('href', `#ag-icon-${active ? 'pause' : 'play'}`);
     play.disabled = !data; seek.disabled = !data;
     root.setAttribute('aria-busy', String(state === 'loading'));
     root.dataset.state = state;
     play.classList.toggle('is-playing', active);
-    const pickerText = document.querySelector('.file-picker [data-i18n]');
+    const pickerText = root.querySelector('.file-picker [data-i18n]');
     pickerText.dataset.i18n = name ? 'audioDemo.replaceFile' : 'audioDemo.chooseFile'; pickerText.textContent = AG.t(pickerText.dataset.i18n);
     updateTime();
   }
@@ -71,8 +71,7 @@
     showPosition();
   }
   function draw() {
-    if (!data) { canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height); return; }
-    if (mode === 'spectrum') spectrum.draw(canvas);
+    if (data && mode === 'spectrum') spectrum.draw(canvas);
     else AgWaveform.wave(canvas, data, mode, audio.duration ? Math.min(1, audio.currentTime / audio.duration) : 0);
   }
   function tick(now) {
@@ -144,8 +143,8 @@
     hoverRatio = null; updateTime(); draw();
   });
   seek.addEventListener('focus', () => { hoverRatio = null; showPosition(); });
-  agTabs([...document.querySelectorAll('[data-mode]')], button => { mode = button.dataset.mode; document.getElementById('audio-panel').setAttribute('aria-labelledby', button.id); draw(); });
-  new ResizeObserver(() => { draw(); showPosition(); }).observe(canvas);
+  agTabs([...document.querySelectorAll('[data-mode][aria-controls="audio-panel"]')], button => { mode = button.dataset.mode; document.getElementById('audio-panel').setAttribute('aria-labelledby', button.id); draw(); });
+  AgWaveform.observeSize(canvas, () => { draw(); showPosition(); });
   new IntersectionObserver(entries => { inView = entries[0].isIntersecting; sync(); }).observe(root);
   document.addEventListener('visibilitychange', sync);
   document.addEventListener('ag:languagechange', text);

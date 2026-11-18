@@ -1,27 +1,28 @@
 # AgPlayer 官方网站
 
-纯 HTML、CSS、原生 JavaScript；无需 npm、构建步骤或在线字体。
+使用 HTML、CSS 和原生 JavaScript。使用 Node.js 构建静态页面，无需安装 npm 依赖或加载在线字体。
 
 2026-10-28 用户确认：官网不展示最新功能、修复摘要、版本更新说明或同版本重新安装提示。后续发版只同步必要的下载元数据与链接，不往下载卡片追加更新内容；保持此次移除的 Windows/macOS 更新摘要、macOS 通用包说明和 Android 功能说明不再出现。
 
-- `index.html`：首页、波形、功能、音频工具、迷你播放器、隐私与下载入口。
+- `index.html` 使用 AgPlayer 中文实机截图与操作录屏介绍产品。原始展示素材放在 `assets/media/`。首次访问显示简体中文，手动切换的语言保存在本机。
+- `listen.html` 是独立波形试听室，使用浏览器本地文件，保留四种波形和沉浸舞台入口。
 - `download.html`：独立下载页；Windows、macOS 与 Android 官网版从受校验的正式版本清单更新，HarmonyOS 引导到应用市场。
 - `about.html`：独立关于页。
-- `assets/css/site.css`：布局、深色样式和响应式断点。
-- `assets/js/translations.js`：实际使用的中英文文案。
+- `assets/css/edition.css` 定义公共导航与版式；`edition-home.css`、`interior-2026.css` 和 `listen.css` 分别负责首页、内页与试听室。
+- `assets/js/translations.js` 及同目录的 `edition-copy.js`、`interior-copy.js`、`listen-copy.js` 提供中英文文案。
 - `assets/js/audio-demo.js`、`waveform-renderer.js`：浏览器本地播放与音频波形。
 
-直接用静态服务器预览此目录；执行 `node scripts/build-site.mjs` 可生成 Cloudflare Pages 使用的 `public/`，包含页面、资源和 Android 隐私政策。`public/` 为生成目录，不作为源码修改入口。
+本地预览和 Cloudflare Pages 均使用 `node scripts/build-site.mjs` 生成的 `public/`。首页按屏展示播放器模式、曲库、六项音频工具、波形试听、下载和使用指南。`assets/media/live-*` 是 AgPlayer 桌面窗口的真实截屏与静音实录，手机版使用 `assets/images/player-mobile.png`。下载区和常见问题在构建时从 `download.html` 同步，沿用同一份下载链接和校验值。`public/` 为生成目录，不作为源码修改入口。
 
-发布前执行 `node --test scripts/download-manifest.test.mjs scripts/sync-release-r2.test.mjs scripts/site-release.test.mjs`。网页从同源 `/updates/latest.json` 读取下载清单，从 1.1.2 起须包含同版本的 Windows x64 EXE、Windows 原生 ARM64 EXE、Universal DMG 和 Android ARM64 APK，固定官方 GitHub/R2 URL、文件大小和 SHA-256 均验证通过后才一起切换。接口不可用时保留最后已发布的 1.1.2；仅修改版本文案不会生成或发布安装包。
+发布前执行 `node --test scripts/download-manifest.test.mjs scripts/sync-release-r2.test.mjs scripts/site-release.test.mjs`。网页从同源 `/updates/latest.json` 读取下载清单，从 1.1.2 起须包含同版本的 Windows x64 EXE、Windows 原生 ARM64 EXE、Universal DMG 和 Android ARM64 APK，固定官方 GitHub/R2 URL、文件大小和 SHA-256 均验证通过后才一起切换。接口不可用时使用随页面内置并核验过的发布清单；仅修改版本文案不会生成或发布安装包。
 
 每次发布须将 R2 `https://download.agplayer.com/updates/latest.json` 实际已发布且核验通过的清单原样复制到本目录的 `updates/latest.json`，随官网构建同步部署，并同步所有已发布 fallback 的版本、文件名、大小与 SHA-256。网页使用同源请求避免跨域限制；原生应用仍使用原有 R2 更新地址。
 
 `.github/workflows/sync-release-r2.yml` 沿用现有发布资产到 R2 的同步流程，仅在正式 GitHub Release 发布或手动指定正式 tag 时运行。先下载核验安装包，再上传并发布更新清单；不会自动清理历史发布。所需凭据使用 GitHub 原有 secrets，不存入网站源码。鸿蒙、华为 APK 与微软商店包由用户自行上传，不放入官网自动更新清单。
 
-语言先使用浏览器首选语言，支持手动切换并保存在本机；这不等于实际国家/地区识别。后续若需要实际地区，可接入发布平台提供的地区信息。
+首次访问使用简体中文，后续访问沿用用户在本机选择的语言。
 
-本地试听不会上传音频。浏览器可解码的格式与桌面版可能不同。四种模式使用真实解码/播放数据；算法来源、版本差异及验收范围见 `docs/development/html-preview-validation.md`。八项音频工具为桌面版功能介绍。
+本地试听不会上传音频。浏览器可解码的格式与桌面版可能不同。四种模式使用真实解码/播放数据；算法来源、版本差异及验收范围见 `docs/development/html-preview-validation.md`。官网展示六项桌面音频工具。
 
 ## 搜索与 AI 搜索发现
 

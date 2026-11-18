@@ -2,7 +2,7 @@
   'use strict';
   let saved;
   try { saved = localStorage.getItem('ag-language'); } catch (_) { /* Storage can be disabled. */ }
-  let language = ['zh', 'en'].includes(saved) ? saved : ((navigator.languages?.[0] || navigator.language || 'en').toLowerCase().startsWith('zh') ? 'zh' : 'en');
+  let language = ['zh', 'en'].includes(saved) ? saved : 'zh';
   const t = (key, values = {}) => {
     let value = key.split('.').reduce((item, part) => item?.[part], window.AG_COPY[language]);
     if (typeof value !== 'string') return key;

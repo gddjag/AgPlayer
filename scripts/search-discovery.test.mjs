@@ -9,15 +9,25 @@ const root = new URL('../', import.meta.url);
 test('published build includes a crawlable sitemap, ownership proof and real error page', async () => {
   execFileSync(process.execPath, ['scripts/build-site.mjs'], { cwd: root });
   const read = name => readFile(new URL(`public/${name}`, root), 'utf8');
+  const home = await read('index.html');
+  const download = await read('download.html');
+  const releaseScript = download.match(/<script defer src="[^"]*downloads\.js\?v=[^"]+"><\/script>/)[0];
+  assert.ok(home.includes(releaseScript), 'embedded downloads use the standalone release script');
+  for (const id of ['desktop-recording', 'audio-demo', 'download', 'windows', 'macos', 'android', 'harmonyos', 'about', 'support']) {
+    assert.equal(home.split(`id="${id}"`).length, 2, `single homepage target for ${id}`);
+  }
   const robots = await read('robots.txt');
   assert.match(robots, /User-agent: \*[\s\S]*Allow: \//);
   assert.match(robots, /Sitemap: https:\/\/agplayer.com\/sitemap.xml/);
   const sitemap = await read('sitemap.xml');
   const urls = [...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map(match => match[1]);
-  assert.deepEqual(urls, ['https://agplayer.com/', 'https://agplayer.com/download', 'https://agplayer.com/about', 'https://agplayer.com/support', 'https://agplayer.com/privacy/android']);
+  assert.deepEqual(urls, ['https://agplayer.com/', 'https://agplayer.com/download', 'https://agplayer.com/about', 'https://agplayer.com/support', 'https://agplayer.com/privacy/android', 'https://agplayer.com/listen']);
   assert.match((await read('indexnow-key.txt')).trim(), /^[a-f0-9]{32}$/);
   assert.match(await read('404.html'), /noindex/);
-  assert.match(await read('llms.txt'), /https:\/\/agplayer.com\/download/);
+  const discovery = await read('llms.txt');
+  assert.ok(discovery.includes('https://agplayer.com/download'));
+  assert.ok(discovery.includes('https://agplayer.com/listen'));
+  assert.ok((await read('listen.html')).includes('<link rel="canonical" href="https://agplayer.com/listen">'));
   for (const [file, url] of [['index.html', urls[0]], ['download.html', urls[1]], ['about.html', urls[2]]]) {
     const html = await read(file);
     assert.ok(html.includes(`<link rel="canonical" href="${url}">`), file);
