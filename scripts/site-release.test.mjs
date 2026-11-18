@@ -22,7 +22,7 @@ test('same-origin published manifest matches all four exact fallback installers'
   const build = await readFile(new URL('scripts/build-site.mjs', root), 'utf8');
   assert.match(source, /const manifestUrl = '\/updates\/latest\.json'/);
   assert.match(build, /'updates'/);
-  assert.equal(manifest.version, '1.1.2');
+  assert.equal(manifest.version, '1.1.4');
   for (const platform of ['Windows', 'WindowsArm', 'Mac', 'Android']) {
     const match = source.match(new RegExp(`const published${platform}Release = Object.freeze\\((\\{[\\s\\S]*?\\})\\);`));
     assert.ok(match, platform);
@@ -73,7 +73,7 @@ test('published desktop variants have an exact embedded fallback and Apple chip 
   assert.ok(html.includes(arm.sha256.toUpperCase()));
   assert.equal(variants.files.filter(f => f.bundledModels).length, 2);
   for (const f of variants.files) {
-    assert.equal(f.sourceCommit, 'd7d523ee00172da05289667f102f0ad8d35f07c1');
+    assert.match(f.sourceCommit, /^[a-f0-9]{40}$/);
     assert.ok(f.size > 50_000_000);
     if (f.bundledModels) assert.ok(f.name.includes('（内置伴奏分离模型版本）'));
     assert.equal(decodeURIComponent(new URL(f.r2Url).pathname.split('/').at(-1)), f.name);

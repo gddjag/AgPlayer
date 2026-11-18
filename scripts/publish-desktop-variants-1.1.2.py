@@ -363,10 +363,5 @@ def publish(descriptor, remote):
 
 
 if __name__ == '__main__':
-    from pathlib import Path
-    import runpy
-    if Path('docs/releases/v1.1.4-verified-assets.json').is_file():
-        runpy.run_path('scripts/stage-artifacts-v1.1.4.py', run_name='__main__')
-        raise SystemExit(0)
     descriptor = json.loads(DESCRIPTOR_PATH.read_text())
     print(json.dumps(publish(descriptor, Remote()), ensure_ascii=False))
