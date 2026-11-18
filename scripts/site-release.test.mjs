@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
+import { createHash } from 'node:crypto';
 
 const root = new URL('../', import.meta.url);
 test('homepage preserves the authorized analytics integration exactly once', async () => {
@@ -23,6 +24,10 @@ test('same-origin published manifest matches all four exact fallback installers'
   assert.match(source, /const manifestUrl = '\/updates\/latest\.json'/);
   assert.match(build, /'updates'/);
   assert.equal(manifest.version, '1.1.4');
+  const html = await readFile(new URL('download.html', root), 'utf8');
+  const scriptRevision = createHash('sha256').update(source).digest('hex').slice(0, 12);
+  assert.ok(html.includes(`assets/js/downloads.js?v=${manifest.version}-${scriptRevision}`));
+
   for (const platform of ['Windows', 'WindowsArm', 'Mac', 'Android']) {
     const match = source.match(new RegExp(`const published${platform}Release = Object.freeze\\((\\{[\\s\\S]*?\\})\\);`));
     assert.ok(match, platform);
