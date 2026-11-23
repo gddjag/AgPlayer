@@ -7,7 +7,7 @@ window.AG_COPY.zh.edition = {
   heroAlt: 'AgPlayer 中文桌面版专业模式，显示滚动波形、节拍网格和曲库。', enlarge: '放大截图', close: '关闭',
   demoTitle: '实机操作演示', demoText: '在 macOS 版 AgPlayer 中播放本地曲目，跟随波形观察节奏，再切换到随音乐变化的沉浸舞台。',
   videoLabel: 'AgPlayer 中文桌面版实机操作录屏', videoFile: '打开实机录屏', demoListen: '用自己的音乐试听',
-  featureTitle: '播放与曲库', featureIntro: '按标签和速度找歌，从波形拖出片段，或跟着节拍网格练习。', featureTools: '查看 6 项音频工具',
+  featureTitle: '播放与曲库', featureIntro: '用标签整理曲库、从波形选段，也可以用 EQ 和 VST3 插件调整播放效果。', featureTools: '查看 6 项音频工具',
   library: '曲库管理', libraryDesc: '用歌单、标签和评分整理本地音乐，在同一窗口浏览曲库、查看整首歌的波形。', libraryAlt: 'AgPlayer 曲库管理与整曲波形的真实软件截图',
   edit: '多轨音频编辑', editDesc: '把片段排列在时间线上，通过波形选段、分割和裁剪，再调整音量与淡入淡出。', editAlt: 'AgPlayer 中文音频编辑器，显示波形选区、BPM 与导出控件',
   stems: '人声与伴奏分离', stemsDesc: '在设备上将歌曲拆分为人声与伴奏，分轨试听、分别导出。可提取的音轨取决于所选模型。', stemsAlt: 'AgPlayer 中文人声与伴奏分离工具，显示模型与导出选项',
@@ -26,7 +26,7 @@ window.AG_COPY.en.edition = {
   heroAlt: 'AgPlayer desktop in Pro mode showing the scrolling waveform, beat grid and music library.', enlarge: 'Enlarge screenshot', close: 'Close',
   demoTitle: 'AgPlayer in action.', demoText: 'Watch the macOS app play a local track, follow its waveform and switch to a visual stage that moves with the music.',
   videoLabel: 'Screen recording of AgPlayer for macOS in Chinese', videoFile: 'Open screen recording', demoListen: 'Try your own music',
-  featureTitle: 'Playback and library.', featureIntro: 'Find tracks by tag and tempo, drag a clip from the waveform, or practice with the beat grid.', featureTools: 'Explore all 6 audio tools',
+  featureTitle: 'Playback and library.', featureIntro: 'Organize your library with tags, select clips on the waveform, and shape playback with EQ and VST3 plug-ins.', featureTools: 'Explore all 6 audio tools',
   library: 'Music library', libraryDesc: 'Organize local tracks with playlists, tags and ratings. Browse your library and see the entire track’s waveform in one window.', libraryAlt: 'AgPlayer music library and full-track waveform',
   edit: 'Multitrack editing', editDesc: 'Arrange clips on a timeline. Select, split and trim on the waveform, then adjust levels and fades.', editAlt: 'AgPlayer audio editor with a waveform selection, BPM and export controls',
   stems: 'Vocal separation', stemsDesc: 'Separate vocals and accompaniment on your device. Listen to each stem and export it individually. Available stems depend on the model.', stemsAlt: 'AgPlayer vocal separation tool with model and export options',
@@ -45,6 +45,22 @@ window.AG_COPY.zh.featureGuide = {
       {title: '按文件夹浏览', text: '从左侧「资源文件夹」展开本地目录，把常一起播放的曲目归入歌单。'},
       {title: '标记值得再听的歌', text: '点亮爱心收藏，给曲目评星，或加上自定义标签。'},
       {title: '按速度找下一首', text: '输入歌名、艺人、专辑或标签，再用评分和 BPM 范围缩小结果。'}
+    ]
+  },
+  tags: {
+    name: '标签管理', alt: 'AgPlayer 专业模式右侧的标签管理面板，显示标签搜索、添加按钮和颜色标签',
+    steps: [
+      {title: '创建自己的标签', text: '打开曲库的「标签管理」，按曲风、场合或用途添加标签，给歌曲分类。'},
+      {title: '调整名称和颜色', text: '在标签菜单中重命名或修改颜色。用颜色区分不同类别，浏览曲库时更容易辨认。'},
+      {title: '按标签快速找歌', text: '搜索标签名称或点击标签筛选曲库，也可以用评分和 BPM 范围进一步缩小结果。'}
+    ]
+  },
+  plugins: {
+    name: 'VST3 插件链', alt: 'AgPlayer 插件页的 VST3 扫描、八个效果插槽和插件兼容状态',
+    steps: [
+      {title: '扫描已安装的插件', text: '在桌面播放器的「EQ → 插件」页扫描标准安装目录，也可以添加自定义目录。插件列表会标出可用和不兼容的项目。'},
+      {title: '拖动编排效果链', text: '将兼容的 VST3 效果插件加入链路，最多使用 8 个插槽。处理从上到下，拖动即可改变顺序。'},
+      {title: '调节插件并对比效果', text: '点击「界面」打开插件的参数面板。用每个插槽的电源按钮单独旁通，试听处理前后的差别。'}
     ]
   },
   wave: {
@@ -87,6 +103,22 @@ window.AG_COPY.en.featureGuide = {
       {title: 'Browse by folder', text: 'Expand a local directory in the folder sidebar. Group tracks you often play together into a playlist.'},
       {title: 'Mark tracks to revisit', text: 'Click the heart to save a favorite, give the track a star rating, or add a custom tag.'},
       {title: 'Find the next tempo', text: 'Search by title, artist, album or tag, then narrow the results by star rating and BPM range.'}
+    ]
+  },
+  tags: {
+    name: 'Tag management', alt: 'AgPlayer Pro mode with tag search, an Add button, and colored tags in the library sidebar',
+    steps: [
+      {title: 'Create your own tags', text: 'Open Tag Management in the library and add tags by genre, occasion, or how you use each track.'},
+      {title: 'Edit tag names and colors', text: 'Rename tags or change their colors from the tag menu. Use colors to distinguish categories at a glance.'},
+      {title: 'Find tracks by tag', text: 'Search for a tag by name or click one to filter your library. Narrow the results further by rating or BPM.'}
+    ]
+  },
+  plugins: {
+    name: 'VST3 plug-in chain', alt: 'AgPlayer plug-in page with VST3 scanning, eight effect slots, and plug-in compatibility status',
+    steps: [
+      {title: 'Scan installed plug-ins', text: 'Open EQ → Plug-ins in the desktop player to scan the standard folders or add a custom folder. The list shows which plug-ins are compatible.'},
+      {title: 'Arrange the effects chain', text: 'Add compatible VST3 effects to up to eight slots. Effects run from top to bottom, and you can drag them to change the order.'},
+      {title: 'Adjust and compare effects', text: 'Open a plug-in’s interface to adjust its settings. Use the power button on each slot to bypass that effect and compare the sound.'}
     ]
   },
   wave: {

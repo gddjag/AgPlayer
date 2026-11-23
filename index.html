@@ -15,7 +15,7 @@
 <link rel="stylesheet" href="/assets/css/decks.css?v=20261123-tools">
 <link rel="stylesheet" href="/assets/css/faq.css?v=20261119-guides">
 <script defer src="/assets/js/translations.js?v=20261109-windows-download-help"></script>
-<script defer src="/assets/js/edition-copy.js?v=20261123-tools"></script>
+<script defer src="/assets/js/edition-copy.js?v=20261124-plugins-tags"></script>
 <script defer src="/assets/js/interior-copy.js?v=20261119-support-copy"></script>
 <script defer src="/assets/js/listen-copy.js?v=20261119-studio"></script>
 <script defer src="/assets/js/i18n.js?v=20261119-live"></script>
@@ -94,16 +94,18 @@
     <div class="home-wrap">
       <div class="feature-heading">
         <h2 id="feature-title" data-i18n="edition.featureTitle">播放与曲库</h2>
-        <p data-i18n="edition.featureIntro">按标签和速度找歌，从波形拖出片段，或跟着节拍网格练习。</p>
+        <p data-i18n="edition.featureIntro">用标签整理曲库、从波形选段，也可以用 EQ 和 VST3 插件调整播放效果。</p>
         <a class="feature-tools-link" href="#tools"><span data-i18n="edition.featureTools">查看 7 项音频工具</span><span aria-hidden="true">↓</span></a>
       </div>
       <div class="feature-layout">
         <div class="feature-tabs" role="tablist" data-i18n-aria="navigation.features" aria-label="功能">
           <button class="feature-tab" id="tab-library" type="button" role="tab" aria-selected="true" aria-controls="feature-screen" tabindex="0" data-feature="library" data-src="/assets/media/live-classic.webp?v=20261123-current" data-i18n="featureGuide.library.name">曲库整理</button>
+          <button class="feature-tab" id="tab-tags" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="tags" data-src="/assets/media/live-tags.webp" data-i18n="featureGuide.tags.name">标签管理</button>
           <button class="feature-tab" id="tab-wave" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="wave" data-src="/assets/media/live-single.webp?v=20261123-current" data-i18n="featureGuide.wave.name">波形选段</button>
           <button class="feature-tab" id="tab-pro" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="pro" data-src="/assets/media/live-pro.webp?v=20261123-current" data-i18n="featureGuide.pro.name">专业模式</button>
           <button class="feature-tab" id="tab-cloning" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="cloning" data-src="/assets/media/live-tool-cloning.webp?v=20261123-current" data-i18n="featureGuide.cloning.name">声音克隆</button>
           <button class="feature-tab" id="tab-eq" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="eq" data-src="/assets/media/live-eq.webp?v=20261123-current" data-i18n="featureGuide.eq.name">EQ 均衡器</button>
+          <button class="feature-tab" id="tab-plugins" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="plugins" data-src="/assets/media/live-vst3-rack.png" data-i18n="featureGuide.plugins.name">VST3 插件链</button>
           <button class="feature-tab" id="tab-mobile" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="mobile" data-src="/assets/images/player-mobile.png?v=20261123-current" data-i18n="featureGuide.mobile.name">手机播放</button>
         </div>
         <div id="feature-screen" class="feature-panel" role="tabpanel" aria-labelledby="tab-library">
