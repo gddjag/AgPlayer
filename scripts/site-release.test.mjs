@@ -23,7 +23,7 @@ test('same-origin published manifest matches all four exact fallback installers'
   const build = await readFile(new URL('scripts/build-site.mjs', root), 'utf8');
   assert.match(source, /const manifestUrl = '\/updates\/latest\.json'/);
   assert.match(build, /'updates'/);
-  assert.equal(manifest.version, '1.1.4');
+  assert.equal(manifest.version, '1.1.5');
   const html = await readFile(new URL('download.html', root), 'utf8');
   const scriptRevision = createHash('sha256').update(source).digest('hex').slice(0, 12);
   assert.ok(html.includes(`assets/js/downloads.js?v=${manifest.version}-${scriptRevision}`));

@@ -363,8 +363,5 @@ def publish(descriptor, remote):
 
 
 if __name__ == '__main__':
-    import runpy
-    runpy.run_path('scripts/promote-variants-v1.1.5.py', run_name='__main__')
-    raise SystemExit(0)
     descriptor = json.loads(DESCRIPTOR_PATH.read_text())
     print(json.dumps(publish(descriptor, Remote()), ensure_ascii=False))

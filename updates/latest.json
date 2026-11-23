@@ -1,37 +1,37 @@
 {
   "schemaVersion": 1,
-  "version": "1.1.4",
-  "tag": "v1.1.4",
-  "publishedAt": "2026-11-18T16:08:32Z",
-  "releaseNotesUrl": "https://github.com/gddjag/AgPlayer/releases/tag/v1.1.4",
+  "version": "1.1.5",
+  "tag": "v1.1.5",
+  "publishedAt": "2026-11-23T02:11:37Z",
+  "releaseNotesUrl": "https://github.com/gddjag/AgPlayer/releases/tag/v1.1.5",
   "files": [
     {
-      "name": "AgPlayer-1.1.4-arm64-release.apk",
-      "size": 238015199,
-      "sha256": "1a68aacd3d135e7858d26271024c6e55f972bca36b9147d03c6b08325594dd2e",
-      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.4/AgPlayer-1.1.4-arm64-release.apk",
-      "r2Url": "https://download.agplayer.com/releases/v1.1.4/AgPlayer-1.1.4-arm64-release.apk"
+      "name": "AgPlayer-1.1.5-arm64-release.apk",
+      "size": 498145427,
+      "sha256": "ed4688eae2a5c50427c5c46e503d3c92b6ff92c66fe069ba94332c45663912ff",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.5/AgPlayer-1.1.5-arm64-release.apk",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.5/AgPlayer-1.1.5-arm64-release.apk"
     },
     {
-      "name": "AgPlayer-1.1.4-macOS-universal.dmg",
-      "size": 116149985,
-      "sha256": "2c7037bdc53fd02658ff14a285f9eec0ce0b9be4bd952568908cec69255127d9",
-      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.4/AgPlayer-1.1.4-macOS-universal.dmg",
-      "r2Url": "https://download.agplayer.com/releases/v1.1.4/AgPlayer-1.1.4-macOS-universal.dmg"
+      "name": "AgPlayer-1.1.5-macOS-universal.dmg",
+      "size": 117523702,
+      "sha256": "b7f334c24490a55bad7f6d119f501a8f28b0f11d99faadcf049fadd54af18bf7",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.5/AgPlayer-1.1.5-macOS-universal.dmg",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.5/AgPlayer-1.1.5-macOS-universal.dmg"
     },
     {
-      "name": "AgPlayer-Setup-1.1.4-arm64.exe",
-      "size": 33109818,
-      "sha256": "80da4b83d90c91a4ef341830b2cb6c23917fa40c00e3ea7e8b3ca0d907fa33f0",
-      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.4/AgPlayer-Setup-1.1.4-arm64.exe",
-      "r2Url": "https://download.agplayer.com/releases/v1.1.4/AgPlayer-Setup-1.1.4-arm64.exe"
+      "name": "AgPlayer-Setup-1.1.5-arm64.exe",
+      "size": 34260169,
+      "sha256": "fd2a2da1e900468d512c17201047b4d699d43055fae3718cc49d8ca18050188c",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.5/AgPlayer-Setup-1.1.5-arm64.exe",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.5/AgPlayer-Setup-1.1.5-arm64.exe"
     },
     {
-      "name": "AgPlayer-Setup-1.1.4-x64.exe",
-      "size": 39141852,
-      "sha256": "86ea6dfd83aecc381e2acd0f72c3731853551539a162c4a4b360db82e8857f8e",
-      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.4/AgPlayer-Setup-1.1.4-x64.exe",
-      "r2Url": "https://download.agplayer.com/releases/v1.1.4/AgPlayer-Setup-1.1.4-x64.exe"
+      "name": "AgPlayer-Setup-1.1.5-x64.exe",
+      "size": 40273552,
+      "sha256": "079b0ea1cd7052f3630227829eb137761ec18bc6a27e24c017c4a60020ca1d60",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.5/AgPlayer-Setup-1.1.5-x64.exe",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.5/AgPlayer-Setup-1.1.5-x64.exe"
     }
   ]
 }
