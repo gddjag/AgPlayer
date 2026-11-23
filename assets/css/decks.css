@@ -124,7 +124,7 @@
 .tool-chapter h2 { font-size: clamp(34px,4vw,66px); letter-spacing: -.05em; line-height: 1.12; }
 .tool-deck { width: min(100%, max(460px, 103svh), 1440px); margin-inline: auto; }
 .tool-deck .deck-stage { max-width: none; }
-.tool-deck .deck-choices { grid-template-columns: repeat(6,minmax(0,1fr)); }
+.tool-deck .deck-choices { grid-template-columns: repeat(auto-fit,minmax(min(100%,130px),1fr)); }
 .tool-deck .deck-copy p { min-height: 1.65em; }
 @container (max-width: 580px) {
   .deck-meta { gap: 7px; margin-block: 9px 12px; }

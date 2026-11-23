@@ -2,7 +2,7 @@
 window.AG_COPY.zh.edition = {
   demoNav: '实机演示', guideNav: '使用指南', supportNav: '支持作者', navLabel: '主导航', footerLabel: '页脚导航',
   title1: '听见音乐，', title2: '看见声音。',
-  intro: 'AgPlayer 是一款免费的本地音乐播放器。跟着波形找节拍，整理自己的曲库，也能剪辑音频、分离人声与伴奏。',
+  intro: 'AgPlayer 是一款免费的本地音乐播放器。跟着波形找节拍，整理自己的曲库，也能剪辑音频、分离人声与伴奏，或生成克隆语音。',
   download: '免费下载', watch: '观看实机演示', desktop: 'AgPlayer 桌面版', heroCaption: '专业模式 · 滚动波形',
   heroAlt: 'AgPlayer 中文桌面版专业模式，显示滚动波形、节拍网格和曲库。', enlarge: '放大截图', close: '关闭',
   demoTitle: '实机操作演示', demoText: '在 macOS 版 AgPlayer 中播放本地曲目，跟随波形观察节奏，再切换到随音乐变化的沉浸舞台。',
@@ -21,7 +21,7 @@ window.AG_COPY.zh.edition = {
 window.AG_COPY.en.edition = {
   demoNav: 'Demo', guideNav: 'Guide', supportNav: 'Support the creator', navLabel: 'Main navigation', footerLabel: 'Footer navigation',
   title1: 'Your music.', title2: 'In full motion.',
-  intro: 'A free local music player. Follow the beat on a waveform, organize your library, edit a track or separate vocals from its backing.',
+  intro: 'A free local music player. Follow the beat on a waveform, organize your library, edit a track, separate vocals from its backing or generate speech from a reference voice.',
   download: 'Download for free', watch: 'Watch the demo', desktop: 'AgPlayer for desktop', heroCaption: 'Pro mode · Scrolling waveform',
   heroAlt: 'AgPlayer desktop in Pro mode showing the scrolling waveform, beat grid and music library.', enlarge: 'Enlarge screenshot', close: 'Close',
   demoTitle: 'AgPlayer in action.', demoText: 'Watch the macOS app play a local track, follow its waveform and switch to a visual stage that moves with the music.',
@@ -125,3 +125,74 @@ window.AG_COPY.en.featureGuide = {
 
 window.AG_COPY.zh.mini.name = '迷你播放器';
 window.AG_COPY.en.mini.name = 'Mini player';
+
+// Current desktop tool names and the matching real screenshots.
+for (const [language, copy] of Object.entries({
+  zh: {
+    toolsLink: '查看 7 项音频工具',
+    cloneTitle: '声音克隆',
+    cloneDescription: '导入或录制参考人声，输入希望朗读的文字，在本机生成语音。生成后可试听、加入播放列表或导出音频。',
+    analysisTitle: '音频检测',
+    analysisDescription: '查看频谱、时频图、声道、电平与响度，结合扫描结果了解音频质量。',
+    metadataTitle: '元数据编辑',
+    eq: {
+      name: 'EQ 均衡器', alt: '当前 AgPlayer EQ 实机截图，展示频谱、十段曲线、频率、增益和 Q 值控件',
+      steps: [
+        {title: '看频谱，调整频段', text: '打开播放控制区的「EQ」，选择频段后调整频率、增益与 Q 值，在曲线上查看变化。'},
+        {title: '从预设开始试听', text: '从预设选择适合的音色，启用 EQ 后边听边调整，再保存自己的设置。'},
+        {title: '按需使用频段动态', text: '在选中的频段启用「动态」，调整阈值与范围，控制该频段的动态响应。'}
+      ]
+    },
+    cloning: {
+      name: '声音克隆', alt: '当前 AgPlayer 声音克隆实机界面，包含模型、参考人声、文本和已生成的语音波形',
+      steps: [
+        {title: '准备参考人声', text: '选择预设音色，或导入、录制自己的参考人声。清晰、无伴奏的录音更适合作为参考。'},
+        {title: '输入文字，本地生成', text: '输入希望朗读的内容，选择已配置的模型和处理设备，生成克隆语音。'},
+        {title: '试听并导出结果', text: '在生成结果的波形上定位试听，满意后加入播放列表或导出音频。'}
+      ]
+    },
+    mobileTitle: '手机音频工具',
+    mobileAlt: 'AgPlayer 手机版音乐库、含声音克隆的音频工具中心、横屏编辑与波形播放界面',
+    mobileLast: '打开「音频工具」，选择音频编辑、伴奏分离、格式转换、声音克隆、音频检测或元数据编辑。'
+  },
+  en: {
+    toolsLink: 'Explore all 7 audio tools',
+    cloneTitle: 'Voice cloning',
+    cloneDescription: 'Import or record a reference voice, enter your text and generate speech locally. Preview the result, add it to your playlist or export the audio.',
+    analysisTitle: 'Audio analysis',
+    analysisDescription: 'Inspect the spectrum, spectrogram, channels, levels and loudness alongside the scan results to assess your audio.',
+    metadataTitle: 'Metadata editor',
+    eq: {
+      name: 'EQ', alt: 'Current AgPlayer EQ showing its spectrum, ten-band curve, frequency, gain and Q controls',
+      steps: [
+        {title: 'Shape each frequency band', text: 'Open EQ from the playback controls. Select a band, adjust its frequency, gain and Q, and follow the curve.'},
+        {title: 'Start from a preset', text: 'Choose a preset and enable EQ to hear the changes. Adjust it while listening and save your settings.'},
+        {title: 'Control band dynamics', text: 'Enable dynamics for the selected band, then adjust its threshold and range.'}
+      ]
+    },
+    cloning: {
+      name: 'Voice cloning', alt: 'Current AgPlayer voice cloning screen with models, reference audio, text and a generated speech waveform',
+      steps: [
+        {title: 'Prepare a reference voice', text: 'Choose a preset voice, or import or record your own reference. A clear recording without backing music works best.'},
+        {title: 'Enter text and generate locally', text: 'Enter what you want spoken, choose a configured model and processing device, then generate speech.'},
+        {title: 'Preview and export', text: 'Seek and listen on the result waveform. Add the generated audio to your playlist or export it.'}
+      ]
+    },
+    mobileTitle: 'Mobile audio tools',
+    mobileAlt: 'AgPlayer mobile library, audio tool center with voice cloning, landscape editor and waveform player',
+    mobileLast: 'Open Audio Tools for editing, separation, conversion, voice cloning, audio analysis or metadata editing.'
+  }
+})) {
+  const product = window.AG_COPY[language];
+  product.edition.featureTools = copy.toolsLink;
+  product.tools.cloning = {title: copy.cloneTitle, description: copy.cloneDescription};
+  product.tools.lossless.title = copy.analysisTitle;
+  product.tools.lossless.description = copy.analysisDescription;
+  product.tools.metadata.title = copy.metadataTitle;
+  product.featureGuide.eq = copy.eq;
+  product.featureGuide.cloning = copy.cloning;
+  product.featureGuide.mobile.name = copy.mobileTitle;
+  product.featureGuide.mobile.alt = copy.mobileAlt;
+  product.featureGuide.mobile.steps[2].text = copy.mobileLast;
+  product.themes.mobile.imageAlt = copy.mobileAlt;
+}
