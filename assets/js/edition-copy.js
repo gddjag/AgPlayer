@@ -87,6 +87,22 @@ window.AG_COPY.zh.featureGuide = {
       {title: '让舞台随歌变化', text: '让预设定时或在换歌时轮换，也可以开启歌曲自适应配色。'}
     ]
   },
+  reactor: {
+    name: '柱体反应堆', alt: 'AgPlayer 柱体反应堆场景，使用深海蓝曜预设',
+    steps: [
+      {title: '让柱体跟随音乐', text: '播放歌曲后打开沉浸视觉，立体柱阵随声音起伏。'},
+      {title: '选择配色', text: '试试截图中的「深海蓝曜」，也可以自定义颜色。'},
+      {title: '自动轮换预设', text: '可让配色定时切换，或在换歌时切换。'}
+    ]
+  },
+  beach: {
+    name: '海滩电音节', alt: 'AgPlayer 海滩电音节场景中的海岸、主舞台和彩色灯束',
+    steps: [
+      {title: '让灯光随音乐变化', text: '舞台配色可跟随音乐，灯光可按频段响应。'},
+      {title: '切换观察视角', text: '在自动巡航、主舞台和海岸全景之间切换。'},
+      {title: '调整舞台特效', text: '设置烟花触发节拍，或手动触发纸花、火花等特效。'}
+    ]
+  },
   mobile: {
     name: '手机播放', alt: 'AgPlayer 安卓版的本地曲库、音频工具、横屏多轨编辑与波形播放界面',
     steps: [
@@ -143,6 +159,22 @@ window.AG_COPY.en.featureGuide = {
       {title: 'Open the stage', text: 'Open the immersive window while a track plays. The scene responds to the audio you are listening to.'},
       {title: 'Switch scenes', text: 'Choose the column reactor or the beach festival from the scene list to see the same track on different stages.'},
       {title: 'Let the stage follow the song', text: 'Cycle through presets on a timer or when the track changes. Turn on adaptive colors to match each song.'}
+    ]
+  },
+  reactor: {
+    name: 'Column Reactor', alt: 'AgPlayer Column Reactor scene with a deep blue color preset',
+    steps: [
+      {title: 'Watch the columns move to the music', text: 'Open the immersive visualizer while a track plays to see the 3D columns respond to the audio.'},
+      {title: 'Choose a color palette', text: 'Try the deep blue preset shown here or set your own colors.'},
+      {title: 'Cycle presets automatically', text: 'Switch palettes on a timer or when the track changes.'}
+    ]
+  },
+  beach: {
+    name: 'Beach Music Festival', alt: 'AgPlayer Beach Music Festival scene with a shoreline, main stage, and colorful beams',
+    steps: [
+      {title: 'Sync the lights to the music', text: 'The stage colors can follow the track, and the lights can respond to different frequency bands.'},
+      {title: 'Change the camera view', text: 'Switch between auto tour, main stage, and a panoramic shoreline view.'},
+      {title: 'Control stage effects', text: 'Set fireworks to trigger on the beat, or launch confetti and sparks manually.'}
     ]
   },
   mobile: {
