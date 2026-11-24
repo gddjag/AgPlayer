@@ -363,9 +363,5 @@ def publish(descriptor, remote):
 
 
 if __name__ == '__main__':
-    if Path('docs/releases/v1.1.6-wave-cleanup.json').is_file():
-        import runpy
-        runpy.run_path('scripts/cleanup-wave-v1.1.6.py', run_name='__main__')
-        raise SystemExit(0)
     descriptor = json.loads(DESCRIPTOR_PATH.read_text())
     print(json.dumps(publish(descriptor, Remote()), ensure_ascii=False))
