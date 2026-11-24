@@ -300,12 +300,12 @@ window.AG_COPY = {
       "android": {
         "name": "Android安卓版",
         "system": "Android 8.0 及以上（ARM64）",
-        "modelsNote": "已内置伴奏分离模型。"
+        "modelsNote": "已内置伴奏分离和声音克隆模型。"
       },
       "harmony": {
         "name": "HarmonyOS鸿蒙版",
         "system": "原生 HarmonyOS PC / 手机",
-        "modelsNote": "已内置伴奏分离模型。",
+        "modelsNote": "已内置伴奏分离和声音克隆模型。",
         "description": "请前往 HarmonyOS 鸿蒙应用市场下载原生鸿蒙 PC 版和手机版。华为卓易通也可下载安卓版本。"
       },
       "faqTitle": "下载前，了解这些",
@@ -704,12 +704,12 @@ window.AG_COPY = {
       "android": {
         "name": "Android",
         "system": "Android 8.0 or later (ARM64)",
-        "modelsNote": "Separation models are included."
+        "modelsNote": "Stem separation and voice cloning models are included."
       },
       "harmony": {
         "name": "HarmonyOS",
         "system": "Native HarmonyOS for PC and mobile",
-        "modelsNote": "Separation models are included.",
+        "modelsNote": "Stem separation and voice cloning models are included.",
         "description": "Download the native HarmonyOS PC and mobile editions from the HarmonyOS app marketplace. You can also download the Android version for use with Huawei Zhuoyitong."
       },
       "faqTitle": "Before you download",

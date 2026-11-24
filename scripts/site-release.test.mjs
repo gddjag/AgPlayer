@@ -60,7 +60,7 @@ test('download cards expose chip/model choices and the requested bilingual model
     }
   }
   assert.equal(context.window.AG_COPY.zh.downloadPage.windows.modelsNote,'常规纯净版不含伴奏分离模型，可在「音频工具」中按需下载。');
-  assert.equal(context.window.AG_COPY.zh.downloadPage.android.modelsNote,'已内置伴奏分离模型。');
+  assert.equal(context.window.AG_COPY.zh.downloadPage.android.modelsNote,'已内置伴奏分离和声音克隆模型。');
   assert.doesNotMatch(html,/downloadPage\.(windows|macos)\.revision/);
 });
 
