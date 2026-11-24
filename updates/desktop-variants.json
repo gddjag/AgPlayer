@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "desktop-download-variants",
-  "version": "1.1.5",
-  "tag": "v1.1.5",
+  "version": "1.1.6",
+  "tag": "v1.1.6",
   "files": [
     {
       "id": "windows-models",
@@ -11,12 +11,12 @@
         "arm64"
       ],
       "bundledModels": true,
-      "name": "AgPlayer-Setup-1.1.5-x64-arm64（内置伴奏分离模型版本）.exe",
-      "size": 292189391,
-      "sha256": "9aeeb9232effe82cef1a661d62c3b536e03ebeb390320b7c26bfa6cd05002c09",
-      "sourceCommit": "fcfc6ab3933ce3dcb7b505e0e963009b826bbc01",
-      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.5/AgPlayer-Setup-1.1.5-x64-arm64-bundled-models.exe",
-      "r2Url": "https://download.agplayer.com/releases/v1.1.5/AgPlayer-Setup-1.1.5-x64-arm64%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.exe"
+      "name": "AgPlayer-Setup-1.1.6-x64-arm64（内置伴奏分离模型版本）.exe",
+      "size": 294042766,
+      "sha256": "f3116fd5c01a6eb1433e05e2995a0c06a1d847749da1e9eb7bfeaad3eaf5890c",
+      "sourceCommit": "0e9d63469f168e508fae418c6b4f9c7554f98eaf",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.6/AgPlayer-Setup-1.1.6-x64-arm64-bundled-models.exe",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.6/AgPlayer-Setup-1.1.6-x64-arm64%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.exe"
     },
     {
       "id": "macos-arm64",
@@ -24,12 +24,12 @@
         "arm64"
       ],
       "bundledModels": false,
-      "name": "AgPlayer-1.1.5-macOS-arm64.dmg",
-      "size": 57946525,
-      "sha256": "3fb0b49d71a5d73ca0de4d7795fe63d2b0324d96ebe364d2411be43c8171856d",
-      "sourceCommit": "fcfc6ab3933ce3dcb7b505e0e963009b826bbc01",
-      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.5/AgPlayer-1.1.5-macOS-arm64.dmg",
-      "r2Url": "https://download.agplayer.com/releases/v1.1.5/AgPlayer-1.1.5-macOS-arm64.dmg"
+      "name": "AgPlayer-1.1.6-macOS-arm64.dmg",
+      "size": 58211803,
+      "sha256": "20035cb3c00db2139583571b3e9a4d90496ce00660ad398c0152b465469d4603",
+      "sourceCommit": "0e9d63469f168e508fae418c6b4f9c7554f98eaf",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.6/AgPlayer-1.1.6-macOS-arm64.dmg",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.6/AgPlayer-1.1.6-macOS-arm64.dmg"
     },
     {
       "id": "macos-x86_64",
@@ -37,12 +37,12 @@
         "x86_64"
       ],
       "bundledModels": false,
-      "name": "AgPlayer-1.1.5-macOS-x86_64.dmg",
-      "size": 64638755,
-      "sha256": "7e1eefb79d4cb45d69639ca393429588bf52930416d6ab5676bcef009d6027ef",
-      "sourceCommit": "fcfc6ab3933ce3dcb7b505e0e963009b826bbc01",
-      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.5/AgPlayer-1.1.5-macOS-x86_64.dmg",
-      "r2Url": "https://download.agplayer.com/releases/v1.1.5/AgPlayer-1.1.5-macOS-x86_64.dmg"
+      "name": "AgPlayer-1.1.6-macOS-x86_64.dmg",
+      "size": 65175894,
+      "sha256": "58fbae273e6ac20a2cae88cd9a3e1bc01df10b43f490297a1549291d41106ef9",
+      "sourceCommit": "0e9d63469f168e508fae418c6b4f9c7554f98eaf",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.6/AgPlayer-1.1.6-macOS-x86_64.dmg",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.6/AgPlayer-1.1.6-macOS-x86_64.dmg"
     },
     {
       "id": "macos-models",
@@ -51,12 +51,12 @@
         "x86_64"
       ],
       "bundledModels": true,
-      "name": "AgPlayer-1.1.5-macOS-universal（内置伴奏分离模型版本）.dmg",
-      "size": 457053188,
-      "sha256": "095e3cece0ba28acce2d4510ed75ffd0e53468b529bdf34ee07fb99271fc483e",
-      "sourceCommit": "fcfc6ab3933ce3dcb7b505e0e963009b826bbc01",
-      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.5/AgPlayer-1.1.5-macOS-universal-bundled-models.dmg",
-      "r2Url": "https://download.agplayer.com/releases/v1.1.5/AgPlayer-1.1.5-macOS-universal%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.dmg"
+      "name": "AgPlayer-1.1.6-macOS-universal（内置伴奏分离模型版本）.dmg",
+      "size": 751189177,
+      "sha256": "ef7975b58f5a4d43c47fda98df03b555b15d13f1a37225dfde891ab3d907080f",
+      "sourceCommit": "0e9d63469f168e508fae418c6b4f9c7554f98eaf",
+      "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.6/AgPlayer-1.1.6-macOS-universal-bundled-models.dmg",
+      "r2Url": "https://download.agplayer.com/releases/v1.1.6/AgPlayer-1.1.6-macOS-universal%EF%BC%88%E5%86%85%E7%BD%AE%E4%BC%B4%E5%A5%8F%E5%88%86%E7%A6%BB%E6%A8%A1%E5%9E%8B%E7%89%88%E6%9C%AC%EF%BC%89.dmg"
     }
   ]
 }
