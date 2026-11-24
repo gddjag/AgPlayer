@@ -48,7 +48,7 @@ window.AG_COPY.zh.featureGuide = {
     ]
   },
   tags: {
-    name: '标签管理', alt: 'AgPlayer 专业模式右侧的标签管理面板，显示标签搜索、添加按钮和颜色标签',
+    name: '标签管理', alt: 'AgPlayer 单窗口右侧的标签管理面板，显示标签搜索、添加按钮和颜色标签',
     steps: [
       {title: '创建自己的标签', text: '打开曲库的「标签管理」，按曲风、场合或用途添加标签，给歌曲分类。'},
       {title: '调整名称和颜色', text: '在标签菜单中重命名或修改颜色。用颜色区分不同类别，浏览曲库时更容易辨认。'},
@@ -106,7 +106,7 @@ window.AG_COPY.en.featureGuide = {
     ]
   },
   tags: {
-    name: 'Tag management', alt: 'AgPlayer Pro mode with tag search, an Add button, and colored tags in the library sidebar',
+    name: 'Tag management', alt: 'AgPlayer single-window mode with tag search, an Add button, and colored tags in the library sidebar',
     steps: [
       {title: 'Create your own tags', text: 'Open Tag Management in the library and add tags by genre, occasion, or how you use each track.'},
       {title: 'Edit tag names and colors', text: 'Rename tags or change their colors from the tag menu. Use colors to distinguish categories at a glance.'},
