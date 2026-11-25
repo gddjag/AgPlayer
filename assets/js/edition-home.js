@@ -70,11 +70,17 @@
   const image = panel.querySelector('img');
   const photoLink = panel.querySelector('.shot-open');
   const featureCopy = panel.querySelectorAll('[data-feature-copy]');
+  let screenshotRequest = 0;
   window.agTabs([...document.querySelectorAll('.feature-tab')], tab => {
     const prefix = 'featureGuide.' + tab.dataset.feature + '.';
     if (image.getAttribute('src') !== tab.dataset.src) {
+      const request = ++screenshotRequest;
+      image.style.visibility = 'hidden';
+      image.loading = 'eager';
       image.src = tab.dataset.src;
-      if (!motion.matches) image.animate([{opacity: .55, transform: 'translateY(4px)'}, {opacity: 1, transform: 'none'}], {duration: 360});
+      image.decode().catch(() => {}).then(() => {
+        if (request === screenshotRequest) image.style.visibility = '';
+      });
     }
     photoLink.href = tab.dataset.src;
     image.dataset.i18nAlt = prefix + 'alt';
