@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="/assets/css/interior-2026.css?v=20261119-reflow">
 <link rel="stylesheet" href="/assets/css/listen.css?v=20261119-reflow">
 <link rel="stylesheet" href="/assets/css/onepage-extras.css?v=20261119-reflow">
-<link rel="stylesheet" href="/assets/css/edition-home.css?v=20261119-reflow">
+<link rel="stylesheet" href="/assets/css/edition-home.css?v=20261125-previews">
 <link rel="stylesheet" href="/assets/css/decks.css?v=20261123-tools">
 <link rel="stylesheet" href="/assets/css/faq.css?v=20261119-guides">
 <script defer src="/assets/js/translations.js?v=20261124-mobile-models"></script>
@@ -24,7 +24,7 @@
 <script defer src="/assets/js/audio-demo.js?v=20261119-reflow"></script>
 <!-- shared-download-script -->
 <script defer src="/assets/js/decks.js?v=20261119-live"></script>
-<script defer src="/assets/js/edition-home.js?v=20261125-fast-tabs"></script>
+<script defer src="/assets/js/edition-home.js?v=20261125-previews"></script>
 <script defer src="/assets/js/background.js?v=20261119-reflow"></script>
 <link rel="canonical" href="https://agplayer.com/">
 <meta name="robots" content="index,follow,max-image-preview:large">
@@ -99,15 +99,15 @@
       </div>
       <div class="feature-layout">
         <div class="feature-tabs" role="tablist" data-i18n-aria="navigation.features" aria-label="功能">
-          <button class="feature-tab" id="tab-library" type="button" role="tab" aria-selected="true" aria-controls="feature-screen" tabindex="0" data-feature="library" data-src="/assets/media/live-library-management.png" data-i18n="featureGuide.library.name">曲库整理</button>
-          <button class="feature-tab" id="tab-tags" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="tags" data-src="/assets/media/live-tags-library.png" data-i18n="featureGuide.tags.name">标签管理</button>
-          <button class="feature-tab" id="tab-wave" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="wave" data-src="/assets/media/live-wave-selection.png" data-i18n="featureGuide.wave.name">波形选段</button>
-          <button class="feature-tab" id="tab-pro" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="pro" data-src="/assets/media/live-pro-light.png" data-i18n="featureGuide.pro.name">专业模式</button>
-          <button class="feature-tab" id="tab-eq" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="eq" data-src="/assets/media/live-eq.webp?v=20261123-current" data-i18n="featureGuide.eq.name">EQ 均衡器</button>
-          <button class="feature-tab" id="tab-plugins" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="plugins" data-src="/assets/media/live-vst3-rack.png" data-i18n="featureGuide.plugins.name">VST3 插件链</button>
-          <button class="feature-tab" id="tab-reactor" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="reactor" data-src="/assets/media/live-column-reactor.png" data-i18n="featureGuide.reactor.name">柱体反应堆</button>
-          <button class="feature-tab" id="tab-beach" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="beach" data-src="/assets/media/live-beach-festival.png" data-i18n="featureGuide.beach.name">海滩电音节</button>
-          <button class="feature-tab" id="tab-mobile" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="mobile" data-src="/assets/images/player-mobile.png?v=20261123-current" data-i18n="featureGuide.mobile.name">手机播放</button>
+          <button class="feature-tab" id="tab-library" type="button" role="tab" aria-selected="true" aria-controls="feature-screen" tabindex="0" data-feature="library" data-src="/assets/media/live-library-management.png" data-preview="/assets/media/feature-preview-library.webp" data-i18n="featureGuide.library.name">曲库整理</button>
+          <button class="feature-tab" id="tab-tags" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="tags" data-src="/assets/media/live-tags-library.png" data-preview="/assets/media/feature-preview-tags.webp" data-i18n="featureGuide.tags.name">标签管理</button>
+          <button class="feature-tab" id="tab-wave" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="wave" data-src="/assets/media/live-wave-selection.png" data-preview="/assets/media/feature-preview-wave.webp" data-i18n="featureGuide.wave.name">波形选段</button>
+          <button class="feature-tab" id="tab-pro" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="pro" data-src="/assets/media/live-pro-light.png" data-preview="/assets/media/feature-preview-pro.webp" data-i18n="featureGuide.pro.name">专业模式</button>
+          <button class="feature-tab" id="tab-eq" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="eq" data-src="/assets/media/live-eq.webp?v=20261123-current" data-preview="/assets/media/feature-preview-eq.webp" data-i18n="featureGuide.eq.name">EQ 均衡器</button>
+          <button class="feature-tab" id="tab-plugins" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="plugins" data-src="/assets/media/live-vst3-rack.png" data-preview="/assets/media/feature-preview-plugins.webp" data-i18n="featureGuide.plugins.name">VST3 插件链</button>
+          <button class="feature-tab" id="tab-reactor" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="reactor" data-src="/assets/media/live-column-reactor.png" data-preview="/assets/media/feature-preview-reactor.webp" data-i18n="featureGuide.reactor.name">柱体反应堆</button>
+          <button class="feature-tab" id="tab-beach" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="beach" data-src="/assets/media/live-beach-festival.png" data-preview="/assets/media/feature-preview-beach.webp" data-i18n="featureGuide.beach.name">海滩电音节</button>
+          <button class="feature-tab" id="tab-mobile" type="button" role="tab" aria-selected="false" aria-controls="feature-screen" tabindex="-1" data-feature="mobile" data-src="/assets/images/player-mobile.png?v=20261123-current" data-preview="/assets/media/feature-preview-mobile.webp" data-i18n="featureGuide.mobile.name">手机播放</button>
         </div>
         <div id="feature-screen" class="feature-panel" role="tabpanel" aria-labelledby="tab-library">
           <dl class="feature-steps">
@@ -117,9 +117,10 @@
           </dl>
           <figure class="feature-figure">
             <a class="shot-open feature-screen" href="/assets/media/live-library-management.png" data-i18n-aria="edition.enlarge" aria-label="放大截图">
-              <img loading="lazy" src="/assets/media/live-library-management.png" width="1828" height="1502" data-i18n-alt="featureGuide.library.alt" alt="AgPlayer 经典双窗口中的曲库、文件夹、评分和 BPM 筛选栏">
+              <img loading="lazy" src="/assets/media/feature-preview-library.webp" width="1828" height="1502" data-i18n-alt="featureGuide.library.alt" alt="AgPlayer 经典双窗口中的曲库、文件夹、评分和 BPM 筛选栏">
               <span class="zoom-sign" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#ag-icon-enlarge"></use></svg></span>
             </a>
+            <p class="feature-image-status" role="status" hidden></p>
             <figcaption class="hero-figcaption"><span data-i18n="edition.screen">软件截图</span><span data-feature-copy="name" data-i18n="featureGuide.library.name">曲库整理</span></figcaption>
           </figure>
         </div>

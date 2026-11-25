@@ -70,16 +70,29 @@
   const image = panel.querySelector('img');
   const photoLink = panel.querySelector('.shot-open');
   const featureCopy = panel.querySelectorAll('[data-feature-copy]');
+  const imageStatus = panel.querySelector('.feature-image-status');
   let screenshotRequest = 0;
   window.agTabs([...document.querySelectorAll('.feature-tab')], tab => {
     const prefix = 'featureGuide.' + tab.dataset.feature + '.';
-    if (image.getAttribute('src') !== tab.dataset.src) {
+    const preview = tab.dataset.preview || tab.dataset.src;
+    if (image.getAttribute('src') !== preview || imageStatus.dataset.state === 'failed') {
       const request = ++screenshotRequest;
+      const english = document.documentElement.lang === 'en';
       image.style.visibility = 'hidden';
+      imageStatus.dataset.state = 'loading';
+      imageStatus.textContent = english ? 'Loading screenshot…' : '正在加载截图…';
+      imageStatus.hidden = false;
       image.loading = 'eager';
-      image.src = tab.dataset.src;
-      image.decode().catch(() => {}).then(() => {
-        if (request === screenshotRequest) image.style.visibility = '';
+      image.src = preview;
+      image.decode().then(() => {
+        if (request !== screenshotRequest) return;
+        image.style.visibility = '';
+        imageStatus.hidden = true;
+        imageStatus.dataset.state = '';
+      }, () => {
+        if (request !== screenshotRequest) return;
+        imageStatus.dataset.state = 'failed';
+        imageStatus.textContent = english ? 'Preview unavailable. Open the original with the zoom button.' : '预览加载失败，可用放大按钮查看原图。';
       });
     }
     photoLink.href = tab.dataset.src;

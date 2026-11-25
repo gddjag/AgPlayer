@@ -140,3 +140,16 @@ html[lang="en"] .hero-message h1 { font-size: clamp(55px,5.3vw,94px); letter-spa
   .hero-message > p { line-height: 1.65; }
   .hero-platforms { font-size: 11px; }
 }
+
+.feature-figure { position: relative; }
+.feature-image-status {
+  position: absolute;
+  inset: 0 0 2rem;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 1rem;
+  text-align: center;
+  pointer-events: none;
+}
+.feature-image-status[hidden] { display: none; }
