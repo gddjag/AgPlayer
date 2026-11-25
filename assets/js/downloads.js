@@ -95,10 +95,10 @@
 });
   const publishedAndroidRelease = Object.freeze({
   "version": "1.1.6",
-  "size": 498145423,
+  "size": 498145434,
   "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.6/AgPlayer-1.1.6-arm64-release.apk",
   "r2Url": "https://download.agplayer.com/releases/v1.1.6/AgPlayer-1.1.6-arm64-release.apk",
-  "sha256": "89E0A6986C649AE152EB7736FBA52762DF6EC96D44C40E69471245C10C7B2054"
+  "sha256": "158C0CA43043B46EFE74B7B1F573AD49BAEFB9038088CDD7981C2A3AB9F086EF"
 });
 
   function selectRelease(manifest, platform = 'windows', architecture = 'x64') {

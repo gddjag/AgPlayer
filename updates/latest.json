@@ -7,8 +7,8 @@
   "files": [
     {
       "name": "AgPlayer-1.1.6-arm64-release.apk",
-      "size": 498145423,
-      "sha256": "89e0a6986c649ae152eb7736fba52762df6ec96d44c40e69471245c10c7b2054",
+      "size": 498145434,
+      "sha256": "158c0ca43043b46efe74b7b1f573ad49baefb9038088cdd7981c2a3ab9f086ef",
       "githubUrl": "https://github.com/gddjag/AgPlayer/releases/download/v1.1.6/AgPlayer-1.1.6-arm64-release.apk",
       "r2Url": "https://download.agplayer.com/releases/v1.1.6/AgPlayer-1.1.6-arm64-release.apk"
     },
